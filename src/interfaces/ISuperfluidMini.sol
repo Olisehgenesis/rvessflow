@@ -65,9 +65,18 @@ interface IGDAv1Forwarder {
 interface ISuperfluidHost {
     function getGovernance() external view returns (address);
     function isApp(address app) external view returns (bool);
+    function getAgreementClass(bytes32 agreementType) external view returns (address);
     function callAgreement(address agreementClass, bytes calldata callData, bytes calldata userData)
         external
         returns (bytes memory);
+}
+
+/// @dev `tryConnectPoolFor` connects `memberAddr`. The forwarder's `connectPool`
+///      would record the calling contract instead.
+interface IGDAv1Autoconnect {
+    function tryConnectPoolFor(address pool, address memberAddr, bytes calldata ctx)
+        external
+        returns (bool success, bytes memory newCtx);
 }
 
 interface ISuperfluidGovernance {

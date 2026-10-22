@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {ISuperTokenMini} from "./interfaces/ISuperfluidMini.sol";
 import {ITokenAllowlist} from "./interfaces/ITokenAllowlist.sol";
 
 /// @title TokenAllowlist
 /// @notice Super Tokens a vault, lock, or chama may hold. The admin pauses new
 ///         positions. Pause does not block settle, protect, or withdraw.
-contract TokenAllowlist is Ownable2Step, ITokenAllowlist {
+contract TokenAllowlist is Initializable, Ownable2Step, UUPSUpgradeable, ITokenAllowlist {
     struct Config {
         bool allowed;
         TokenKind kind;
@@ -28,7 +30,22 @@ contract TokenAllowlist is Ownable2Step, ITokenAllowlist {
     error TokenMismatch();
     error BadDecimals();
 
-    constructor(address initialOwner) Ownable(initialOwner) {}
+    constructor(address initialOwner) Ownable(initialOwner) {
+        _disableInitializers();
+    }
+
+    function initialize(address initialOwner) external initializer {
+        if (initialOwner == address(0)) revert ZeroAddress();
+        _transferOwnership(initialOwner);
+    }
+
+    function contractVersion() public pure virtual returns (uint256) {
+        return 1;
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        if (newImplementation == address(0)) revert ZeroAddress();
+    }
 
     function setPaused(bool paused_) external onlyOwner {
         paused = paused_;

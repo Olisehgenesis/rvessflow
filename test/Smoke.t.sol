@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {Test, console2} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {SuperfluidFrameworkDeployer} from
     "@superfluid-finance/ethereum-contracts/contracts/utils/SuperfluidFrameworkDeployer.t.sol";
 import {ERC1820RegistryCompiled} from
@@ -28,6 +28,7 @@ contract SmokeTest is Test {
 
     function setUp() public {
         vm.etch(ERC1820RegistryCompiled.ADDRESS, ERC1820RegistryCompiled.BYTECODE);
+        vm.warp(1_700_000_000);
         SuperfluidFrameworkDeployer deployer = new SuperfluidFrameworkDeployer();
         deployer.deployTestFramework();
         sf = deployer.getFramework();
@@ -68,27 +69,23 @@ contract SmokeTest is Test {
         vault.activate(id);
         vm.stopPrank();
 
-        assertFalse(usdcx.isAccountCritical(address(vault), block.timestamp + vault.PROTECT_WINDOW()));
+        assertFalse(usdcx.isAccountCritical(address(vault), vm.getBlockTimestamp() + vault.PROTECT_WINDOW()));
         int96 rate = sf.cfaV1Forwarder.getAccountFlowrate(usdcx, bob);
         assertGt(rate, 0);
 
-        vm.warp(block.timestamp + 12 hours);
-        uint256 mid = usdcx.balanceOf(bob);
-        assertGt(mid, 0);
-
-        vm.warp(block.timestamp + 12 hours);
         FlowVault.Flow memory f = vault.getFlow(id);
-        console2.log("now", block.timestamp);
-        console2.log("end", f.end);
-        console2.log("active", f.active);
-        vault.settle(id);
-        uint256 endBal = usdcx.balanceOf(bob);
-        assertApproxEqAbs(endBal, 1e18, 1e12);
-        assertEq(usdcx.balanceOf(address(vault)), vault.unallocated(address(usdcx)));
-        assertFalse(usdcx.isAccountCritical(address(vault), block.timestamp + 1));
+        vm.warp(f.start + 12 hours);
+        assertGt(usdcx.balanceOf(bob), 0);
 
+        vm.warp(f.end);
+        vault.settle(id);
+        assertApproxEqAbs(usdcx.balanceOf(bob), 1e18, 1e12);
+        assertEq(usdcx.balanceOf(address(vault)), vault.unallocated(address(usdcx)));
+        assertFalse(usdcx.isAccountCritical(address(vault), vm.getBlockTimestamp() + 1));
+
+        uint256 idle = vault.unallocated(address(usdcx));
         vm.prank(alice);
-        vault.withdraw(address(usdcx), vault.unallocated(address(usdcx)));
+        vault.withdraw(address(usdcx), idle);
         assertEq(usdcx.balanceOf(address(vault)), 0);
     }
 }

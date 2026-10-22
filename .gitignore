@@ -11,3 +11,5 @@ agent-tools/
 uploads/
 .DS_Store
 wallet/
+lcov.info
+coverage/

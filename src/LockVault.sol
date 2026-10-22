@@ -4,8 +4,10 @@ pragma solidity ^0.8.27;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ITokenAllowlist} from "./interfaces/ITokenAllowlist.sol";
 import {ISuperTokenMini, ICFAv1Forwarder, ISETHMini} from "./interfaces/ISuperfluidMini.sol";
@@ -20,7 +22,7 @@ import {SuperTokenReceiver} from "./SuperTokenReceiver.sol";
 ///      the saver's wallet, so an early break cannot claw it back; the stream stops.
 ///      The admin can change the penalty (max 10%) and the emission and cannot
 ///      withdraw principal, penalties, or the yield budget.
-contract LockVault is Ownable2Step, ReentrancyGuard, SuperTokenReceiver {
+contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGuard, SuperTokenReceiver {
     using SafeERC20 for IERC20;
 
     uint16 public constant BPS = 10_000;
@@ -85,6 +87,23 @@ contract LockVault is Ownable2Step, ReentrancyGuard, SuperTokenReceiver {
         host = host_;
         cfa = ICFAv1Forwarder(cfa_);
         _registerSuperTokenReceiver();
+        _disableInitializers();
+    }
+
+    function initialize(address initialOwner) external initializer {
+        if (initialOwner == address(0)) revert ZeroAddress();
+        _transferOwnership(initialOwner);
+        if (penaltyBps == 0) penaltyBps = 300;
+        if (nextId == 0) nextId = 1;
+        _registerSuperTokenReceiver();
+    }
+
+    function contractVersion() public pure virtual returns (uint256) {
+        return 1;
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        if (newImplementation == address(0)) revert ZeroAddress();
     }
 
     function setPenaltyBps(uint16 bps) external onlyOwner {

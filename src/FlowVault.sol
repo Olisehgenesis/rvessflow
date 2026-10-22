@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import {ITokenAllowlist} from "./interfaces/ITokenAllowlist.sol";
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {ISuperTokenMini, ISETHMini, ICFAv1Forwarder, ISuperfluidHost} from "./interfaces/ISuperfluidMini.sol";
@@ -501,8 +502,7 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         if (rate == 0) return;
         Flow storage flow = _flows[id];
         uint256 conduitBuffer = cfa.getBufferAmountByFlowrate(flow.token, rate);
-        address conduit = Clones.clone(conduitImplementation);
-        FlowConduit(conduit).initialize(address(this), flow.token);
+        address conduit = _spawnConduit(flow.token);
         if (conduitBuffer != 0) {
             ISuperTokenMini(flow.token).transfer(conduit, conduitBuffer);
         }
@@ -512,6 +512,16 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         if (cfa.getFlowrate(flow.token, address(this), conduit) != rate) revert StreamMismatch();
         flow.conduit = conduit;
         flow.liveRate = rate;
+    }
+
+    function _spawnConduit(address token) internal returns (address conduit) {
+        address beacon = IVaultFactory(factory).conduitBeacon();
+        if (beacon != address(0)) {
+            conduit = address(new BeaconProxy(beacon, abi.encodeCall(FlowConduit.initialize, (address(this), token))));
+        } else {
+            conduit = Clones.clone(conduitImplementation);
+            FlowConduit(conduit).initialize(address(this), token);
+        }
     }
 
     function _closeRoot(uint256 id) internal {

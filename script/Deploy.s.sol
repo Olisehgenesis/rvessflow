@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Script, console2} from "forge-std/Script.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {TokenAllowlist} from "../src/TokenAllowlist.sol";
 import {VaultFactory} from "../src/VaultFactory.sol";
 import {FlowVault} from "../src/FlowVault.sol";
@@ -24,7 +25,6 @@ abstract contract DeployRvess is Script {
         address keeper = vm.envOr("KEEPER", address(0));
 
         vm.startBroadcast(pk);
-        TokenAllowlist allow = new TokenAllowlist(deployer);
         address host;
         address cfa = SuperfluidAddresses.CFA_V1_FORWARDER;
         address gda = SuperfluidAddresses.GDA_V1_FORWARDER;
@@ -33,11 +33,29 @@ abstract contract DeployRvess is Script {
         } else {
             host = SuperfluidAddresses.BASE_SEPOLIA_HOST;
         }
+        TokenAllowlist allow = TokenAllowlist(
+            _proxy(address(new TokenAllowlist(deployer)), abi.encodeCall(TokenAllowlist.initialize, (deployer)))
+        );
         FlowConduit conduit = new FlowConduit(cfa);
         FlowVault implementation = new FlowVault(host, cfa, address(conduit));
-        VaultFactory factory = new VaultFactory(deployer, address(allow), address(implementation));
-        LockVault locks = new LockVault(deployer, address(allow), host, cfa);
-        GroupRotation groups = new GroupRotation(address(allow), host, gda);
+        VaultFactory factory = VaultFactory(
+            _proxy(
+                address(new VaultFactory(deployer, address(allow), address(implementation))),
+                abi.encodeCall(VaultFactory.initialize, (deployer, address(allow), address(implementation)))
+            )
+        );
+        LockVault locks = LockVault(
+            _proxy(
+                address(new LockVault(deployer, address(allow), host, cfa)),
+                abi.encodeCall(LockVault.initialize, (deployer))
+            )
+        );
+        GroupRotation groups = GroupRotation(
+            _proxy(
+                address(new GroupRotation(address(allow), host, gda)),
+                abi.encodeCall(GroupRotation.initialize, (deployer))
+            )
+        );
 
         if (expectedChainId == 8453) {
             allow.setSuperToken(SuperfluidAddresses.BASE_USDCX, true, ITokenAllowlist.TokenKind.Wrapper);
@@ -63,6 +81,10 @@ abstract contract DeployRvess is Script {
         console2.log("CFAv1Forwarder", cfa);
         console2.log("GDAv1Forwarder", gda);
         console2.log("Keeper", keeper);
+    }
+
+    function _proxy(address implementation, bytes memory initCall) internal returns (address) {
+        return address(new ERC1967Proxy(implementation, initCall));
     }
 }
 

@@ -5,4 +5,5 @@ interface IVaultFactory {
     function allowlist() external view returns (address);
     function keeper() external view returns (address);
     function vaultOf(address user) external view returns (address);
+    function conduitBeacon() external view returns (address);
 }
