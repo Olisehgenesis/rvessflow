@@ -1,0 +1,12 @@
+cache/
+out/
+broadcast/
+.env
+node_modules/
+web/node_modules/
+web/.next/
+web/tsconfig.tsbuildinfo
+lib/openzeppelin-contracts/lib/
+agent-tools/
+uploads/
+.DS_Store
