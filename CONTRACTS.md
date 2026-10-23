@@ -8,9 +8,9 @@ The protocol owner is the admin. The owner can pause new positions, set the lock
 
 ## Upgrade
 
-`TokenAllowlist`, `VaultFactory`, `LockVault`, and `GroupRotation` are UUPS proxies. Call `initialize` once through the proxy. `upgradeToAndCall` is owner-only.
+`TokenAllowlist`, `VaultFactory`, `LockVault`, and `GroupRotation` are UUPS proxies. Call `initialize` once through the proxy. An upgrade waits two days. The owner calls `scheduleUpgrade` with the new implementation, and `upgradeToAndCall` reverts until that time. The same wait applies to the factory's own upgrade.
 
-Each person gets one `FlowVault`, and each flow gets one `FlowConduit`. Both are beacon proxies. The factory owner calls `upgradeVaults` or `upgradeConduits` to move every existing vault or conduit to a new implementation. A new vault implementation must be constructed with the same Superfluid host and CFA forwarder.
+Each person gets one `FlowVault`, and each flow gets one `FlowConduit`. Both are beacon proxies. The factory owner calls `scheduleVaultUpgrade` or `scheduleConduitUpgrade`, waits two days, then `upgradeVaults` or `upgradeConduits`. A new vault implementation must be constructed with the same Superfluid host and CFA forwarder.
 
 `contractVersion` returns `1` on the current implementations.
 
@@ -36,11 +36,13 @@ The owner registers a Super Token with `setSuperToken(token, allowed, kind)`.
 
 The vault owner deposits with `depositSuper`, `depositUnderlying`, or `depositNative`. Idle value is `unallocated`. Only the owner can `withdraw`, `withdrawUnderlying`, or `withdrawNative`, and only up to the unallocated balance. A withdraw that would leave the vault critical within the hour reverts.
 
-`createFlow` reserves the stream amount, the CFA deposits for the vault-to-conduit and conduit-to-recipient streams, and one hour of rate as a cushion.
+`createFlow` for an expense or a flow goal reserves the stream amount, the CFA deposits for the vault-to-conduit and conduit-to-recipient streams, and one hour of rate as a cushion. A saving goal reserves only the amount that will be held. It does not open a CFA stream, so it posts no deposit and no cushion. `openSavings` creates that hold and starts it in one call. The target may be larger than the first deposit.
+
+`topUp` adds idle tokens to a saving goal, or extends an expense or flow goal at the same rate. `release` moves part of a saving goal back to idle. `pause` stops an expense or flow goal and keeps the unstreamed balance reserved. `resume` opens a new conduit for the time that was left. `recoverSurplus` credits tokens that arrived outside a deposit, and it does not treat an active stream's reserve as idle. `balanceSheet` and `progress` read idle, held, and still-due amounts.
 
 | Limit | Value |
 | --- | --- |
-| Flows per vault | 64, including subflows and settled flows |
+| Flows per vault | 64 unsettled flows, including subflows. Settled flows stay in history and free a slot |
 | Subflow depth | 3 |
 | Children of one flow | 16 |
 | Chain length | 8 |
@@ -48,11 +50,11 @@ The vault owner deposits with `depositSuper`, `depositUnderlying`, or `depositNa
 
 `createSubflow` is allowed only before the root starts, only if the parent allows subflows, and only if the children's rates still fit under the parent. Share mode sets the child rate to `parent.rate * shareBps / 10000`. A saving goal cannot allow subflows, and its recipient must be the owner. An expense cannot have a goal.
 
-`activate` opens the CFA streams once the flow is ready. Ready means the earliest start time has passed, a chained predecessor has ended or reached its goal, and a keeper-gated flow has been triggered. `trigger` is the owner or the factory keeper. Anyone can activate a ready flow.
+`activate` opens the CFA streams once an expense or a flow goal is ready. A saving goal is marked active and holds the deposit in the vault. Ready means the earliest start time has passed, a chained predecessor has ended or reached its goal, and a keeper-gated flow has been triggered. A paused flow is not ready. `trigger` is the owner or the factory keeper. Anyone can activate a ready flow.
 
-`cancel` is the owner. Cancelling a subflow before the root starts folds that rate back into the parent. Cancelling a root closes the tree. `settle` closes a root after its end, or earlier if the outward stream was deleted or the vault will be critical within the hour. `protect(token)` closes every root in that token that is due, broken, or about to be critical.
+`cancel` is the owner. Cancelling a subflow before the root starts folds that rate back into the parent. Cancelling a root, or anything in a paused tree, closes the tree and returns what was not streamed. `settle` closes a root after its end, or earlier if the outward stream was deleted, the vault will be critical within the hour, or a flow goal has already streamed its goal. A saving goal returns the full hold, because nothing was streamed. `protect(token)` closes every active root in that token that is due, broken, or about to be critical.
 
-The stream keeps running past `end` until one of those calls. After the one-hour cushion, the vault can go critical and a third party can liquidate the CFA deposit. Call `protect` before then.
+An expense or flow goal keeps running past `end` until one of those calls. After the one-hour cushion, that vault can go critical and a third party can liquidate the CFA deposit. Call `protect` before then. A saving goal does not stream, so it cannot be liquidated.
 
 ## FlowConduit
 
@@ -62,19 +64,19 @@ CFA allows one stream between a pair of addresses. The vault streams to the cond
 
 `lock` and `lockUnderlying` pull a Super Token, or wrap an underlying token, and hold it until `end`. Duration is one hour to 30 years.
 
-`breakEarly` before the end returns principal minus the penalty. The penalty is `penaltyBps` of principal, 300 by default and at most 1000. It is added to `bonusPool`. `withdrawMature` at or after the end returns principal plus that lock's share of the pool. The share is this lock's `principal * duration` divided by the weight of locks still open in that token when this one finishes.
+`breakEarly` before the end returns principal minus the penalty. The penalty is the rate copied onto the lock at creation, 300 by default and at most 1000. It is added to `bonusPool`. `withdrawPartial` takes part of the principal at that same rate and leaves the rest locked. `withdrawMature` at or after the end returns principal plus that lock's share of the pool. The share is this lock's weight divided by the weight of locks still open in that token when this one finishes. `topUp` adds principal. Weight added is the new amount times the time still left. `lockGoal` stores a name and a target, which may be larger than the first deposit.
 
-`setPenaltyBps` is the owner. It applies to breaks after the change.
+`setPenaltyBps` is the owner. It applies to locks created after the change. An open lock keeps the rate it was created with.
 
-Yield is optional per lock. The owner sets `yieldPerTokenPerSecond`: wei of the same Super Token streamed per second for each 1e18 of principal. The owner, or anyone, adds tokens with `fundYield` or `fundYieldUnderlying`. Those tokens become `yieldBudget`. A lock opened with `earnYield` true starts a CFA stream from the lock vault to the saver. The rate of an open stream does not change when the owner sets a new rate. Streamed yield is already in the saver's wallet, so an early break does not take it back. The stream stops when the lock ends or is broken.
+Yield is optional per lock. The owner sets `yieldPerTokenPerSecond`: wei of the same Super Token streamed per second for each 1e18 of principal. The owner, or anyone, adds tokens with `fundYield` or `fundYieldUnderlying`. Those tokens are transferred to `yieldPayer` and counted in `yieldBudget`. A lock opened with `earnYield` true starts a CFA stream from the payer to the saver. The payer holds only the reward budget, so a reward stream cannot spend locked principal. The rate of an open stream does not change when the owner sets a new global rate. `topUp` on a yielding lock adds to that saver's stream. Streamed yield is already in the saver's wallet, so an early break does not take it back. The stream stops when the lock ends or is broken.
 
-`protect` and `protectUser` close yield streams when the remaining budget cannot cover the CFA deposit plus one hour of yield. That stop is there so yield cannot spend locked principal. The owner cannot withdraw principal, penalties, or the yield budget.
+`protect` and `protectUser` close yield streams when the remaining budget cannot cover the CFA deposit plus one hour of yield. If nobody calls and the budget runs out, Superfluid can liquidate the payer. The lock vault still pays principal. The owner cannot withdraw principal, penalties, or the yield budget.
 
 ## GroupRotation
 
 `createGroup` takes the token, contribution, cycle length, window, grace, cycle count, members, and each member's offset from the start of the cycle. The creator must be a member. Offsets, the window, and the grace must fit inside the cycle. Windows may differ per member.
 
-Collateral is `contribution * totalCycles`. Every member calls `postCollateral`, then the creator calls `start`. `start` opens a GDA pool whose admin is the group. Units are not transferable, and only the group can distribute. Each member calls `connect` so the pool streams to them. The forwarder's `connectPool` would connect the group itself, so the contract uses `tryConnectPoolFor` for the member. A member can be connected to at most four pools.
+Collateral is `contribution * totalCycles`. Every member calls `postCollateral`. Before `start`, `exitBeforeStart` returns that member's collateral and removes them. `start` then requires at least three members, each of whom has posted. The creator calls `start`. If the creator has already left, any remaining member may. `start` opens a GDA pool whose admin is the group. Units are not transferable, and only the group can distribute. Each member calls `connect` so the pool streams to them. The forwarder's `connectPool` would connect the group itself, so the contract uses `tryConnectPoolFor` for the member. That path uses an autoconnect slot. A member has four autoconnect slots. `claimStream` still works without one.
 
 `contribute` pulls one contribution during that member's window, or during the grace period after it. On time and late-but-inside-grace are both recorded. The pot streams to `activeRecipient`. `recipientOf` remains the scheduled turn.
 
@@ -82,11 +84,11 @@ If the window and grace have passed, the next `contribute`, `sync`, `catchUp`, o
 
 `paidFromTo(group, from, to)` is what `from` has sent toward `to`. `owedFromTo` is what `from` still owes `to`. `ledger` and `ledgerOf` return given, received, owed, misses, and whether they are in owe. `legAt` is one booked payment: who sent it, whose round it was for, the cycle, the amount, and whether it was on time, late, slashed, or a repayment. `place` is waiting, in the window, missed, or in owe.
 
-`received` is what the pool has accounted to that member, which can be a little under the nominal rate. At the end of a cycle the remainder of the pot is distributed without spending collateral.
+`received` is what the pool has accounted to that member, which can be a little under the nominal rate. At the end of a cycle the remainder of the pot is distributed without spending collateral. `claimPayout` is the member the pot is streaming to. It stops that stream and distributes the funded remainder in one lump, still without spending collateral. Later contributions in the cycle can start a stream again.
 
-`finalize` waits until every cycle has ended, settles any still-open misses, stops the stream, and lets members `claimCollateral`. `cancelBeforeStart` is only the creator, and only before `start`.
+`finalize` waits until every cycle has ended, settles any still-open misses, stops the stream, and lets members `claimCollateral`. `cancelBeforeStart` is only the creator, and only before `start`. `previewMember` returns one member's offset, window, grace, and the cycle index on which they are paid.
 
-`setGroupPaused` is the owner. A paused group rejects new contributions, repayments, and `start`. Sync, protect, settle, and claims still run.
+`setGroupPaused` is the owner. While a group is paused its clock stays at the moment the pause began, the pool stream is stopped, and `contribute`, `repay`, and `settleMissed` revert. `sync` does not slash. Unpausing adds the paused seconds back, so a window that was open stays open.
 
 The group keeps collateral as its solvency margin and caps the pool flow so the GDA deposit fits in the pot. Anyone can `protect`. A missed call can still leave the account critical after the one-hour window, the same as a vault.
 

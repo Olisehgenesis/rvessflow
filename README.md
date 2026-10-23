@@ -13,7 +13,7 @@ One person has one vault and can also be in savings groups. The vault and the gr
 A vault holds up to 64 flows in the allowlisted Super Tokens. Several flows can use the same token. Each flow gets its own conduit, so two saving plans can pay the same wallet. Flows can last from one minute up to 30 years.
 
 - **Expense.** Streams to someone else. No goal.
-- **Saving goal.** Streams back to the vault owner. No subflows. A goal is required and cannot be larger than the amount reserved for the stream.
+- **Saving goal.** A hold in the vault. Nothing is streamed, and the target may be larger than the first deposit. No subflows.
 - **Flow goal.** Streams toward a goal. The goal is required and cannot be larger than the reserved amount.
 
 Subflows are allowed only when the parent permits them. The sum of the children's rates must stay at or under the parent's rate. Depth stops at 3. A flow can start at a chosen time, or when another flow ends or hits its goal. A chain can be 8 flows long. A keeper can be required to release a flow. If no keeper is set, the owner triggers it.
@@ -42,6 +42,7 @@ A group is a rotating pot of 3 to 50 members. Each member has their own payment 
 Foundry uses Solidity 0.8.35, the Cancun EVM, the optimizer, and via-IR.
 
 ```shell
+cd contracts
 forge build
 forge test
 ```
@@ -60,6 +61,7 @@ Copy `.env.example` to `.env`. Set `PRIVATE_KEY` and, if you want one, `KEEPER`.
 
 ```shell
 source .env
+cd contracts
 forge script script/Deploy.s.sol:DeployBaseSepolia --rpc-url "$BASE_SEPOLIA_RPC_URL" --broadcast
 ```
 
@@ -67,6 +69,12 @@ Mainnet uses `DeployBaseMainnet` and `BASE_RPC_URL`. The script deploys upgradea
 
 The owner can upgrade the allowlist, factory, lock vault, and group through their proxies. `upgradeVaults` and `upgradeConduits` on the factory upgrade every vault or every conduit.
 
-## Wallet UI
+## App
 
-This repository is the contracts. A web wallet is not included.
+The web app is the Next.js project at the repository root. It reads the Base Sepolia deployment and signs with the four accounts in `wallet/testers.json`. Those keys stay on disk.
+
+```shell
+npm run dev
+```
+
+Contract tests still run from `contracts/`.

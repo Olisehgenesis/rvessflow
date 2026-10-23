@@ -1,0 +1,828 @@
+import "server-only";
+
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { cache } from "react";
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  parseAbi,
+  stringToHex,
+  hexToString,
+  formatUnits,
+  parseUnits,
+  zeroAddress,
+  type Address,
+  type Hex,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { baseSepolia } from "viem/chains";
+import { money, shortAddress } from "@/lib/display";
+
+export const chain = baseSepolia;
+export const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL || "https://base-sepolia-rpc.publicnode.com";
+
+export const addresses = {
+  allowlist: "0xD1c99f91c3495735929F49D62E430B9a1536D4EE" as Address,
+  factory: "0xf60322153F176b98e552263465F05A9c260A0979" as Address,
+  locks: "0xD28D065E0A9d1F12f14E3d51e245658A7aAAb410" as Address,
+  groups: "0x37F0d018517Ce6F7E72476155b41251F0d6aA6F8" as Address,
+  fusdcx: "0x1650581F573eAd727B92073B5Ef8B4f5B94D1648" as Address,
+  cfa: "0xcfA132E353cB4E398080B9700609bb008eceB125" as Address,
+};
+
+export const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
+
+const erc20 = parseAbi([
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+]);
+
+const factoryAbi = parseAbi([
+  "function vaultOf(address) view returns (address)",
+  "function allowlist() view returns (address)",
+  "function owner() view returns (address)",
+  "function createVault() returns (address)",
+]);
+
+const allowAbi = parseAbi([
+  "function isAllowed(address) view returns (bool)",
+  "function paused() view returns (bool)",
+  "function owner() view returns (address)",
+]);
+
+const vaultAbi = parseAbi([
+  "function owner() view returns (address)",
+  "function unallocated(address) view returns (uint256)",
+  "function flowCount() view returns (uint256)",
+  "function flowIdAt(uint256) view returns (uint256)",
+  "function getFlow(uint256) view returns ((address token, address recipient, address conduit, uint8 kind, uint8 chainMode, uint8 rateMode, uint16 shareBps, uint8 depth, bool allowSubflows, bool keeperGated, bool triggered, bool active, bool settled, bytes32 name, uint64 earliestStart, uint64 duration, uint64 createdAt, uint64 triggeredAt, uint64 start, uint64 end, int96 rate, int96 childRate, int96 liveRate, uint256 parentId, uint256 predecessorId, uint256 goalAmount, uint256 reserved, uint256 buffers, uint256 cushion, bool paused, uint64 remaining))",
+  "function balanceSheet(address) view returns (uint256 idle, uint256 held, uint256 streaming)",
+  "function depositSuper(address token, uint256 amount)",
+  "function withdraw(address token, uint256 amount)",
+  "function openSavings(address token, uint256 amount, uint64 duration, bytes32 name, uint256 target) returns (uint256)",
+  "function createFlow((address token, address recipient, uint8 kind, uint256 amount, uint64 earliestStart, uint64 duration, uint256 goalAmount, bool allowSubflows, uint256 predecessorId, uint8 chainMode, bool keeperGated, bytes32 name)) returns (uint256)",
+  "function activate(uint256 id)",
+  "function pause(uint256 id)",
+  "function resume(uint256 id)",
+  "function topUp(uint256 id, uint256 amount)",
+  "function release(uint256 id, uint256 amount)",
+  "function cancel(uint256 id)",
+  "function settle(uint256 id)",
+]);
+
+const cfaAbi = parseAbi([
+  "function getBufferAmountByFlowrate(address token, int96 flowrate) view returns (uint256)",
+]);
+
+const lockAbi = parseAbi([
+  "function owner() view returns (address)",
+  "function penaltyBps() view returns (uint16)",
+  "function yieldBudget(address) view returns (uint256)",
+  "function yieldPerTokenPerSecond(address) view returns (uint256)",
+  "function locksOf(address) view returns (uint256[])",
+  "function locks(uint256) view returns (address owner, address token, uint128 principal, uint64 start, uint64 end, uint256 weight, int96 yieldRate, bool settled, uint16 lockedPenaltyBps, bytes32 name, uint128 targetAmount)",
+  "function previewBreak(uint256) view returns (uint256 payout, uint256 penalty)",
+  "function previewMature(uint256) view returns (uint256 principal, uint256 bonus)",
+  "function lockGoal(address token, uint128 amount, uint64 duration, bool earnYield, bytes32 name, uint128 target) returns (uint256)",
+  "function topUp(uint256 id, uint128 amount) returns (uint256)",
+  "function breakEarly(uint256 id) returns (uint256 payout, uint256 penalty)",
+  "function withdrawMature(uint256 id) returns (uint256 payout, uint256 bonus)",
+]);
+
+const groupAbi = parseAbi([
+  "function owner() view returns (address)",
+  "function nextId() view returns (uint256)",
+  "function groupsOf(address) view returns (uint256[])",
+  "function groups(uint256) view returns (address creator, address token, address pool, uint128 contribution, uint128 collateralRequired, uint64 cycleDuration, uint64 windowDuration, uint64 graceDuration, uint64 startTime, uint16 totalCycles, uint16 memberCount, bool started, bool cancelled, bool finalized, uint16 streamingCycle, address streamingTo, int96 rate, uint64 rateUpdatedAt, bool cycleOpen, uint256 receivedSnapshot)",
+  "function getMember(uint256 id, uint256 index) view returns (address account, uint64 offset, uint128 collateral, bool collateralPosted, bool defaulted, uint256 given, uint256 received, uint256 owed, uint16 missed)",
+  "function currentCycle(uint256) view returns (uint256 cycle, bool open)",
+  "function createGroup(address token, uint128 contribution, uint64 cycleDuration, uint64 windowDuration, uint64 graceDuration, uint16 totalCycles, address[] accounts, uint64[] offsets) returns (uint256)",
+  "function postCollateral(uint256 id)",
+  "function start(uint256 id)",
+  "function contribute(uint256 id)",
+  "function exitBeforeStart(uint256 id)",
+  "function cancelBeforeStart(uint256 id)",
+  "function claimCollateral(uint256 id) returns (uint256)",
+]);
+
+export type Person = { name: string; address: Address };
+
+type Stored = { name: string; address: Address; privateKey: Hex };
+
+function storedAccounts(): Stored[] {
+  const file = path.join(process.cwd(), "wallet", "testers.json");
+  const parsed = JSON.parse(readFileSync(file, "utf8")) as { accounts: Stored[] };
+  if (!Array.isArray(parsed.accounts) || parsed.accounts.length === 0) {
+    throw new Error("wallet/testers.json has no accounts.");
+  }
+  return parsed.accounts;
+}
+
+export function people(): Person[] {
+  return storedAccounts().map(({ name, address }) => ({ name, address }));
+}
+
+export function personName(address: Address): string {
+  const found = people().find((person) => person.address.toLowerCase() === address.toLowerCase());
+  return found?.name ?? shortAddress(address);
+}
+
+function signer(index: number) {
+  const accounts = storedAccounts();
+  const chosen = accounts[index];
+  if (!chosen) throw new Error("That account is not one of the funded test accounts.");
+  const account = privateKeyToAccount(chosen.privateKey);
+  const wallet = createWalletClient({ account, chain, transport: http(rpcUrl) });
+  return { account, wallet, person: { name: chosen.name, address: chosen.address } };
+}
+
+async function write(index: number, args: Parameters<ReturnType<typeof signer>["wallet"]["writeContract"]>[0]) {
+  const { wallet } = signer(index);
+  const hash = await wallet.writeContract(args);
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") throw new Error("The transaction reverted.");
+  return hash;
+}
+
+async function ensureAllowance(index: number, owner: Address, spender: Address, amount: bigint) {
+  const allowance = await publicClient.readContract({
+    address: addresses.fusdcx,
+    abi: erc20,
+    functionName: "allowance",
+    args: [owner, spender],
+  });
+  if (allowance >= amount) return;
+  await write(index, {
+    address: addresses.fusdcx,
+    abi: erc20,
+    functionName: "approve",
+    args: [spender, amount],
+  });
+}
+
+export function readName(value: Hex): string {
+  const text = hexToString(value, { size: 32 }).replaceAll("\u0000", "").trim();
+  return text;
+}
+
+export function toName(value: string): Hex {
+  const clean = value.trim();
+  if (!clean) throw new Error("Give this a name.");
+  if (clean.length > 31) throw new Error("Use 31 characters or fewer.");
+  return stringToHex(clean, { size: 32 });
+}
+
+export function withProtocolFee(amount: bigint): bigint {
+  return amount + (amount * 30n) / 10_000n;
+}
+
+export function parseAmount(value: string): bigint {
+  const clean = value.trim();
+  if (!/^\d+(\.\d{1,18})?$/.test(clean) || Number(clean) <= 0) {
+    throw new Error("Enter an amount greater than zero.");
+  }
+  return parseUnits(clean, 18);
+}
+
+const kindName = ["expense", "saving", "flow"] as const;
+
+export type FlowRow = {
+  id: string;
+  name: string;
+  kind: "expense" | "saving" | "flow";
+  token: Address;
+  recipient: Address;
+  recipientName: string;
+  active: boolean;
+  paused: boolean;
+  settled: boolean;
+  start: number;
+  end: number;
+  earliestStart: number;
+  duration: number;
+  rate: string;
+  reserved: string;
+  goal: string;
+  saved: string;
+  remaining: string;
+};
+
+export type LockRow = {
+  id: string;
+  name: string;
+  principal: string;
+  target: string;
+  start: number;
+  end: number;
+  settled: boolean;
+  penaltyBps: number;
+  yieldRate: string;
+  breakPayout: string;
+  breakPenalty: string;
+  matureBonus: string;
+};
+
+export type MemberRow = {
+  account: Address;
+  name: string;
+  posted: boolean;
+  collateral: string;
+  given: string;
+  received: string;
+  owed: string;
+  missed: number;
+};
+
+export type GroupRow = {
+  id: string;
+  creator: Address;
+  creatorName: string;
+  contribution: string;
+  collateral: string;
+  cycleSeconds: number;
+  windowSeconds: number;
+  graceSeconds: number;
+  cycles: number;
+  members: MemberRow[];
+  started: boolean;
+  cancelled: boolean;
+  finalized: boolean;
+  startTime: number;
+  cycle: string;
+  cycleOpen: boolean;
+};
+
+export type Portfolio = {
+  me: Person;
+  index: number;
+  people: Person[];
+  wallet: string;
+  eth: string;
+  vault: Address | null;
+  idle: string;
+  held: string;
+  streaming: string;
+  locked: string;
+  total: string;
+  readAt: number;
+  flows: FlowRow[];
+  locks: LockRow[];
+  groups: GroupRow[];
+  protocol: {
+    admin: Address;
+    penaltyBps: number;
+    yieldBudget: string;
+    yieldRate: string;
+    tokenAllowed: boolean;
+    paused: boolean;
+    upgradeReadyAt: number;
+  };
+};
+
+function streamRemaining(flow: {
+  kind: number;
+  settled: boolean;
+  paused: boolean;
+  active: boolean;
+  reserved: bigint;
+  rate: bigint;
+  start: bigint;
+  end: bigint;
+  duration: bigint;
+  remaining: bigint;
+}, now: bigint): bigint {
+  if (flow.settled || flow.kind === 1) return 0n;
+  if (flow.paused) return flow.rate > 0n ? flow.rate * flow.remaining : 0n;
+  if (!flow.active) return flow.reserved;
+  const elapsed = now >= flow.end ? flow.duration : now - flow.start;
+  const streamed = flow.rate * elapsed;
+  return flow.reserved > streamed ? flow.reserved - streamed : 0n;
+}
+
+export const loadPortfolio = cache(async (who: { address: Address; name: string; index: number }): Promise<Portfolio> => {
+  const roster = people();
+  const me = { name: who.name, address: who.address };
+  const index = who.index;
+
+  const [walletBal, ethBal, vault, penaltyBps, yieldBudget, yieldRate, tokenAllowed, paused, admin, lockIds, groupIds] =
+    await Promise.all([
+      publicClient.readContract({ address: addresses.fusdcx, abi: erc20, functionName: "balanceOf", args: [me.address] }),
+      publicClient.getBalance({ address: me.address }),
+      publicClient.readContract({ address: addresses.factory, abi: factoryAbi, functionName: "vaultOf", args: [me.address] }),
+      publicClient.readContract({ address: addresses.locks, abi: lockAbi, functionName: "penaltyBps" }),
+      publicClient.readContract({ address: addresses.locks, abi: lockAbi, functionName: "yieldBudget", args: [addresses.fusdcx] }),
+      publicClient.readContract({
+        address: addresses.locks,
+        abi: lockAbi,
+        functionName: "yieldPerTokenPerSecond",
+        args: [addresses.fusdcx],
+      }),
+      publicClient.readContract({ address: addresses.allowlist, abi: allowAbi, functionName: "isAllowed", args: [addresses.fusdcx] }),
+      publicClient.readContract({ address: addresses.allowlist, abi: allowAbi, functionName: "paused" }),
+      publicClient.readContract({ address: addresses.allowlist, abi: allowAbi, functionName: "owner" }),
+      publicClient.readContract({ address: addresses.locks, abi: lockAbi, functionName: "locksOf", args: [me.address] }),
+      publicClient.readContract({ address: addresses.groups, abi: groupAbi, functionName: "groupsOf", args: [me.address] }),
+    ]);
+
+  const hasVault = vault !== zeroAddress;
+  let idle = 0n;
+  let held = 0n;
+  let streaming = 0n;
+  let flows: FlowRow[] = [];
+  let readAt = Math.floor(Date.now() / 1000);
+
+  if (hasVault) {
+    const [sheet, count] = await Promise.all([
+      publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "balanceSheet", args: [addresses.fusdcx] }),
+      publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "flowCount" }),
+    ]);
+    idle = sheet[0];
+    held = sheet[1];
+    streaming = sheet[2];
+    const totalFlows = Number(count);
+    if (totalFlows > 0) {
+      const ids = await publicClient.multicall({
+        contracts: Array.from({ length: totalFlows }, (_, i) => ({
+          address: vault,
+          abi: vaultAbi,
+          functionName: "flowIdAt" as const,
+          args: [BigInt(i)] as const,
+        })),
+        allowFailure: false,
+      });
+      const records = await publicClient.multicall({
+        contracts: ids.map((id) => ({
+          address: vault,
+          abi: vaultAbi,
+          functionName: "getFlow" as const,
+          args: [id] as const,
+        })),
+        allowFailure: false,
+      });
+      readAt = Math.floor(Date.now() / 1000);
+      const now = BigInt(readAt);
+      flows = records.map((flow, i) => {
+        const kind = Number(flow.kind);
+        const remaining = kind === 1 && !flow.settled ? flow.reserved : streamRemaining({ ...flow, kind }, now);
+        return {
+          id: ids[i].toString(),
+          name: readName(flow.name) || "Untitled",
+          kind: kindName[kind] ?? "flow",
+          token: flow.token,
+          recipient: flow.recipient,
+          recipientName: personName(flow.recipient),
+          active: flow.active,
+          paused: flow.paused,
+          settled: flow.settled,
+          start: Number(flow.start),
+          end: Number(flow.end),
+          earliestStart: Number(flow.earliestStart),
+          duration: Number(flow.duration),
+          rate: flow.rate.toString(),
+          reserved: flow.reserved.toString(),
+          goal: flow.goalAmount.toString(),
+          saved: (kind === 1 && !flow.settled ? flow.reserved : 0n).toString(),
+          remaining: remaining.toString(),
+        };
+      });
+    }
+  }
+
+  const lockRecords = lockIds.length
+    ? await publicClient.multicall({
+        contracts: lockIds.flatMap((id) => [
+          { address: addresses.locks, abi: lockAbi, functionName: "locks" as const, args: [id] as const },
+          { address: addresses.locks, abi: lockAbi, functionName: "previewBreak" as const, args: [id] as const },
+          { address: addresses.locks, abi: lockAbi, functionName: "previewMature" as const, args: [id] as const },
+        ]),
+        allowFailure: false,
+      })
+    : [];
+
+  const locks: LockRow[] = [];
+  let locked = 0n;
+  for (let i = 0; i < lockIds.length; i++) {
+    const entry = lockRecords[i * 3] as readonly [Address, Address, bigint, bigint, bigint, bigint, bigint, boolean, number, Hex, bigint];
+    const preview = lockRecords[i * 3 + 1] as readonly [bigint, bigint];
+    const mature = lockRecords[i * 3 + 2] as readonly [bigint, bigint];
+    const principal = entry[2];
+    const settled = entry[7];
+    if (!settled) locked += principal;
+    locks.push({
+      id: lockIds[i].toString(),
+      name: readName(entry[9]) || "Lock",
+      principal: principal.toString(),
+      target: entry[10].toString(),
+      start: Number(entry[3]),
+      end: Number(entry[4]),
+      settled,
+      penaltyBps: Number(entry[8]),
+      yieldRate: entry[6].toString(),
+      breakPayout: preview[0].toString(),
+      breakPenalty: preview[1].toString(),
+      matureBonus: mature[1].toString(),
+    });
+  }
+
+  const groupRows: GroupRow[] = [];
+  for (const id of groupIds) {
+    const group = await publicClient.readContract({
+      address: addresses.groups,
+      abi: groupAbi,
+      functionName: "groups",
+      args: [id],
+    });
+    const creator = group[0];
+    const contribution = group[3];
+    const collateralRequired = group[4];
+    const count = Number(group[10]);
+    const members = count
+      ? await publicClient.multicall({
+          contracts: Array.from({ length: count }, (_, index) => ({
+            address: addresses.groups,
+            abi: groupAbi,
+            functionName: "getMember" as const,
+            args: [id, BigInt(index)] as const,
+          })),
+          allowFailure: false,
+        })
+      : [];
+    let cycle = 0n;
+    let cycleOpen = false;
+    if (group[11] && !group[13]) {
+      const current = await publicClient.readContract({
+        address: addresses.groups,
+        abi: groupAbi,
+        functionName: "currentCycle",
+        args: [id],
+      });
+      cycle = current[0];
+      cycleOpen = current[1];
+    }
+    groupRows.push({
+      id: id.toString(),
+      creator,
+      creatorName: personName(creator),
+      contribution: contribution.toString(),
+      collateral: collateralRequired.toString(),
+      cycleSeconds: Number(group[5]),
+      windowSeconds: Number(group[6]),
+      graceSeconds: Number(group[7]),
+      cycles: Number(group[9]),
+      started: group[11],
+      cancelled: group[12],
+      finalized: group[13],
+      startTime: Number(group[8]),
+      cycle: cycle.toString(),
+      cycleOpen,
+      members: members.map((member) => ({
+        account: member[0],
+        name: personName(member[0]),
+        posted: member[3],
+        collateral: member[2].toString(),
+        given: member[5].toString(),
+        received: member[6].toString(),
+        owed: member[7].toString(),
+        missed: Number(member[8]),
+      })),
+    });
+  }
+
+  const total = walletBal + idle + held + streaming + locked;
+  let upgradeReadyAt = 0;
+  try {
+    upgradeReadyAt = Number(
+      await publicClient.readContract({
+        address: addresses.locks,
+        abi: parseAbi(["function upgradeReadyAt() view returns (uint64)"]),
+        functionName: "upgradeReadyAt",
+      }),
+    );
+  } catch {
+    upgradeReadyAt = 0;
+  }
+
+  return {
+    me,
+    index,
+    people: roster,
+    wallet: walletBal.toString(),
+    eth: formatUnits(ethBal, 18),
+    vault: hasVault ? vault : null,
+    idle: idle.toString(),
+    held: held.toString(),
+    streaming: streaming.toString(),
+    locked: locked.toString(),
+    total: total.toString(),
+    readAt,
+    flows,
+    locks,
+    groups: groupRows,
+    protocol: {
+      admin,
+      penaltyBps: Number(penaltyBps),
+      yieldBudget: yieldBudget.toString(),
+      yieldRate: yieldRate.toString(),
+      tokenAllowed,
+      paused,
+      upgradeReadyAt,
+    },
+  };
+});
+
+async function vaultFor(index: number): Promise<Address> {
+  const { account } = signer(index);
+  const existing = await publicClient.readContract({
+    address: addresses.factory,
+    abi: factoryAbi,
+    functionName: "vaultOf",
+    args: [account.address],
+  });
+  if (existing !== zeroAddress) return existing;
+  await write(index, { address: addresses.factory, abi: factoryAbi, functionName: "createVault" });
+  const created = await publicClient.readContract({
+    address: addresses.factory,
+    abi: factoryAbi,
+    functionName: "vaultOf",
+    args: [account.address],
+  });
+  if (created === zeroAddress) throw new Error("The vault was not created.");
+  return created;
+}
+
+async function deposit(index: number, vault: Address, amount: bigint) {
+  if (amount === 0n) return;
+  const { account } = signer(index);
+  const balance = await publicClient.readContract({
+    address: addresses.fusdcx,
+    abi: erc20,
+    functionName: "balanceOf",
+    args: [account.address],
+  });
+  const due = withProtocolFee(amount);
+  if (balance < due) {
+    throw new Error(`This needs ${money(due)} fUSDCx in the wallet, including the 0.3% protocol fee. This account has ${money(balance)}.`);
+  }
+  await ensureAllowance(index, account.address, vault, due);
+  await write(index, {
+    address: vault,
+    abi: vaultAbi,
+    functionName: "depositSuper",
+    args: [addresses.fusdcx, amount],
+  });
+}
+
+async function latestFlowId(vault: Address): Promise<string> {
+  const count = await publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "flowCount" });
+  if (count === 0n) throw new Error("The goal was not created.");
+  const id = await publicClient.readContract({
+    address: vault,
+    abi: vaultAbi,
+    functionName: "flowIdAt",
+    args: [count - 1n],
+  });
+  return id.toString();
+}
+
+export async function streamNeed(amount: bigint, duration: bigint): Promise<bigint> {
+  const perSecond = amount / duration;
+  if (perSecond === 0n) throw new Error("That duration is too long for this amount. The stream would be less than 1 wei per second.");
+  const reserved = perSecond * duration;
+  const buffer = await publicClient.readContract({
+    address: addresses.cfa,
+    abi: cfaAbi,
+    functionName: "getBufferAmountByFlowrate",
+    args: [addresses.fusdcx, perSecond],
+  });
+  const cushion = perSecond * 3600n;
+  return reserved + buffer * 2n + cushion;
+}
+
+export async function openSaving(index: number, input: { name: string; amount: string; target: string; duration: number }) {
+  const amount = parseAmount(input.amount);
+  const target = input.target.trim() ? parseAmount(input.target) : amount;
+  const vault = await vaultFor(index);
+  const idle = await publicClient.readContract({
+    address: vault,
+    abi: vaultAbi,
+    functionName: "unallocated",
+    args: [addresses.fusdcx],
+  });
+  if (idle < amount) await deposit(index, vault, amount - idle);
+  await write(index, {
+    address: vault,
+    abi: vaultAbi,
+    functionName: "openSavings",
+    args: [addresses.fusdcx, amount, BigInt(input.duration), toName(input.name), target],
+  });
+  return latestFlowId(vault);
+}
+
+export async function openStream(
+  index: number,
+  input: { name: string; amount: string; duration: number; kind: "flow" | "expense"; recipient: Address; startAt: number },
+) {
+  const amount = parseAmount(input.amount);
+  const duration = BigInt(input.duration);
+  const need = await streamNeed(amount, duration);
+  const { account } = signer(index);
+  const recipient = input.kind === "flow" ? account.address : input.recipient;
+  if (recipient.toLowerCase() === account.address.toLowerCase() && input.kind === "expense") {
+    throw new Error("An expense streams to someone else. Pick another account.");
+  }
+  const vault = await vaultFor(index);
+  const idle = await publicClient.readContract({
+    address: vault,
+    abi: vaultAbi,
+    functionName: "unallocated",
+    args: [addresses.fusdcx],
+  });
+  if (idle < need) await deposit(index, vault, need - idle);
+  const perSecond = amount / duration;
+  const reserved = perSecond * duration;
+  const goal = input.kind === "flow" ? reserved : 0n;
+  const hash = await write(index, {
+    address: vault,
+    abi: vaultAbi,
+    functionName: "createFlow",
+    args: [
+      {
+        token: addresses.fusdcx,
+        recipient,
+        kind: input.kind === "expense" ? 0 : 2,
+        amount,
+        earliestStart: BigInt(input.startAt),
+        duration,
+        goalAmount: goal,
+        allowSubflows: false,
+        predecessorId: 0n,
+        chainMode: 0,
+        keeperGated: false,
+        name: toName(input.name),
+      },
+    ],
+  });
+  if (input.startAt === 0 || input.startAt <= Math.floor(Date.now() / 1000)) {
+    const receipt = await publicClient.getTransactionReceipt({ hash });
+    const created = receipt.logs.find((log) => log.address.toLowerCase() === vault.toLowerCase());
+    void created;
+    const count = await publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "flowCount" });
+    const id = await publicClient.readContract({
+      address: vault,
+      abi: vaultAbi,
+      functionName: "flowIdAt",
+      args: [count - 1n],
+    });
+    await write(index, { address: vault, abi: vaultAbi, functionName: "activate", args: [id] });
+  }
+  return latestFlowId(vault);
+}
+
+async function requireVault(index: number): Promise<Address> {
+  const { account } = signer(index);
+  const vault = await publicClient.readContract({
+    address: addresses.factory,
+    abi: factoryAbi,
+    functionName: "vaultOf",
+    args: [account.address],
+  });
+  if (vault === zeroAddress) throw new Error("Open a goal first. That creates your vault.");
+  return vault;
+}
+
+export async function addToGoal(index: number, id: bigint, amountRaw: string) {
+  const amount = parseAmount(amountRaw);
+  const vault = await requireVault(index);
+  const idle = await publicClient.readContract({
+    address: vault,
+    abi: vaultAbi,
+    functionName: "unallocated",
+    args: [addresses.fusdcx],
+  });
+  if (idle < amount) await deposit(index, vault, amount - idle);
+  await write(index, { address: vault, abi: vaultAbi, functionName: "topUp", args: [id, amount] });
+}
+
+export async function releaseGoal(index: number, id: bigint, amountRaw: string) {
+  const vault = await requireVault(index);
+  await write(index, { address: vault, abi: vaultAbi, functionName: "release", args: [id, parseAmount(amountRaw)] });
+}
+
+export async function vaultCall(index: number, fn: "pause" | "resume" | "cancel" | "settle" | "withdraw", idOrAmount: bigint) {
+  const vault = await requireVault(index);
+  if (fn === "withdraw") {
+    await write(index, { address: vault, abi: vaultAbi, functionName: "withdraw", args: [addresses.fusdcx, idOrAmount] });
+    return;
+  }
+  await write(index, { address: vault, abi: vaultAbi, functionName: fn, args: [idOrAmount] });
+}
+
+export async function openLock(index: number, input: { name: string; amount: string; target: string; duration: number; earnYield: boolean }) {
+  const amount = parseAmount(input.amount);
+  if (amount > BigInt("0xffffffffffffffffffffffffffffffff")) throw new Error("That amount is too large for a lock.");
+  const target = input.target.trim() ? parseAmount(input.target) : amount;
+  const { account } = signer(index);
+  await ensureAllowance(index, account.address, addresses.locks, withProtocolFee(amount));
+  await write(index, {
+    address: addresses.locks,
+    abi: lockAbi,
+    functionName: "lockGoal",
+    args: [addresses.fusdcx, amount, BigInt(input.duration), input.earnYield, toName(input.name), target],
+  });
+  const ids = await publicClient.readContract({
+    address: addresses.locks,
+    abi: lockAbi,
+    functionName: "locksOf",
+    args: [account.address],
+  });
+  return ids[ids.length - 1]?.toString() ?? "";
+}
+
+export async function lockTopUp(index: number, id: bigint, amountRaw: string) {
+  const amount = parseAmount(amountRaw);
+  const { account } = signer(index);
+  await ensureAllowance(index, account.address, addresses.locks, withProtocolFee(amount));
+  await write(index, { address: addresses.locks, abi: lockAbi, functionName: "topUp", args: [id, amount] });
+}
+
+export async function lockBreak(index: number, id: bigint) {
+  await write(index, { address: addresses.locks, abi: lockAbi, functionName: "breakEarly", args: [id] });
+}
+
+export async function lockMature(index: number, id: bigint) {
+  await write(index, { address: addresses.locks, abi: lockAbi, functionName: "withdrawMature", args: [id] });
+}
+
+export async function openGroup(
+  index: number,
+  input: { contribution: string; members: Address[]; cycles: number; cycleSeconds: number; windowSeconds: number; graceSeconds: number },
+) {
+  const contribution = parseAmount(input.contribution);
+  const { account } = signer(index);
+  const unique = [...new Set(input.members.map((item) => item.toLowerCase()))].map((item) => item as Address);
+  if (!unique.some((item) => item.toLowerCase() === account.address.toLowerCase())) {
+    throw new Error("You have to be a member of the group you create.");
+  }
+  if (unique.length < 3) throw new Error("A group needs at least 3 members.");
+  if (contribution > BigInt("0xffffffffffffffffffffffffffffffff")) throw new Error("That contribution is too large.");
+  const cycle = BigInt(input.cycleSeconds);
+  const window = BigInt(input.windowSeconds);
+  const grace = BigInt(input.graceSeconds);
+  if (cycle < 3600n || cycle > 366n * 86400n || window <= 0n || window + grace > cycle) {
+    throw new Error("That cycle length is outside what the contract allows.");
+  }
+  await write(index, {
+    address: addresses.groups,
+    abi: groupAbi,
+    functionName: "createGroup",
+    args: [addresses.fusdcx, contribution, cycle, window, grace, input.cycles, unique, unique.map(() => 0n)],
+  });
+}
+
+export async function groupAct(
+  index: number,
+  id: bigint,
+  fn: "postCollateral" | "start" | "contribute" | "exitBeforeStart" | "cancelBeforeStart" | "claimCollateral",
+) {
+  if (fn === "postCollateral" || fn === "contribute") {
+    const group = await publicClient.readContract({
+      address: addresses.groups,
+      abi: groupAbi,
+      functionName: "groups",
+      args: [id],
+    });
+    const amount = fn === "postCollateral" ? group[4] : group[3];
+    const { account } = signer(index);
+    await ensureAllowance(index, account.address, addresses.groups, withProtocolFee(amount));
+  }
+  await write(index, { address: addresses.groups, abi: groupAbi, functionName: fn, args: [id] });
+}
+
+export function explain(error: unknown): string {
+  const text = error instanceof Error ? error.message : "The transaction failed.";
+  const known: Record<string, string> = {
+    Insufficient: "The vault does not have enough fUSDCx set aside for this.",
+    TooEarly: "This is not ready yet.",
+    TooLate: "The payment window for this cycle has closed.",
+    WindowOutOfRange: "The payment window does not fit inside that cycle.",
+    BadDuration: "That length is outside what the contract allows.",
+    BadAmount: "That amount does not fit this position.",
+    MissingCollateral: "Every member has to post collateral before the group can start.",
+    AlreadyPosted: "You already posted collateral for this group.",
+    AlreadyPaid: "You already paid this cycle.",
+    NotCreator: "Only the person who created the group can do that.",
+    VaultExists: "This account already has a vault.",
+    NotActive: "That position is not running.",
+    StillActive: "It has not reached its date yet.",
+    Paused: "The protocol is paused for new positions.",
+    TokenNotAllowed: "fUSDCx is not on the allowlist.",
+  };
+  for (const [key, message] of Object.entries(known)) {
+    if (text.includes(key)) return message;
+  }
+  const line = text.split("\n").find((item) => item.trim()) ?? text;
+  return line.replace(/^Error:\s*/, "").slice(0, 220);
+}

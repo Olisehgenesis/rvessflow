@@ -1,0 +1,56 @@
+"use client";
+
+import { Suspense } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { IconHome, IconLock, IconMore, IconPeople, IconSeed } from "@/components/icons";
+
+const items = [
+  { href: "/home", label: "Home", icon: IconHome },
+  { href: "/goals", label: "Goals", icon: IconSeed },
+  { href: "/vaults", label: "Vaults", icon: IconLock },
+  { href: "/groups", label: "Groups", icon: IconPeople },
+  { href: "/settings", label: "More", icon: IconMore },
+];
+
+export function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-dvh bg-background text-foreground lg:grid lg:grid-cols-[minmax(0,1fr)_30rem]">
+      <aside className="relative hidden bg-background text-foreground lg:flex lg:flex-col lg:p-12">
+        <p className="text-sm font-medium">RvessFlow</p>
+        <p className="mt-4 max-w-sm text-lg">A hold stays still. A stream moves every second.</p>
+      </aside>
+      <div className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-background lg:border-l lg:border-border">
+        <div className="flex-1">{children}</div>
+        <Suspense fallback={<div className="sticky bottom-0 h-14 border-t border-border bg-card" />}>
+          <BottomNav />
+        </Suspense>
+      </div>
+    </div>
+  );
+}
+
+function BottomNav() {
+  const pathname = usePathname();
+  return (
+    <nav className="sticky bottom-0 z-20 border-t border-border bg-card px-2 pt-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))]">
+      <ul className="grid grid-cols-5">
+        {items.map((item) => {
+          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const Icon = item.icon;
+          return (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                className={`flex flex-col items-center gap-0.5 py-1.5 text-[11px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${active ? "font-semibold text-foreground" : "text-muted-foreground"}`}
+              >
+                <Icon className="size-5" />
+                <span className={active ? "font-semibold" : ""}>{item.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
