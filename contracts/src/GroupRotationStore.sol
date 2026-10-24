@@ -170,6 +170,7 @@ abstract contract GroupRotationStore is Initializable, Ownable2Step, UUPSUpgrade
     error NothingOwed();
     error UpgradeNotReady();
     error NotAdmin();
+    error NotManager();
     error NotProtocolAdmin();
 
     struct GroupRules {

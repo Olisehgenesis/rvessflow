@@ -15,7 +15,7 @@ import {SuperTokenReceiver} from "./SuperTokenReceiver.sol";
 import {YieldPayer} from "./YieldPayer.sol";
 
 /// @title LockVault
-/// @notice Time-locked savings. Breaking a lock early pays a penalty (3% by default)
+/// @notice RvessFlow Protocol. Time-locked savings. Breaking a lock early pays a penalty (3% by default)
 ///         into a bonus pool. Savers who hold until maturity split that pool by
 ///         weight (principal × duration) among locks still open at completion.
 /// @dev Optional yield is a real CFA stream from {YieldPayer} to the saver, funded

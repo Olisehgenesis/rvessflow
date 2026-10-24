@@ -21,7 +21,7 @@ import {GroupRotationExtension} from "./GroupRotationExtension.sol";
 import {GroupRotationStore} from "./GroupRotationStore.sol";
 
 /// @title GroupRotation
-/// @notice A ROSCA / chama. Members contribute once per cycle inside their own
+/// @notice RvessFlow Protocol. A ROSCA / chama. Members contribute once per cycle inside their own
 ///         window. The pot is a real GDA pool flow to that cycle's recipient,
 ///         not a lump sum and not an internal balance.
 /// @dev Collateral (contribution × cycles) stays here until the group ends and
@@ -52,7 +52,7 @@ contract GroupRotation is GroupRotationStore {
     }
 
     function contractVersion() public pure virtual returns (uint256) {
-        return 3;
+        return 4;
     }
 
     /// @notice Schedule an upgrade. It can be executed after two days. Members can still exit a group
@@ -69,7 +69,9 @@ contract GroupRotation is GroupRotationStore {
 
     /// @notice Stop new contributions and repayments. Sync, protect, settle, and
     ///         claims still run, so a pause cannot hide a miss or trap collateral.
-    function setGroupPaused(uint256 id, bool paused_) external nonReentrant onlyOwner {
+    ///         The protocol owner may pause or unpause. A support manager may only pause.
+    function setGroupPaused(uint256 id, bool paused_) external nonReentrant {
+        if (msg.sender != owner() && (!paused_ || !allowlist.isManager(msg.sender))) revert NotManager();
         if (groups[id].creator == address(0)) revert BadState();
         if (paused_ == groupPaused[id]) {
             emit GroupPausedSet(id, paused_);
@@ -227,8 +229,8 @@ contract GroupRotation is GroupRotationStore {
         PayStatus status = nowT <= windowStart + _windowAt(id, index) ? PayStatus.OnTime : PayStatus.Late;
         _pullExact(g.token, g.contribution);
         _pullProtocol(g.token, g.contribution);
-        adminFeeGate = id;
-        _ext(abi.encodeWithSignature("takeAdminFee(uint256)", id));
+        // Book the payment before the admin-fee pull. A token callback then sees
+        // this window as already paid, so it cannot be settled as a miss.
         p.amount = g.contribution;
         p.paidAt = uint64(block.timestamp);
         p.status = status;
@@ -237,6 +239,8 @@ contract GroupRotation is GroupRotationStore {
         _pushLeg(id, msg.sender, to, g.contribution, uint16(cycle), status);
         m.given += g.contribution;
         emit Contributed(id, cycle, msg.sender, status, g.contribution);
+        adminFeeGate = id;
+        _ext(abi.encodeWithSignature("takeAdminFee(uint256)", id));
         _sync(id, false);
     }
 

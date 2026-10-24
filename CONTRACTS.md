@@ -1,10 +1,12 @@
-# RvessFlow contracts
+# RvessFlow Protocol
 
-These contracts have not been audited. Do not put real funds in them.
+These contracts were reviewed against a Solidity security checklist. That is not an external audit. Do not put real funds in them.
 
-RvessFlow holds savings and pays them out as Superfluid streams. A flow or subflow is a constant-flow agreement (CFA) stream. A group pot is a general-distribution agreement (GDA) pool. The accepted tokens are Super Tokens on the allowlist, normally USDCx and ETHx. On Base Sepolia the stable token is fUSDCx.
+The RvessFlow Protocol holds savings and pays them out as Superfluid streams. A flow or subflow is a constant-flow agreement (CFA) stream. A group pot is a general-distribution agreement (GDA) pool. The accepted tokens are Super Tokens on the allowlist, normally USDCx and ETHx. On Base Sepolia the stable token is fUSDCx.
 
-The protocol owner is the admin. The owner can pause new positions, set the lock penalty and the yield rate, fund yield, pause a group, and upgrade the contracts. The owner cannot withdraw a user's flow balance, lock principal, penalty pool, unused yield budget, group collateral, or a group pot, and cannot rewrite who paid whom.
+The protocol owner is one address. That address should be a Safe, so several people sign upgrades and treasury actions, and the contracts still see a single owner. The owner can add support managers, set the token list, set the lock penalty and the yield rate, fund yield, and upgrade the contracts. The owner cannot withdraw a user's flow balance, lock principal, penalty pool, unused yield budget, group collateral, or a group pot, and cannot rewrite who paid whom.
+
+Support managers are a separate list on the allowlist. The owner adds and removes them with `setManager`. A manager can pause new positions and pause a group, so support can stop a stuck group without holding the Safe. Only the owner can unpause. A manager cannot upgrade, change the token list, change the penalty or the yield rate, add another manager, or withdraw fees. A group has its own admins, added with `addGroupAdmin`. Those people run that group. They are not protocol managers.
 
 ## Upgrade
 
@@ -12,7 +14,7 @@ The protocol owner is the admin. The owner can pause new positions, set the lock
 
 Each person gets one `FlowVault`, and each flow gets one `FlowConduit`. Both are beacon proxies. The factory owner calls `scheduleVaultUpgrade` or `scheduleConduitUpgrade`, waits two days, then `upgradeVaults` or `upgradeConduits`. A new vault implementation must be constructed with the same Superfluid host and CFA forwarder.
 
-`contractVersion` returns `2` on the allowlist and the factory, and `3` on the lock vault and the group.
+`contractVersion` returns `3` on the allowlist, `2` on the factory, `3` on the lock vault, and `4` on the group. The Base Sepolia proxies are still on the previous versions until the owner schedules this upgrade and waits two days.
 
 ## TokenAllowlist
 
@@ -24,7 +26,7 @@ The owner registers a Super Token with `setSuperToken(token, allowed, kind)`.
 | `Native` | ETHx. Underlying must be empty. |
 | `Pure` | A pure Super Token with no underlying. |
 
-`setPaused(true)` blocks new flows, new locks, and new groups. It does not block settle, protect, withdraw, or an already running stream.
+`setPaused(true)` blocks new flows, new locks, and new groups. The owner or a support manager may pause. Only the owner may pass `false`. It does not block settle, protect, withdraw, or an already running stream. `setManager` is the owner only. `managerAt` lists the current managers.
 
 ## VaultFactory
 
@@ -90,7 +92,7 @@ If the window and grace have passed, the next `contribute`, `sync`, `catchUp`, o
 
 `finalize` waits until every cycle has ended, settles still-open misses, stops the stream, and lets members `claimCollateral`. One call books at most 50 misses. If a long silence is still catching up, `finalize` returns without marking the group final and emits `GroupCatchingUp`. The caller repeats it until every cycle is booked. `cancelBeforeStart` is an admin, or any remaining member once the creator has left. `previewMember` returns one member's offset, window, grace, and the cycle index on which they are paid.
 
-`setGroupPaused` is the owner. While a group is paused its clock stays at the moment the pause began, the pool stream is stopped, and `contribute`, `repay`, and `settleMissed` revert. `sync` does not slash. Unpausing adds the paused seconds back, so a window that was open stays open.
+`setGroupPaused(true)` is the owner or a support manager. Only the owner may unpause. While a group is paused its clock stays at the moment the pause began, the pool stream is stopped, and `contribute`, `repay`, and `settleMissed` revert. `sync` does not slash. Unpausing adds the paused seconds back, so a window that was open stays open.
 
 The group keeps collateral as its solvency margin and caps the pool flow so the GDA deposit fits in the pot. Anyone can `protect`. A missed call can still leave the account critical after the one-hour window, the same as a vault.
 

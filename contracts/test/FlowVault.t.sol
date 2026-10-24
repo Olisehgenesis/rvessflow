@@ -43,7 +43,7 @@ contract FlowVaultTest is SfBase {
         assertEq(allow.underlyingDecimalsOf(address(usdcx)), 6);
         assertEq(uint8(allow.kindOf(address(ethx))), uint8(ITokenAllowlist.TokenKind.Native));
         vm.stopPrank();
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
+        vm.expectRevert(TokenAllowlist.NotManager.selector);
         vm.prank(alice);
         allow.setPaused(true);
 

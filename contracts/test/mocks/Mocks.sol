@@ -37,6 +37,10 @@ contract MockAllowlist is ITokenAllowlist {
         kind = kind_;
     }
 
+    function isManager(address) external pure returns (bool) {
+        return false;
+    }
+
     function isAllowed(address) external pure returns (bool) {
         return true;
     }

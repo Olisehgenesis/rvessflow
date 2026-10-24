@@ -13,7 +13,7 @@ import {FlowVaultExtension} from "./FlowVaultExtension.sol";
 import {FlowVaultStore, IFlowVaultHooks} from "./FlowVaultStore.sol";
 
 /// @title FlowVault
-/// @notice One person's savings wallet. An expense or a flow goal is a real Superfluid
+/// @notice RvessFlow Protocol. One person's savings wallet. An expense or a flow goal is a real Superfluid
 ///         CFA stream: the vault streams to a per-flow conduit, and the conduit streams
 ///         to the recipient. A saving goal holds the deposit until its end date and
 ///         does not open a stream, so it cannot be liquidated.

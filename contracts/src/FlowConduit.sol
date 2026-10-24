@@ -6,7 +6,7 @@ import {ISuperTokenMini, ICFAv1Forwarder} from "./interfaces/ISuperfluidMini.sol
 import {SuperTokenReceiver} from "./SuperTokenReceiver.sol";
 
 /// @title FlowConduit
-/// @notice One Superfluid CFA sender per logical flow. The vault streams to this
+/// @notice RvessFlow Protocol. One Superfluid CFA sender per logical flow. The vault streams to this
 ///         conduit and the conduit streams to the person, so two buckets can pay
 ///         the same wallet. CFA allows only one flow between a pair of addresses.
 contract FlowConduit is Initializable, SuperTokenReceiver {

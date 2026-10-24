@@ -10,6 +10,7 @@ import {GroupRotation, IGroupCalls} from "../src/GroupRotation.sol";
 import {GroupRotationStore} from "../src/GroupRotationStore.sol";
 import {FlowVault} from "../src/FlowVault.sol";
 import {FlowVaultStore} from "../src/FlowVaultStore.sol";
+import {TokenAllowlist} from "../src/TokenAllowlist.sol";
 import {ITokenAllowlist} from "../src/interfaces/ITokenAllowlist.sol";
 
 contract GroupRotationTest is SfBase {
@@ -334,7 +335,7 @@ contract GroupRotationTest is SfBase {
         vm.expectRevert(GroupRotationStore.Paused.selector);
         vm.prank(members[2]);
         groups.contribute(id);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, members[0]));
+        vm.expectRevert(GroupRotationStore.NotManager.selector);
         vm.prank(members[0]);
         groups.setGroupPaused(id, false);
         groups.setGroupPaused(id, false);
@@ -514,6 +515,71 @@ contract GroupRotationTest is SfBase {
         (,,, uint128 left,,,,,,) = groups.groupRules(id);
         assertEq(left, 0);
         _assertSolvent(address(usdcx), address(groups));
+    }
+
+    function test_supportManagerCanPauseAndCannotChangeTheProtocol() public {
+        address desk = makeAddr("support");
+        vm.prank(desk);
+        vm.expectRevert(TokenAllowlist.NotManager.selector);
+        allow.setPaused(true);
+
+        vm.startPrank(admin);
+        vm.expectRevert(TokenAllowlist.ZeroAddress.selector);
+        allow.setManager(address(0), true);
+        allow.setManager(desk, true);
+        allow.setManager(desk, true);
+        vm.stopPrank();
+        assertTrue(allow.isManager(desk));
+        assertEq(allow.managerCount(), 1);
+        assertEq(allow.managerAt(0), desk);
+
+        vm.prank(desk);
+        allow.setPaused(true);
+        assertTrue(allow.paused());
+        vm.prank(desk);
+        vm.expectRevert(TokenAllowlist.NotManager.selector);
+        allow.setPaused(false);
+        vm.prank(admin);
+        allow.setPaused(false);
+        assertFalse(allow.paused());
+
+        vm.prank(desk);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, desk));
+        allow.setSuperToken(address(usdcx), false, ITokenAllowlist.TokenKind.Wrapper);
+        vm.prank(desk);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, desk));
+        allow.setManager(alice, true);
+        vm.prank(desk);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, desk));
+        groups.scheduleUpgrade(address(groups));
+
+        address[] memory members = _members(3, "desk");
+        vm.prank(members[0]);
+        uint256 id = groups.createGroup(
+            address(usdcx), 1e18, 1 hours, 10 minutes, 0, 1, members, _zeroOffsets(3)
+        );
+        vm.prank(desk);
+        groups.setGroupPaused(id, true);
+        assertTrue(groups.groupPaused(id));
+        vm.prank(desk);
+        vm.expectRevert(GroupRotationStore.NotManager.selector);
+        groups.setGroupPaused(id, false);
+        groups.setGroupPaused(id, false);
+        assertFalse(groups.groupPaused(id));
+        vm.prank(alice);
+        vm.expectRevert(GroupRotationStore.NotManager.selector);
+        groups.setGroupPaused(id, true);
+
+        vm.prank(admin);
+        allow.setManager(desk, false);
+        assertFalse(allow.isManager(desk));
+        assertEq(allow.managerCount(), 0);
+        vm.prank(desk);
+        vm.expectRevert(TokenAllowlist.NotManager.selector);
+        allow.setPaused(true);
+        vm.prank(desk);
+        vm.expectRevert(GroupRotationStore.NotManager.selector);
+        groups.setGroupPaused(id, true);
     }
 
     function _startGroup(

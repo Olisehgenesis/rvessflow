@@ -10,7 +10,7 @@ import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/Upgradeabl
 import {FlowVault} from "./FlowVault.sol";
 
 /// @title VaultFactory
-/// @notice One upgradeable {FlowVault} per person. The keeper may only signal a
+/// @notice RvessFlow Protocol. One upgradeable {FlowVault} per person. The keeper may only signal a
 ///         gated flow. It cannot move funds, and flows still run if no keeper is set.
 /// @dev Vaults and conduits are beacon proxies. The owner upgrades every vault,
 ///      or every conduit, with one call. This factory itself is UUPS.
@@ -50,6 +50,22 @@ contract VaultFactory is Initializable, Ownable2Step, UUPSUpgradeable {
         }
         _transferOwnership(initialOwner);
         _init(allowlist_, implementation);
+    }
+
+    /// @notice Same as {initialize}, and names a keeper in the same transaction.
+    function initialize(address initialOwner, address allowlist_, address implementation, address keeper_)
+        external
+        initializer
+    {
+        if (initialOwner == address(0) || allowlist_ == address(0) || implementation == address(0)) {
+            revert ZeroAddress();
+        }
+        _transferOwnership(initialOwner);
+        _init(allowlist_, implementation);
+        if (keeper_ != address(0)) {
+            keeper = keeper_;
+            emit KeeperSet(keeper_);
+        }
     }
 
     function contractVersion() public pure virtual returns (uint256) {

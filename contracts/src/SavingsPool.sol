@@ -9,7 +9,7 @@ import {ISuperTokenMini} from "./interfaces/ISuperfluidMini.sol";
 import {SuperTokenReceiver} from "./SuperTokenReceiver.sol";
 
 /// @title SavingsPool
-/// @notice A savings club or a joint goal. Members keep their own shares.
+/// @notice RvessFlow Protocol. A savings club or a joint goal. Members keep their own shares.
 ///         Nobody takes a turn. Loans are drawn from the cash, interest and
 ///         fines return to the pool, and a reserve stays liquid.
 /// @dev Names, ID status, next of kin, group descriptions, and milestone labels

@@ -1,0 +1,5 @@
+{
+  "name": "RvessFlow Protocol",
+  "description": "Sign a deployment from your wallet. No private key is stored.",
+  "iconPath": "icon.svg"
+}

@@ -5,7 +5,7 @@ import {ISuperTokenMini, ICFAv1Forwarder} from "./interfaces/ISuperfluidMini.sol
 import {SuperTokenReceiver} from "./SuperTokenReceiver.sol";
 
 /// @title YieldPayer
-/// @notice Sends the admin-funded reward stream. It holds only reward tokens, so a
+/// @notice RvessFlow Protocol. Sends the admin-funded reward stream. It holds only reward tokens, so a
 ///         reward stream cannot spend locked principal. The stream is a real CFA
 ///         flow from this contract to the saver.
 contract YieldPayer is SuperTokenReceiver {
