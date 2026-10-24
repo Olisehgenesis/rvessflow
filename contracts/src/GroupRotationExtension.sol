@@ -162,6 +162,28 @@ contract GroupRotationExtension is GroupRotationStore {
         memberWindow[id][index] = window;
     }
 
+    /// @notice Connect `msg.sender` to the group's pool so the pot can stream to them.
+    /// @dev Superfluid lets this contract attach a member to four pools on one token.
+    ///      A fifth pool, and every pool after it up to 256, is connected by the member's
+    ///      own wallet with `GDAv1Forwarder.connectPool`. Calling `connectPool` from this
+    ///      contract would connect the group, not the member.
+    function connect(uint256 id) external nonReentrant returns (bool) {
+        Group storage g = groups[id];
+        if (!g.started || g.pool == address(0)) revert BadState();
+        _memberIndex(id, msg.sender);
+        address agreement = ISuperfluidHost(host).getAgreementClass(
+            keccak256("org.superfluid-finance.agreements.GeneralDistributionAgreement.v1")
+        );
+        bytes memory ret = ISuperfluidHost(host).callAgreement(
+            agreement,
+            abi.encodeCall(IGDAv1Autoconnect.tryConnectPoolFor, (g.pool, msg.sender, new bytes(0))),
+            ""
+        );
+        (bool success,) = abi.decode(ret, (bool, bytes));
+        if (!success) revert SelfConnectRequired(g.pool);
+        return true;
+    }
+
     /// @notice Connect the caller to the admin-fee pool. Does not spend a slot until an admin asks.
     function connectAdminFee(uint256 id) external nonReentrant returns (bool) {
         if (!_isAdmin(id, msg.sender)) revert NotAdmin();

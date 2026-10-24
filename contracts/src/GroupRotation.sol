@@ -14,8 +14,7 @@ import {
     IGDAv1Forwarder,
     ISuperfluidGovernance,
     ISuperfluidHost,
-    ISuperfluidPool,
-    IGDAv1Autoconnect
+    ISuperfluidPool
 } from "./interfaces/ISuperfluidMini.sol";
 import {SuperTokenReceiver} from "./SuperTokenReceiver.sol";
 import {GroupRotationExtension} from "./GroupRotationExtension.sol";
@@ -290,27 +289,11 @@ contract GroupRotation is GroupRotationStore {
     }
 
     /// @notice Connect `msg.sender` to the group's pool so the pot can stream to them.
-    /// @dev Superfluid lets this contract attach a member to four pools on one token.
-    ///      A fifth pool, and every pool after it up to 256, is connected by the member's
-    ///      own wallet with `GDAv1Forwarder.connectPool`. That is how one person receives
-    ///      ten group streams at once. Calling `connectPool` from this contract would
-    ///      connect the group, not the member.
-    function connect(uint256 id) external nonReentrant returns (bool) {
-        Group storage g = groups[id];
-        if (!g.started || g.pool == address(0)) revert BadState();
-        address member = msg.sender;
-        _memberIndex(id, member);
-        address agreement = ISuperfluidHost(host).getAgreementClass(
-            keccak256("org.superfluid-finance.agreements.GeneralDistributionAgreement.v1")
-        );
-        bytes memory ret = ISuperfluidHost(host).callAgreement(
-            agreement,
-            abi.encodeCall(IGDAv1Autoconnect.tryConnectPoolFor, (g.pool, member, new bytes(0))),
-            ""
-        );
-        (bool success,) = abi.decode(ret, (bool, bytes));
-        if (!success) revert SelfConnectRequired(g.pool);
-        return true;
+    /// @dev Implemented on the extension. Superfluid lets this contract attach a member
+    ///      to four pools on one token. A fifth pool, and every pool after it up to 256,
+    ///      is connected by the member's own wallet with `GDAv1Forwarder.connectPool`.
+    function connect(uint256) external returns (bool connected) {
+        _delegate();
     }
 
     function claimStream(uint256 id) external returns (bool) {

@@ -22,7 +22,7 @@ contract GroupRotationV2 is GroupRotation {
     constructor(address allowlist_, address host_, address gda_) GroupRotation(allowlist_, host_, gda_) {}
 
     function contractVersion() public pure override returns (uint256) {
-        return 3;
+        return 4;
     }
 }
 
@@ -51,7 +51,7 @@ contract UpgradeTest is SfBase {
         GroupRotation proxied = GroupRotation(
             address(new ERC1967Proxy(address(impl), abi.encodeCall(GroupRotation.initialize, (admin))))
         );
-        assertEq(proxied.contractVersion(), 2);
+        assertEq(proxied.contractVersion(), 3);
         assertEq(proxied.owner(), admin);
         GroupRotationV2 nextGroup = new GroupRotationV2(address(allow), address(sf.host), address(gdaFwd));
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
@@ -69,6 +69,6 @@ contract UpgradeTest is SfBase {
         vm.warp(groupAt + 2 days);
         vm.prank(admin);
         proxied.upgradeToAndCall(address(nextGroup), "");
-        assertEq(GroupRotationV2(address(proxied)).contractVersion(), 3);
+        assertEq(GroupRotationV2(address(proxied)).contractVersion(), 4);
     }
 }

@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {ISuperTokenMini} from "./interfaces/ISuperfluidMini.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ITokenAllowlist} from "./interfaces/ITokenAllowlist.sol";
+import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
+import {ISuperTokenMini, ISETHMini} from "./interfaces/ISuperfluidMini.sol";
 import {FlowVaultStore, IFlowVaultHooks} from "./FlowVaultStore.sol";
 
 interface IProtocolOwner {
@@ -11,6 +15,8 @@ interface IProtocolOwner {
 /// @notice Savings holds, pause, and balance reads for {FlowVault}.
 ///         The vault delegatecalls here. Storage is the vault's storage.
 contract FlowVaultExtension is FlowVaultStore {
+    using SafeERC20 for IERC20;
+
     constructor(address host_, address cfa_, address conduit_) FlowVaultStore(host_, cfa_, conduit_) {
         _disableInitializers();
     }
@@ -175,5 +181,117 @@ contract FlowVaultExtension is FlowVaultStore {
         ISuperTokenMini(token).transfer(to, amount);
         IFlowVaultHooks(address(this)).hookRequireMargin(token);
         emit ProtocolFeeWithdrawn(token, to, amount);
+    }
+
+    function depositSuper(address token, uint256 amount) external nonReentrant {
+        IFlowVaultHooks(address(this)).hookProtect(token);
+        if (amount == 0) revert ZeroAmount();
+        _requireAllowed(token);
+        uint256 fee = (amount * 30) / 10_000;
+        uint256 got = _pullSuper(token, amount + fee);
+        if (got < amount) revert ZeroAmount();
+        uint256 skim = got - amount;
+        if (skim > fee) skim = fee;
+        if (skim != 0) {
+            protocolFees[token] += skim;
+            emit ProtocolFeeCharged(token, skim);
+        }
+        unallocated[token] += got - skim;
+        emit Deposited(msg.sender, token, got - skim);
+    }
+
+    function depositUnderlying(address token, uint256 underlyingAmount) external nonReentrant {
+        IFlowVaultHooks(address(this)).hookProtect(token);
+        if (underlyingAmount == 0) revert ZeroAmount();
+        ITokenAllowlist list = _requireAllowed(token);
+        if (list.kindOf(token) != ITokenAllowlist.TokenKind.Wrapper) revert WrongTokenKind();
+        uint256 minted = _upgrade(token, list, underlyingAmount);
+        uint256 net = _skim(token, minted);
+        unallocated[token] += net;
+        emit Deposited(msg.sender, token, net);
+    }
+
+    function depositNative(address token) external payable nonReentrant {
+        IFlowVaultHooks(address(this)).hookProtect(token);
+        if (msg.value == 0) revert ZeroAmount();
+        ITokenAllowlist list = _requireAllowed(token);
+        if (list.kindOf(token) != ITokenAllowlist.TokenKind.Native) revert WrongTokenKind();
+        uint256 beforeBal = ISuperTokenMini(token).balanceOf(address(this));
+        ISETHMini(token).upgradeByETH{value: msg.value}();
+        uint256 minted = ISuperTokenMini(token).balanceOf(address(this)) - beforeBal;
+        uint256 net = _skim(token, minted);
+        unallocated[token] += net;
+        emit Deposited(msg.sender, token, net);
+    }
+
+    function withdraw(address token, uint256 amount) external nonReentrant onlyOwner {
+        IFlowVaultHooks(address(this)).hookProtect(token);
+        _take(token, amount);
+        ISuperTokenMini(token).transfer(owner, amount);
+        IFlowVaultHooks(address(this)).hookRequireMargin(token);
+        emit Withdrawn(owner, token, amount);
+    }
+
+    function withdrawUnderlying(address token, uint256 amount) external nonReentrant onlyOwner {
+        IFlowVaultHooks(address(this)).hookProtect(token);
+        _take(token, amount);
+        (uint256 underlyingAmount, uint256 adjusted) = ISuperTokenMini(token).toUnderlyingAmount(amount);
+        if (adjusted != amount || underlyingAmount == 0) revert BadAmount();
+        address underlying = ISuperTokenMini(token).getUnderlyingToken();
+        ISuperTokenMini(token).downgrade(amount);
+        IERC20(underlying).safeTransfer(owner, underlyingAmount);
+        IFlowVaultHooks(address(this)).hookRequireMargin(token);
+        emit Withdrawn(owner, token, amount);
+    }
+
+    function withdrawNative(address token, uint256 amount) external nonReentrant onlyOwner {
+        IFlowVaultHooks(address(this)).hookProtect(token);
+        _take(token, amount);
+        ISETHMini(token).downgradeToETH(amount);
+        (bool ok,) = owner.call{value: amount}("");
+        if (!ok) revert Insufficient();
+        IFlowVaultHooks(address(this)).hookRequireMargin(token);
+        emit Withdrawn(owner, token, amount);
+    }
+
+    function _requireAllowed(address token) internal view returns (ITokenAllowlist list) {
+        list = ITokenAllowlist(IVaultFactory(factory).allowlist());
+        if (!list.isAllowed(token)) revert TokenNotAllowed();
+    }
+
+    function _pullSuper(address token, uint256 amount) internal returns (uint256 got) {
+        uint256 beforeBal = ISuperTokenMini(token).balanceOf(address(this));
+        ISuperTokenMini(token).transferFrom(msg.sender, address(this), amount);
+        got = ISuperTokenMini(token).balanceOf(address(this)) - beforeBal;
+        if (got == 0) revert ZeroAmount();
+    }
+
+    function _upgrade(address token, ITokenAllowlist list, uint256 underlyingAmount) internal returns (uint256 minted) {
+        uint8 decimals = list.underlyingDecimalsOf(token);
+        if (decimals == 0 || decimals > 18) revert BadAmount();
+        uint256 superAmount = underlyingAmount * (10 ** (18 - decimals));
+        (uint256 pullAmount, uint256 adjusted) = ISuperTokenMini(token).toUnderlyingAmount(superAmount);
+        if (adjusted == 0 || pullAmount == 0) revert BadAmount();
+        address underlying = list.underlyingOf(token);
+        IERC20(underlying).safeTransferFrom(msg.sender, address(this), pullAmount);
+        IERC20(underlying).forceApprove(address(token), pullAmount);
+        uint256 beforeBal = ISuperTokenMini(token).balanceOf(address(this));
+        ISuperTokenMini(token).upgrade(superAmount);
+        minted = ISuperTokenMini(token).balanceOf(address(this)) - beforeBal;
+        if (minted == 0) revert ZeroAmount();
+    }
+
+    function _take(address token, uint256 amount) internal {
+        if (amount == 0) revert ZeroAmount();
+        if (amount > unallocated[token]) revert Insufficient();
+        unallocated[token] -= amount;
+    }
+
+    function _skim(address token, uint256 amount) internal returns (uint256 net) {
+        uint256 fee = (amount * 30) / 10_000;
+        if (fee == 0 || fee > amount) return amount;
+        protocolFees[token] += fee;
+        emit ProtocolFeeCharged(token, fee);
+        return amount - fee;
     }
 }

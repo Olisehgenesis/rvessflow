@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import {ITokenAllowlist} from "./interfaces/ITokenAllowlist.sol";
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
-import {ISuperTokenMini, ISETHMini, ICFAv1Forwarder, ISuperfluidHost} from "./interfaces/ISuperfluidMini.sol";
+import {ISuperTokenMini} from "./interfaces/ISuperfluidMini.sol";
 import {FlowConduit} from "./FlowConduit.sol";
 import {FlowVaultExtension} from "./FlowVaultExtension.sol";
 import {FlowVaultStore, IFlowVaultHooks} from "./FlowVaultStore.sol";
@@ -23,8 +21,6 @@ import {FlowVaultStore, IFlowVaultHooks} from "./FlowVaultStore.sol";
 ///      once the time, chain, or keeper condition is true, and it refuses to open a
 ///      stream that would leave the vault critical. See the README for why.
 contract FlowVault is FlowVaultStore, IFlowVaultHooks {
-    using SafeERC20 for IERC20;
-
     address public immutable extension;
 
     constructor(address host_, address cfa_, address conduitImplementation_)
@@ -47,75 +43,29 @@ contract FlowVault is FlowVaultStore, IFlowVaultHooks {
 
     receive() external payable {}
 
-    function depositSuper(address token, uint256 amount) external nonReentrant {
-        _protect(token);
-        if (amount == 0) revert ZeroAmount();
-        _requireAllowed(token);
-        uint256 fee = (amount * 30) / 10_000;
-        uint256 got = _pullSuper(token, amount + fee);
-        if (got < amount) revert ZeroAmount();
-        uint256 skim = got - amount;
-        if (skim > fee) skim = fee;
-        if (skim != 0) {
-            protocolFees[token] += skim;
-            emit ProtocolFeeCharged(token, skim);
-        }
-        unallocated[token] += got - skim;
-        emit Deposited(msg.sender, token, got - skim);
+    /// @dev Deposits and withdrawals live on the extension so this contract stays under the code-size limit.
+    function depositSuper(address, uint256) external {
+        _delegate();
     }
 
-    function depositUnderlying(address token, uint256 underlyingAmount) external nonReentrant {
-        _protect(token);
-        if (underlyingAmount == 0) revert ZeroAmount();
-        ITokenAllowlist list = _requireAllowed(token);
-        if (list.kindOf(token) != ITokenAllowlist.TokenKind.Wrapper) revert WrongTokenKind();
-        uint256 minted = _upgrade(token, list, underlyingAmount);
-        uint256 net = _skim(token, minted);
-        unallocated[token] += net;
-        emit Deposited(msg.sender, token, net);
+    function depositUnderlying(address, uint256) external {
+        _delegate();
     }
 
-    function depositNative(address token) external payable nonReentrant {
-        _protect(token);
-        if (msg.value == 0) revert ZeroAmount();
-        ITokenAllowlist list = _requireAllowed(token);
-        if (list.kindOf(token) != ITokenAllowlist.TokenKind.Native) revert WrongTokenKind();
-        uint256 beforeBal = ISuperTokenMini(token).balanceOf(address(this));
-        ISETHMini(token).upgradeByETH{value: msg.value}();
-        uint256 minted = ISuperTokenMini(token).balanceOf(address(this)) - beforeBal;
-        uint256 net = _skim(token, minted);
-        unallocated[token] += net;
-        emit Deposited(msg.sender, token, net);
+    function depositNative(address) external payable {
+        _delegate();
     }
 
-    function withdraw(address token, uint256 amount) external nonReentrant onlyOwner {
-        _protect(token);
-        _take(token, amount);
-        ISuperTokenMini(token).transfer(owner, amount);
-        _requireMargin(token);
-        emit Withdrawn(owner, token, amount);
+    function withdraw(address, uint256) external {
+        _delegate();
     }
 
-    function withdrawUnderlying(address token, uint256 amount) external nonReentrant onlyOwner {
-        _protect(token);
-        _take(token, amount);
-        (uint256 underlyingAmount, uint256 adjusted) = ISuperTokenMini(token).toUnderlyingAmount(amount);
-        if (adjusted != amount || underlyingAmount == 0) revert BadAmount();
-        address underlying = ISuperTokenMini(token).getUnderlyingToken();
-        ISuperTokenMini(token).downgrade(amount);
-        IERC20(underlying).safeTransfer(owner, underlyingAmount);
-        _requireMargin(token);
-        emit Withdrawn(owner, token, amount);
+    function withdrawUnderlying(address, uint256) external {
+        _delegate();
     }
 
-    function withdrawNative(address token, uint256 amount) external nonReentrant onlyOwner {
-        _protect(token);
-        _take(token, amount);
-        ISETHMini(token).downgradeToETH(amount);
-        (bool ok,) = owner.call{value: amount}("");
-        if (!ok) revert Insufficient();
-        _requireMargin(token);
-        emit Withdrawn(owner, token, amount);
+    function withdrawNative(address, uint256) external {
+        _delegate();
     }
 
     function createFlow(CreateFlowParams calldata p) external nonReentrant onlyOwner returns (uint256 id) {
@@ -736,34 +686,6 @@ contract FlowVault is FlowVaultStore, IFlowVaultHooks {
         return ITokenAllowlist(IVaultFactory(factory).allowlist());
     }
 
-    function _pullSuper(address token, uint256 amount) internal returns (uint256 got) {
-        uint256 beforeBal = ISuperTokenMini(token).balanceOf(address(this));
-        ISuperTokenMini(token).transferFrom(msg.sender, address(this), amount);
-        got = ISuperTokenMini(token).balanceOf(address(this)) - beforeBal;
-        if (got == 0) revert ZeroAmount();
-    }
-
-    function _upgrade(address token, ITokenAllowlist list, uint256 underlyingAmount) internal returns (uint256 minted) {
-        uint8 decimals = list.underlyingDecimalsOf(token);
-        if (decimals == 0 || decimals > 18) revert BadAmount();
-        uint256 superAmount = underlyingAmount * (10 ** (18 - decimals));
-        (uint256 pullAmount, uint256 adjusted) = ISuperTokenMini(token).toUnderlyingAmount(superAmount);
-        if (adjusted == 0 || pullAmount == 0) revert BadAmount();
-        address underlying = list.underlyingOf(token);
-        IERC20(underlying).safeTransferFrom(msg.sender, address(this), pullAmount);
-        IERC20(underlying).forceApprove(address(token), pullAmount);
-        uint256 beforeBal = ISuperTokenMini(token).balanceOf(address(this));
-        ISuperTokenMini(token).upgrade(superAmount);
-        minted = ISuperTokenMini(token).balanceOf(address(this)) - beforeBal;
-        if (minted == 0) revert ZeroAmount();
-    }
-
-    function _take(address token, uint256 amount) internal {
-        if (amount == 0) revert ZeroAmount();
-        if (amount > unallocated[token]) revert Insufficient();
-        unallocated[token] -= amount;
-    }
-
     function _requireMargin(address token) internal view {
         if (activeCount[token] == 0) return;
         if (_criticalSoon(token)) revert Insufficient();
@@ -780,14 +702,6 @@ contract FlowVault is FlowVaultStore, IFlowVaultHooks {
         uint256 bal = ISuperTokenMini(token).balanceOf(address(this));
         uint256 fees = protocolFees[token];
         unallocated[token] = bal > fees ? bal - fees : 0;
-    }
-
-    function _skim(address token, uint256 amount) internal returns (uint256 net) {
-        uint256 fee = (amount * 30) / 10_000;
-        if (fee == 0 || fee > amount) return amount;
-        protocolFees[token] += fee;
-        emit ProtocolFeeCharged(token, fee);
-        return amount - fee;
     }
 
     function _hasOpenRoot(address token) internal view returns (bool) {
