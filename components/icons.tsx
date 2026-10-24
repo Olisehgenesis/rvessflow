@@ -87,14 +87,18 @@ export function IconMore(props: IconProps) {
 
 export function IconMark({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 64 64" aria-hidden>
+    <svg className={className} viewBox="0 0 256 256" fill="none" aria-hidden>
       <path
+        d="M84 36C52 36 28 60 28 92C28 108 36 122 50 132V164C50 177 61 188 74 188C87 188 98 177 98 164V124H122C142 124 158 108 158 88C158 58 132 36 100 36H84Z"
         fill="currentColor"
-        d="M32 6c8.4 0 16 6.2 18.2 14.6-3.4-1.4-7-1.6-10.2-.4-2.2-6.2-8-10.2-14.6-9.2-8.2 1.2-13.6 9-12.4 17.2 1 6.8 6.2 12 13 13.2-1.6 3.4-2 7.2-1 10.8C16.6 50.2 10 41.6 10 32 10 17.6 19.8 6 32 6Z"
       />
       <path
-        fill="currentColor"
-        d="M34.2 28.4c7.6 1.2 12.8 8.2 11.6 15.8-1.4 8.6-9.2 14.2-17.8 12.8-4.8-.8-8.6-3.8-10.8-7.8 2.6 1.6 5.8 2.2 9 1.6 6.2-1 10.4-6.8 9.4-13-1-6.4-6.6-10.8-13-10.2 3.6-1.2 7.6-.8 11.6.8Z"
+        d="M104 110L196 198C203 205 214 205 221 198C228 191 228 180 221 173L152 104L104 110Z"
+        fill="var(--motion)"
+      />
+      <path
+        d="M82 62H98C114 62 126 74 126 88C126 100 116 110 102 110H82C70 110 60 100 60 88C60 74 70 62 82 62Z"
+        fill="var(--background)"
       />
     </svg>
   );

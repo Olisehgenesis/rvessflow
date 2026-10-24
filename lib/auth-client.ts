@@ -9,7 +9,7 @@ const rpc = "https://sepolia.base.org";
 export const walletConnectProjectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "fb48461bfb6043c40729e05706109f1a";
 
-export async function createPasskeyWallet(label: string) {
+export async function createPasskeyWallet(label: string): Promise<{ address: string; label: string }> {
   const name = label.trim().slice(0, 32) || "Passkey";
   const [{ createPublicClient, http }, { baseSepolia }, accountAbstraction, { toKernelSmartAccount }] = await Promise.all([
     import("viem"),
@@ -37,7 +37,7 @@ export async function createPasskeyWallet(label: string) {
     address: account.address,
     label: name,
   });
-  await openSession(account.address, "passkey", name);
+  return { address: account.address, label: name };
 }
 
 export async function unlockPasskey(saved: SavedPasskey) {
@@ -50,7 +50,7 @@ export async function unlockPasskey(saved: SavedPasskey) {
   await openSession(saved.address, "passkey", saved.label);
 }
 
-export async function connectWallet() {
+export async function connectWallet(label = "") {
   if (!walletConnectProjectId) throw new Error("WalletConnect is not configured.");
   const { baseSepolia } = await import("viem/chains");
   const { default: EthereumProvider } = await import("@walletconnect/ethereum-provider");
@@ -62,12 +62,12 @@ export async function connectWallet() {
       name: "RvessFlow",
       description: "Your money, in motion.",
       url: window.location.origin,
-      icons: [`${window.location.origin}/mark.jpg`],
+      icons: [`${window.location.origin}/mark.svg`],
     },
     rpcMap: { [baseSepolia.id]: rpc },
   });
   await provider.connect();
   const address = provider.accounts[0];
   if (!address || !isAddress(address)) throw new Error("The wallet did not return an account.");
-  await openSession(address, "wallet", "Wallet");
+  await openSession(address, "wallet", label);
 }

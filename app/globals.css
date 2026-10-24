@@ -10,6 +10,7 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-script: var(--font-caveat), "Segoe Script", cursive;
   --font-heading: var(--font-display);
   --color-motion: var(--motion);
   --color-lavender: var(--lavender);
@@ -183,6 +184,56 @@
 .land-sweep {
   transform-origin: left center;
   animation: land-sweep 1s linear 1.2s infinite;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@keyframes auth-fill {
+  0% {
+    transform: scaleX(0.22);
+  }
+  50% {
+    transform: scaleX(0.7);
+  }
+  100% {
+    transform: scaleX(0.22);
+  }
+}
+
+.auth-slide {
+  width: 42%;
+  transform-origin: left center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .auth-slide {
+    width: 100%;
+    animation: auth-fill 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes stage-float {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-10px);
+  }
+}
+
+.stage-float {
+  animation: stage-float 4.8s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-float,
+  .auth-slide {
+    animation: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

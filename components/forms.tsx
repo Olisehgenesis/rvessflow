@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ErrorNote } from "@/components/ui-bits";
 import {
-  createGroup,
   createLock,
   createSaving,
   createStream,
@@ -21,7 +20,6 @@ import {
   switchAccount,
   type ActionState,
 } from "@/lib/actions";
-import { cyclePlan, spanLabel, type CycleChoice } from "@/lib/cycle";
 import type { Person } from "@/lib/protocol";
 import { DateField, addDays, dateProblem, formatDay, secondsUntilEnd, startOfDay, streamWindow } from "@/components/date-field";
 
@@ -167,69 +165,6 @@ export function LockForm({ penalty, yieldBudget }: { penalty: number; yieldBudge
       <p className="text-sm text-muted-foreground">Leaving early costs {(penalty / 100).toFixed(2).replace(/\.00$/, "")}% of the principal. That rate is copied onto the lock and does not change later.</p>
       <ErrorNote error={state?.error} />
       <Submit pending={pending || Boolean(problem)}>Lock now</Submit>
-    </form>
-  );
-}
-
-export function GroupForm({ people, me }: { people: Person[]; me: string }) {
-  const [state, action, pending] = useActionState(createGroup, null);
-  const [choice, setChoice] = useState<CycleChoice>("hour");
-  const [days, setDays] = useState("14");
-  const plan = cyclePlan(choice, Number(days));
-  return (
-    <form action={action} className="space-y-4">
-      <Field label="Each contribution" name="contribution" placeholder="100" inputMode="decimal" hint="Each member posts contribution × cycles as collateral before the group can start." />
-      <label className="block space-y-1.5">
-        <Label>Cycles</Label>
-        <select name="cycles" className={`${field} w-full`} defaultValue="4">
-          <option value="4">4 cycles</option>
-          <option value="8">8 cycles</option>
-          <option value="12">12 cycles</option>
-        </select>
-      </label>
-      <label className="block space-y-1.5">
-        <Label>Each cycle</Label>
-        <select name="cycle" className={`${field} w-full`} value={choice} onChange={(event) => setChoice(event.target.value as CycleChoice)}>
-          <option value="hour">Hour</option>
-          <option value="week">Week</option>
-          <option value="month">Month, 30 days</option>
-          <option value="year">Year, 365 days</option>
-          <option value="custom">Custom days</option>
-        </select>
-      </label>
-      {choice === "custom" ? (
-        <label className="block space-y-1.5">
-          <Label>Days</Label>
-          <Input name="days" inputMode="numeric" value={days} onChange={(event) => setDays(event.target.value)} className={field} required />
-        </label>
-      ) : (
-        <input type="hidden" name="days" value={days} />
-      )}
-      <fieldset className="space-y-2">
-        <Label>Members</Label>
-        {people.map((person) => (
-          <label key={person.address} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm">
-            <input
-              type="checkbox"
-              name="member"
-              value={person.address}
-              defaultChecked
-              className="size-4 accent-foreground"
-            />
-            <span>
-              {person.name}
-              {person.address.toLowerCase() === me.toLowerCase() ? " (you)" : ""}
-            </span>
-          </label>
-        ))}
-      </fieldset>
-      <p className="text-sm text-muted-foreground">
-        {plan
-          ? `Each cycle lasts ${spanLabel(plan.cycle)}. Members have ${spanLabel(plan.window)} to pay, then ${spanLabel(plan.grace)} of grace.`
-          : "Enter a whole number of days from 1 to 366."}
-      </p>
-      <ErrorNote error={state?.error} />
-      <Submit pending={pending}>Create group</Submit>
     </form>
   );
 }

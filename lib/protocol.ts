@@ -106,6 +106,10 @@ const groupAbi = parseAbi([
   "function exitBeforeStart(uint256 id)",
   "function cancelBeforeStart(uint256 id)",
   "function claimCollateral(uint256 id) returns (uint256)",
+  "function memberPhone(uint256 id, address account) view returns (bytes32)",
+  "function payoutOrder(uint256 id) view returns (uint16[])",
+  "function setMemberPhone(uint256 id, address account, bytes32 phone)",
+  "function setPayoutOrder(uint256 id, uint16[] indexes)",
 ]);
 
 export type Person = { name: string; address: Address };
@@ -168,6 +172,14 @@ export function readName(value: Hex): string {
   return text;
 }
 
+function quietName(value: Hex): string {
+  try {
+    return readName(value);
+  } catch {
+    return "";
+  }
+}
+
 export function toName(value: string): Hex {
   const clean = value.trim();
   if (!clean) throw new Error("Give this a name.");
@@ -228,6 +240,7 @@ export type LockRow = {
 export type MemberRow = {
   account: Address;
   name: string;
+  phone: string;
   posted: boolean;
   collateral: string;
   given: string;
@@ -247,6 +260,10 @@ export type GroupRow = {
   graceSeconds: number;
   cycles: number;
   members: MemberRow[];
+  /** Member indexes in the order they receive. Empty means the contract has no turn-order call. */
+  payout: number[];
+  canArrange: boolean;
+  canPhone: boolean;
   started: boolean;
   cancelled: boolean;
   finalized: boolean;
@@ -450,6 +467,19 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
           allowFailure: false,
         })
       : [];
+    const phoneRows = count
+      ? await publicClient.multicall({
+          contracts: members.map((member) => ({
+            address: addresses.groups,
+            abi: groupAbi,
+            functionName: "memberPhone" as const,
+            args: [id, member[0]] as const,
+          })),
+          allowFailure: true,
+        })
+      : [];
+    const phonesLive = phoneRows.some((row) => row.status === "success");
+    const seating = await readPayout(id, count);
     let cycle = 0n;
     let cycleOpen = false;
     if (group[11] && !group[13]) {
@@ -478,9 +508,10 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
       startTime: Number(group[8]),
       cycle: cycle.toString(),
       cycleOpen,
-      members: members.map((member) => ({
+      members: members.map((member, index) => ({
         account: member[0],
         name: personName(member[0]),
+        phone: phonesLive && phoneRows[index]?.status === "success" ? quietName(phoneRows[index].result) : "",
         posted: member[3],
         collateral: member[2].toString(),
         given: member[5].toString(),
@@ -488,6 +519,9 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
         owed: member[7].toString(),
         missed: Number(member[8]),
       })),
+      payout: seating.order,
+      canArrange: seating.known,
+      canPhone: phonesLive,
     });
   }
 
@@ -774,11 +808,95 @@ export async function openGroup(
   if (cycle < 3600n || cycle > 366n * 86400n || window <= 0n || window + grace > cycle) {
     throw new Error("That cycle length is outside what the contract allows.");
   }
+  const before = await publicClient.readContract({
+    address: addresses.groups,
+    abi: groupAbi,
+    functionName: "groupsOf",
+    args: [account.address],
+  });
   await write(index, {
     address: addresses.groups,
     abi: groupAbi,
     functionName: "createGroup",
     args: [addresses.fusdcx, contribution, cycle, window, grace, input.cycles, unique, unique.map(() => 0n)],
+  });
+  const after = await publicClient.readContract({
+    address: addresses.groups,
+    abi: groupAbi,
+    functionName: "groupsOf",
+    args: [account.address],
+  });
+  const fresh = after.find((item) => !before.some((old) => old === item));
+  return (fresh ?? after[after.length - 1])?.toString() ?? "";
+}
+
+async function readPayout(id: bigint, count: number): Promise<{ order: number[]; known: boolean }> {
+  const identity = Array.from({ length: count }, (_, index) => index);
+  if (!count) return { order: [], known: false };
+  try {
+    const order = await publicClient.readContract({
+      address: addresses.groups,
+      abi: groupAbi,
+      functionName: "payoutOrder",
+      args: [id],
+    });
+    const seats = order.map(Number);
+    const valid = seats.length === count && seats.every((seat, index) => seat >= 0 && seat < count && seats.indexOf(seat) === index);
+    return { order: valid ? seats : identity, known: true };
+  } catch {
+    return { order: identity, known: false };
+  }
+}
+
+export async function shiftPayout(index: number, id: bigint, from: number, dir: -1 | 1) {
+  const group = await publicClient.readContract({
+    address: addresses.groups,
+    abi: groupAbi,
+    functionName: "groups",
+    args: [id],
+  });
+  if (group[11] || group[12]) throw new Error("The turn order is fixed once the group has started.");
+  const count = Number(group[10]);
+  const seating = await readPayout(id, count);
+  if (!seating.known) throw new Error("This group contract cannot rearrange turns.");
+  const to = from + dir;
+  if (!Number.isInteger(from) || to < 0 || to >= seating.order.length) {
+    throw new Error("That person is already at the end of the order.");
+  }
+  const next = seating.order.slice();
+  const hold = next[from];
+  next[from] = next[to];
+  next[to] = hold;
+  await write(index, {
+    address: addresses.groups,
+    abi: groupAbi,
+    functionName: "setPayoutOrder",
+    args: [id, next],
+  });
+}
+
+export async function publishPhones(index: number, id: bigint, rows: { account: Address; phone: string }[]) {
+  for (const row of rows) {
+    const phone = row.phone.replace(/\D/g, "");
+    if (phone.length < 7 || phone.length > 31) continue;
+    await write(index, {
+      address: addresses.groups,
+      abi: groupAbi,
+      functionName: "setMemberPhone",
+      args: [id, row.account, toName(phone)],
+    });
+  }
+}
+
+export async function linkPhone(index: number, id: bigint, phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 31) throw new Error("Add a phone number with the country code in Settings first.");
+  const { account } = signer(index);
+  await write(index, {
+    address: addresses.groups,
+    abi: groupAbi,
+    functionName: "setMemberPhone",
+    args: [id, account.address, toName(digits)],
   });
 }
 

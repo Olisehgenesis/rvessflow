@@ -6,7 +6,9 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 
 import {SfBase} from "./SfBase.sol";
 import {FlowVault} from "../src/FlowVault.sol";
+import {GroupRotationStore} from "../src/GroupRotationStore.sol";
 import {GroupRotation} from "../src/GroupRotation.sol";
+import {VaultFactory} from "../src/VaultFactory.sol";
 
 contract FlowVaultV2 is FlowVault {
     constructor(address host_, address cfa_, address conduit_) FlowVault(host_, cfa_, conduit_) {}
@@ -20,7 +22,7 @@ contract GroupRotationV2 is GroupRotation {
     constructor(address allowlist_, address host_, address gda_) GroupRotation(allowlist_, host_, gda_) {}
 
     function contractVersion() public pure override returns (uint256) {
-        return 2;
+        return 3;
     }
 }
 
@@ -32,6 +34,16 @@ contract UpgradeTest is SfBase {
         vm.prank(alice);
         factory.upgradeVaults(address(nextVault));
         vm.prank(admin);
+        vm.expectRevert(VaultFactory.UpgradeNotReady.selector);
+        factory.upgradeVaults(address(nextVault));
+        vm.prank(admin);
+        factory.scheduleVaultUpgrade(address(nextVault));
+        vm.prank(admin);
+        vm.expectRevert(VaultFactory.UpgradeNotReady.selector);
+        factory.upgradeVaults(address(nextVault));
+        uint256 vaultAt = vm.getBlockTimestamp();
+        vm.warp(vaultAt + 2 days);
+        vm.prank(admin);
         factory.upgradeVaults(address(nextVault));
         assertEq(FlowVaultV2(payable(address(vault))).contractVersion(), 2);
 
@@ -39,14 +51,24 @@ contract UpgradeTest is SfBase {
         GroupRotation proxied = GroupRotation(
             address(new ERC1967Proxy(address(impl), abi.encodeCall(GroupRotation.initialize, (admin))))
         );
-        assertEq(proxied.contractVersion(), 1);
+        assertEq(proxied.contractVersion(), 2);
         assertEq(proxied.owner(), admin);
         GroupRotationV2 nextGroup = new GroupRotationV2(address(allow), address(sf.host), address(gdaFwd));
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
         vm.prank(alice);
         proxied.upgradeToAndCall(address(nextGroup), "");
         vm.prank(admin);
+        vm.expectRevert(GroupRotationStore.UpgradeNotReady.selector);
         proxied.upgradeToAndCall(address(nextGroup), "");
-        assertEq(GroupRotationV2(address(proxied)).contractVersion(), 2);
+        vm.prank(admin);
+        proxied.scheduleUpgrade(address(nextGroup));
+        vm.prank(admin);
+        vm.expectRevert(GroupRotationStore.UpgradeNotReady.selector);
+        proxied.upgradeToAndCall(address(nextGroup), "");
+        uint256 groupAt = vm.getBlockTimestamp();
+        vm.warp(groupAt + 2 days);
+        vm.prank(admin);
+        proxied.upgradeToAndCall(address(nextGroup), "");
+        assertEq(GroupRotationV2(address(proxied)).contractVersion(), 3);
     }
 }

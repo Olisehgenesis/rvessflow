@@ -11,24 +11,25 @@ const TABLES = [
 
 const PEG = "https://api.coingecko.com/api/v3/simple/price?ids=usd-coin&vs_currencies=usd";
 
-export const loadQuote = cache(async (): Promise<Quote> => {
-  const code = await currencyCode();
-  if (code === "fusdcx") return chainQuote();
+export async function loadQuoteFor(code: string): Promise<Quote> {
+  const choice = currencyByCode(code);
+  if (choice.code === "fusdcx") return chainQuote();
   try {
     const [peg, table] = await Promise.all([usdcUsd(), usdTable()]);
-    const perUsd = table.rates[code];
+    const perUsd = table.rates[choice.code];
     if (!perUsd || !Number.isFinite(perUsd)) return chainQuote();
     const perToken = peg.usd * perUsd;
-    const choice = currencyByCode(code);
-    const digits = code === "jpy" || code === "ugx" ? 0 : 2;
+    const digits = choice.code === "jpy" || choice.code === "ugx" ? 0 : 2;
     const local = perToken.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
     const pegText = `USDC is ${peg.usd.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 4 })} USD on CoinGecko`;
-    const country = code === "usd" ? pegText : `${pegText}. 1 fUSDCx ≈ ${local} ${choice.label} at the ${table.date} rate`;
-    return { code, unit: choice.label, perToken, digits, note: `${country}.` };
+    const country = choice.code === "usd" ? pegText : `${pegText}. 1 fUSDCx ≈ ${local} ${choice.label} at the ${table.date} rate`;
+    return { code: choice.code, unit: choice.label, perToken, digits, note: `${country}.` };
   } catch {
     return { ...chainQuote(), note: "Country rates did not load, so amounts stay in fUSDCx." };
   }
-});
+}
+
+export const loadQuote = cache(async (): Promise<Quote> => loadQuoteFor(await currencyCode()));
 
 async function usdcUsd(): Promise<{ usd: number }> {
   const response = await fetch(PEG, { headers: { accept: "application/json" }, next: { revalidate: 3600 } });

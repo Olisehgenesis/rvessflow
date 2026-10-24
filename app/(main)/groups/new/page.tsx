@@ -1,25 +1,15 @@
-import { Suspense } from "react";
-import { GroupForm } from "@/components/forms";
-import Loading from "../../loading";
+import { DraftTerms } from "@/components/circle";
 import { KindIntro } from "@/components/product";
 import { Page } from "@/components/ui-bits";
-import { loadPortfolio } from "@/lib/protocol";
-import { viewer } from "@/lib/session";
 
 export default function NewGroupPage() {
   return (
-    <Suspense fallback={<Loading />}>
-      <NewGroupBody />
-    </Suspense>
-  );
-}
-
-async function NewGroupBody() {
-  const data = await loadPortfolio(await viewer());
-  return (
     <Page title="New group" back="/groups">
       <KindIntro kind="group" />
-      <GroupForm people={data.people} me={data.me.address} />
+      <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+        Create the group, add people by the email, phone, or password linked to their wallet, set the order, then start it.
+      </p>
+      <DraftTerms />
     </Page>
   );
 }

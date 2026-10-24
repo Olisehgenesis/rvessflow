@@ -11,170 +11,29 @@ import {ITokenAllowlist} from "./interfaces/ITokenAllowlist.sol";
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {ISuperTokenMini, ISETHMini, ICFAv1Forwarder, ISuperfluidHost} from "./interfaces/ISuperfluidMini.sol";
 import {FlowConduit} from "./FlowConduit.sol";
-import {SuperTokenReceiver} from "./SuperTokenReceiver.sol";
+import {FlowVaultExtension} from "./FlowVaultExtension.sol";
+import {FlowVaultStore, IFlowVaultHooks} from "./FlowVaultStore.sol";
 
 /// @title FlowVault
-/// @notice One person's savings wallet. Every flow and subflow is a real Superfluid
+/// @notice One person's savings wallet. An expense or a flow goal is a real Superfluid
 ///         CFA stream: the vault streams to a per-flow conduit, and the conduit streams
-///         to the recipient. Nothing vests on an internal balance.
+///         to the recipient. A saving goal holds the deposit until its end date and
+///         does not open a stream, so it cannot be liquidated.
 /// @dev Scheduled starts are not opened in FlowScheduler. `activate` is permissionless
 ///      once the time, chain, or keeper condition is true, and it refuses to open a
 ///      stream that would leave the vault critical. See the README for why.
-contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
+contract FlowVault is FlowVaultStore, IFlowVaultHooks {
     using SafeERC20 for IERC20;
 
-    uint256 public constant MAX_FLOWS = 64;
-    uint8 public constant MAX_DEPTH = 3;
-    uint256 public constant MAX_CHAIN = 8;
-    uint256 public constant MAX_CHILDREN = 16;
-    uint64 public constant MIN_DURATION = 60;
-    uint64 public constant MAX_DURATION = 30 * 365 days;
-    uint256 public constant PROTECT_WINDOW = 1 hours;
-    uint16 public constant BPS = 10_000;
+    address public immutable extension;
 
-    enum FlowKind {
-        Expense,
-        SavingGoal,
-        FlowGoal
-    }
-    enum ChainMode {
-        None,
-        OnEnd,
-        OnGoal
-    }
-    enum RateMode {
-        Fixed,
-        Share
-    }
-
-    struct Flow {
-        address token;
-        address recipient;
-        address conduit;
-        FlowKind kind;
-        ChainMode chainMode;
-        RateMode rateMode;
-        uint16 shareBps;
-        uint8 depth;
-        bool allowSubflows;
-        bool keeperGated;
-        bool triggered;
-        bool active;
-        bool settled;
-        bytes32 name;
-        uint64 earliestStart;
-        uint64 duration;
-        uint64 createdAt;
-        uint64 triggeredAt;
-        uint64 start;
-        uint64 end;
-        int96 rate;
-        int96 childRate;
-        int96 liveRate;
-        uint256 parentId;
-        uint256 predecessorId;
-        uint256 goalAmount;
-        uint256 reserved;
-        uint256 buffers;
-        uint256 cushion;
-    }
-
-    struct CreateFlowParams {
-        address token;
-        address recipient;
-        FlowKind kind;
-        uint256 amount;
-        uint64 earliestStart;
-        uint64 duration;
-        uint256 goalAmount;
-        bool allowSubflows;
-        uint256 predecessorId;
-        ChainMode chainMode;
-        bool keeperGated;
-        bytes32 name;
-    }
-
-    struct CreateSubflowParams {
-        uint256 parentId;
-        address recipient;
-        FlowKind kind;
-        RateMode rateMode;
-        uint256 amount;
-        uint16 shareBps;
-        uint256 goalAmount;
-        bool allowSubflows;
-        bytes32 name;
-    }
-
-    address public immutable host;
-    ICFAv1Forwarder public immutable cfa;
-    address public immutable conduitImplementation;
-
-    address public owner;
-    address public factory;
-    uint256 public nextId;
-
-    mapping(address token => uint256 amount) public unallocated;
-    mapping(address token => uint256 count) public activeCount;
-    mapping(uint256 id => Flow flow) private _flows;
-    mapping(uint256 id => uint256[] childIds) private _children;
-    uint256[] private _ids;
-
-    event Deposited(address indexed from, address indexed token, uint256 amount);
-    event Withdrawn(address indexed to, address indexed token, uint256 amount);
-    event FlowCreated(uint256 indexed id, uint256 indexed parentId, address indexed recipient, address token, int96 rate);
-    event FlowActivated(uint256 indexed id, uint64 start, uint64 end);
-    event FlowSettled(uint256 indexed id, uint256 refunded);
-    event FlowTriggered(uint256 indexed id, address indexed caller);
-
-    error NotOwner();
-    error NotFactory();
-    error ZeroAddress();
-    error ZeroAmount();
-    error TokenNotAllowed();
-    error Paused();
-    error BadDuration();
-    error BadRate();
-    error BadKind();
-    error RecipientMustBeOwner();
-    error SubflowsNotAllowed();
-    error TooManyFlows();
-    error TooDeep();
-    error TooManyChildren();
-    error ParentStarted();
-    error NotFound();
-    error NotActive();
-    error StillActive();
-    error TooEarly();
-    error NotTriggered();
-    error NotGated();
-    error AlreadyTriggered();
-    error BadChain();
-    error ChainTooLong();
-    error GoalRequired();
-    error GoalNotReached();
-    error GoalTooLarge();
-    error GoalNotAllowed();
-    error BadShare();
-    error RateExceeded();
-    error Insufficient();
-    error NotRoot();
-    error BadAmount();
-    error WrongTokenKind();
-    error StreamMismatch();
-
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert NotOwner();
-        _;
-    }
-
-    constructor(address host_, address cfa_, address conduitImplementation_) {
-        if (host_ == address(0) || cfa_ == address(0) || conduitImplementation_ == address(0)) revert ZeroAddress();
-        host = host_;
-        cfa = ICFAv1Forwarder(cfa_);
-        conduitImplementation = conduitImplementation_;
+    constructor(address host_, address cfa_, address conduitImplementation_)
+        FlowVaultStore(host_, cfa_, conduitImplementation_)
+    {
+        extension = address(new FlowVaultExtension(host_, cfa_, conduitImplementation_));
         _disableInitializers();
     }
+
 
     function initialize(address owner_, address factory_) external initializer {
         if (owner_ == address(0) || factory_ == address(0)) revert ZeroAddress();
@@ -182,6 +41,7 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         owner = owner_;
         factory = factory_;
         nextId = 1;
+        openFlowsIndexed = true;
         _registerSuperTokenReceiver();
     }
 
@@ -191,9 +51,17 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         _protect(token);
         if (amount == 0) revert ZeroAmount();
         _requireAllowed(token);
-        uint256 got = _pullSuper(token, amount);
-        unallocated[token] += got;
-        emit Deposited(msg.sender, token, got);
+        uint256 fee = (amount * 30) / 10_000;
+        uint256 got = _pullSuper(token, amount + fee);
+        if (got < amount) revert ZeroAmount();
+        uint256 skim = got - amount;
+        if (skim > fee) skim = fee;
+        if (skim != 0) {
+            protocolFees[token] += skim;
+            emit ProtocolFeeCharged(token, skim);
+        }
+        unallocated[token] += got - skim;
+        emit Deposited(msg.sender, token, got - skim);
     }
 
     function depositUnderlying(address token, uint256 underlyingAmount) external nonReentrant {
@@ -202,8 +70,9 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         ITokenAllowlist list = _requireAllowed(token);
         if (list.kindOf(token) != ITokenAllowlist.TokenKind.Wrapper) revert WrongTokenKind();
         uint256 minted = _upgrade(token, list, underlyingAmount);
-        unallocated[token] += minted;
-        emit Deposited(msg.sender, token, minted);
+        uint256 net = _skim(token, minted);
+        unallocated[token] += net;
+        emit Deposited(msg.sender, token, net);
     }
 
     function depositNative(address token) external payable nonReentrant {
@@ -214,8 +83,9 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         uint256 beforeBal = ISuperTokenMini(token).balanceOf(address(this));
         ISETHMini(token).upgradeByETH{value: msg.value}();
         uint256 minted = ISuperTokenMini(token).balanceOf(address(this)) - beforeBal;
-        unallocated[token] += minted;
-        emit Deposited(msg.sender, token, minted);
+        uint256 net = _skim(token, minted);
+        unallocated[token] += net;
+        emit Deposited(msg.sender, token, net);
     }
 
     function withdraw(address token, uint256 amount) external nonReentrant onlyOwner {
@@ -249,27 +119,62 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
     }
 
     function createFlow(CreateFlowParams calldata p) external nonReentrant onlyOwner returns (uint256 id) {
+        id = _createFlow(p);
+    }
+
+    /// @notice Hold `amount` until `duration` has passed. One call creates and starts the goal.
+    ///         `target` may be larger than the first deposit. Nothing is streamed.
+    function openSavings(address token, uint256 amount, uint64 duration, bytes32 name_, uint256 target)
+        external
+        nonReentrant
+        onlyOwner
+        returns (uint256 id)
+    {
+        id = _createFlow(
+            CreateFlowParams({
+                token: token,
+                recipient: owner,
+                kind: FlowKind.SavingGoal,
+                amount: amount,
+                earliestStart: 0,
+                duration: duration,
+                goalAmount: target == 0 ? amount : target,
+                allowSubflows: false,
+                predecessorId: 0,
+                chainMode: ChainMode.None,
+                keeperGated: false,
+                name: name_
+            })
+        );
+        _activate(id);
+    }
+
+    function _createFlow(CreateFlowParams memory p) internal returns (uint256 id) {
         _protect(p.token);
         if (_list().paused()) revert Paused();
         _requireAllowed(p.token);
         if (p.recipient == address(0)) revert ZeroAddress();
         if (p.duration < MIN_DURATION || p.duration > MAX_DURATION) revert BadDuration();
-        if (_ids.length >= MAX_FLOWS) revert TooManyFlows();
+        if (_unsettled() >= MAX_FLOWS) revert TooManyFlows();
         if (p.kind == FlowKind.SavingGoal) {
             if (p.recipient != owner) revert RecipientMustBeOwner();
             if (p.allowSubflows) revert SubflowsNotAllowed();
         }
         (int96 rate, uint256 reserved) = _rate(p.amount, p.duration);
+        bool hold = p.kind == FlowKind.SavingGoal;
         if (p.kind == FlowKind.Expense) {
             if (p.goalAmount != 0) revert GoalNotAllowed();
+        } else if (hold) {
+            if (p.goalAmount == 0) revert GoalRequired();
         } else if (p.goalAmount == 0 || p.goalAmount > reserved) {
             if (p.goalAmount == 0) revert GoalRequired();
             revert GoalTooLarge();
         }
         _checkChain(p.predecessorId, p.chainMode, p.token);
 
-        uint256 buffers = _pairBuffer(p.token, rate);
-        uint256 cushion = uint256(uint96(rate)) * PROTECT_WINDOW;
+        // A hold does not open a CFA stream, so it posts no deposit and no cushion.
+        uint256 buffers = hold ? 0 : _pairBuffer(p.token, rate);
+        uint256 cushion = hold ? 0 : uint256(uint96(rate)) * PROTECT_WINDOW;
         uint256 need = reserved + buffers + cushion;
         if (unallocated[p.token] < need) revert Insufficient();
         unallocated[p.token] -= need;
@@ -304,9 +209,13 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
             goalAmount: p.goalAmount,
             reserved: reserved,
             buffers: buffers,
-            cushion: cushion
+            cushion: cushion,
+            paused: false,
+            remaining: 0,
+            ran: 0
         });
         _ids.push(id);
+        _trackRoot(p.token, id);
         emit FlowCreated(id, 0, p.recipient, p.token, rate);
     }
 
@@ -318,7 +227,7 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         if (!parent.allowSubflows) revert SubflowsNotAllowed();
         if (parent.depth >= MAX_DEPTH) revert TooDeep();
         if (_children[p.parentId].length >= MAX_CHILDREN) revert TooManyChildren();
-        if (_ids.length >= MAX_FLOWS) revert TooManyFlows();
+        if (_unsettled() >= MAX_FLOWS) revert TooManyFlows();
         if (p.recipient == address(0)) revert ZeroAddress();
         _protect(parent.token);
         if (_list().paused()) revert Paused();
@@ -375,10 +284,14 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
             goalAmount: p.goalAmount,
             reserved: uint256(uint96(rate)) * parent.duration,
             buffers: 0,
-            cushion: 0
+            cushion: 0,
+            paused: false,
+            remaining: 0,
+            ran: 0
         });
         _children[p.parentId].push(id);
         _ids.push(id);
+        _trackChild();
         parent.childRate += rate;
         _retargetBuffers(rootId);
         emit FlowCreated(id, p.parentId, p.recipient, parent.token, rate);
@@ -414,9 +327,13 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         Flow storage flow = _flows[id];
         if (flow.createdAt == 0 || flow.settled) revert NotFound();
         uint256 rootId = _rootOf(id);
+        if (_flows[rootId].paused) {
+            _closeRoot(rootId);
+            return;
+        }
         if (flow.parentId != 0 && !_flows[rootId].active) {
             _flows[flow.parentId].childRate -= flow.rate;
-            _markSettled(id);
+            _dropOpen(_markSettled(id));
             _retargetBuffers(rootId);
             emit FlowSettled(id, 0);
             return;
@@ -431,13 +348,73 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         Flow storage root = _flows[rootId];
         if (root.settled) revert NotActive();
         if (!root.active) revert NotActive();
-        if (block.timestamp < root.end && !_broken(rootId) && !_criticalSoon(root.token)) revert StillActive();
+        bool goalHit = root.kind == FlowKind.FlowGoal && root.goalAmount != 0 && root.rate > 0 && block.timestamp > root.start
+            && uint256(uint96(root.rate)) * (block.timestamp - root.start) >= root.goalAmount;
+        if (block.timestamp < root.end && !_broken(rootId) && !_criticalSoon(root.token) && !goalHit) revert StillActive();
         _closeRoot(rootId);
     }
 
     function protect(address token) external nonReentrant {
         _protect(token);
     }
+
+    /// @dev The extension calls these. A direct call from anyone else reverts.
+    function hookProtect(address token) external {
+        if (msg.sender != address(this)) revert NotSelf();
+        _protect(token);
+    }
+
+    function hookSilence(uint256 id) external {
+        if (msg.sender != address(this)) revert NotSelf();
+        _silence(id);
+    }
+
+    function hookOpen(uint256 id, int96 rate) external {
+        if (msg.sender != address(this)) revert NotSelf();
+        _open(id, rate);
+    }
+
+    function hookOpenChildren(uint256 id, uint64 start, uint64 end) external {
+        if (msg.sender != address(this)) revert NotSelf();
+        _openChildren(id, start, end);
+    }
+
+    function hookRequireMargin(address token) external {
+        if (msg.sender != address(this)) revert NotSelf();
+        _requireMargin(token);
+    }
+
+    /// @dev These forward to the extension so this contract stays under the code-size limit.
+    function pause(uint256) external { _delegate(); }
+    function resume(uint256) external { _delegate(); }
+    function topUp(uint256, uint256) external { _delegate(); }
+    function release(uint256, uint256) external { _delegate(); }
+    function recoverSurplus(address) external { _delegate(); }
+
+    function balanceSheet(address) external returns (uint256 idle, uint256 held, uint256 streaming) {
+        _delegate();
+    }
+
+    function progress(uint256) external returns (uint256 saved, uint256 target, uint64 end, bool holding) {
+        _delegate();
+    }
+
+    fallback() external {
+        _delegate();
+    }
+
+    function _delegate() internal {
+        address ext = extension;
+        assembly ("memory-safe") {
+            calldatacopy(0, 0, calldatasize())
+            let ok := delegatecall(gas(), ext, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            switch ok
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
+        }
+    }
+
 
     function getFlow(uint256 id) external view returns (Flow memory) {
         return _flows[id];
@@ -472,8 +449,16 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         root.active = true;
         root.start = start;
         root.end = end;
-        root.liveRate = root.rate - root.childRate;
+        root.paused = false;
         activeCount[root.token] += 1;
+        // A saving goal keeps the deposit in the vault. No CFA stream, no liquidation.
+        if (root.kind == FlowKind.SavingGoal) {
+            root.liveRate = 0;
+            _requireMargin(root.token);
+            emit FlowActivated(id, start, end);
+            return;
+        }
+        root.liveRate = root.rate - root.childRate;
         _open(id, root.liveRate);
         _openChildren(id, start, end);
         _requireMargin(root.token);
@@ -491,6 +476,10 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
             child.end = end;
             // Children are real CFA streams of the residual only. A parent whose
             // children already take the whole rate does not open a second stream.
+            if (child.kind == FlowKind.SavingGoal) {
+                child.liveRate = 0;
+                continue;
+            }
             int96 residual = child.rate - child.childRate;
             child.liveRate = residual;
             _open(childId, residual);
@@ -531,13 +520,23 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         address token = root.token;
         bool wasActive = root.active;
         uint256 unstreamed;
-        if (wasActive) {
+        uint64 ranFor;
+        if (root.paused) {
+            ranFor = root.duration - root.remaining;
+            unstreamed = _outflowRate(id) * root.remaining + _heldReserve(id);
+            root.paused = false;
+        } else if (wasActive && root.kind != FlowKind.SavingGoal) {
             uint256 elapsed = block.timestamp >= root.end ? root.duration : block.timestamp - root.start;
-            uint256 streamed = uint256(uint96(root.rate)) * elapsed;
+            ranFor = uint64(elapsed);
+            uint256 streamed = _outflowRate(id) * elapsed;
             unstreamed = root.reserved > streamed ? root.reserved - streamed : 0;
+        } else if (wasActive) {
+            unstreamed = root.reserved;
+            ranFor = block.timestamp >= root.end ? root.duration : uint64(block.timestamp - root.start);
         } else {
             unstreamed = root.reserved;
         }
+        root.ran = ranFor;
         uint256 cushion = root.cushion;
         uint256 buffers = root.buffers;
         root.settled = true;
@@ -546,23 +545,44 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         if (wasActive) activeCount[token] -= 1;
 
         uint256 beforeBal = ISuperTokenMini(token).balanceOf(address(this));
-        _shutTree(id);
+        uint256 closed = _shutTree(id);
         uint256 gained = ISuperTokenMini(token).balanceOf(address(this)) - beforeBal;
         if (wasActive) unallocated[token] += unstreamed + cushion + gained;
         else unallocated[token] += unstreamed + cushion + buffers;
+        _dropOpen(closed);
+        _untrackRoot(token, id);
         _clampIdle(token);
         emit FlowSettled(id, unallocated[token]);
     }
 
-    function _shutTree(uint256 id) internal {
+    function _silence(uint256 id) internal {
         _shut(id);
         uint256 n = _children[id].length;
         for (uint256 i; i < n; ++i) {
             uint256 childId = _children[id][i];
+            Flow storage child = _flows[childId];
+            if (child.settled) continue;
+            child.active = false;
+            child.liveRate = 0;
+            _silence(childId);
+        }
+    }
+
+    function _unsettled() internal view returns (uint256) {
+        return openCount;
+    }
+
+    function _shutTree(uint256 id) internal returns (uint256 n) {
+        _shut(id);
+        n = 1;
+        uint256 children = _children[id].length;
+        for (uint256 i; i < children; ++i) {
+            uint256 childId = _children[id][i];
+            if (_flows[childId].settled) continue;
             _flows[childId].settled = true;
             _flows[childId].active = false;
             _flows[childId].liveRate = 0;
-            _shutTree(childId);
+            n += _shutTree(childId);
         }
     }
 
@@ -571,25 +591,35 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         if (flow.conduit == address(0)) return;
         cfa.setFlowrate(flow.token, flow.conduit, 0);
         FlowConduit(flow.conduit).close();
+        flow.conduit = address(0);
     }
 
     function _protect(address token) internal {
-        uint256 n = _ids.length;
-        for (uint256 i; i < n; ++i) {
-            uint256 id = _ids[i];
+        _indexExisting();
+        uint256[] storage roots = liveRoots[token];
+        uint256 i;
+        while (i < roots.length) {
+            uint256 id = roots[i];
             Flow storage flow = _flows[id];
-            if (flow.token != token || flow.parentId != 0 || flow.settled || !flow.active) continue;
-            if (block.timestamp >= flow.end || _broken(id)) _closeRoot(id);
-        }
-        if (activeCount[token] != 0 && _criticalSoon(token)) {
-            for (uint256 i; i < _ids.length; ++i) {
-                uint256 id = _ids[i];
-                Flow storage flow = _flows[id];
-                if (flow.token == token && flow.parentId == 0 && flow.active && !flow.settled) {
-                    _closeRoot(id);
-                    if (!_criticalSoon(token)) break;
-                }
+            if (flow.settled || !flow.active) {
+                i++;
+                continue;
             }
+            if (block.timestamp >= flow.end || _broken(id)) {
+                _closeRoot(id);
+                continue;
+            }
+            i++;
+        }
+        i = 0;
+        while (activeCount[token] != 0 && _criticalSoon(token) && i < roots.length) {
+            uint256 id = roots[i];
+            Flow storage flow = _flows[id];
+            if (flow.active && !flow.settled) {
+                _closeRoot(id);
+                continue;
+            }
+            i++;
         }
     }
 
@@ -608,7 +638,7 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
     }
 
     function _ready(Flow storage flow) internal view returns (bool) {
-        if (flow.settled || flow.active) return false;
+        if (flow.settled || flow.active || flow.paused) return false;
         if (flow.keeperGated && !flow.triggered) return false;
         if (flow.earliestStart != 0 && block.timestamp < flow.earliestStart) return false;
         if (flow.chainMode == ChainMode.None) return true;
@@ -616,8 +646,11 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         if (flow.chainMode == ChainMode.OnEnd) {
             return pred.settled || (pred.active && block.timestamp >= pred.end);
         }
-        if (!pred.active || pred.rate == 0) return false;
-        uint256 elapsed = block.timestamp - pred.start;
+        if (pred.rate == 0 || pred.goalAmount == 0) return false;
+        uint256 elapsed;
+        if (pred.active) elapsed = block.timestamp - pred.start;
+        else if (pred.settled) elapsed = pred.ran;
+        else return false;
         return uint256(uint96(pred.rate)) * elapsed >= pred.goalAmount;
     }
 
@@ -659,18 +692,19 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         return id;
     }
 
-    function _markSettled(uint256 id) internal {
+    function _markSettled(uint256 id) internal returns (uint256 n) {
         _flows[id].settled = true;
         _flows[id].liveRate = 0;
-        uint256 n = _children[id].length;
-        for (uint256 i; i < n; ++i) {
-            _markSettled(_children[id][i]);
+        n = 1;
+        uint256 children = _children[id].length;
+        for (uint256 i; i < children; ++i) {
+            n += _markSettled(_children[id][i]);
         }
     }
 
     function _treeBuffers(uint256 id) internal view returns (uint256 total) {
         Flow storage flow = _flows[id];
-        if (flow.settled) return 0;
+        if (flow.settled || flow.kind == FlowKind.SavingGoal) return 0;
         int96 residual = flow.rate - flow.childRate;
         if (residual < 0) revert RateExceeded();
         total = _pairBuffer(flow.token, residual);
@@ -743,15 +777,20 @@ contract FlowVault is Initializable, ReentrancyGuard, SuperTokenReceiver {
         if (_hasOpenRoot(token)) return;
         (, uint256 deposit,,) = ISuperTokenMini(token).realtimeBalanceOfNow(address(this));
         if (deposit != 0) return;
-        unallocated[token] = ISuperTokenMini(token).balanceOf(address(this));
+        uint256 bal = ISuperTokenMini(token).balanceOf(address(this));
+        uint256 fees = protocolFees[token];
+        unallocated[token] = bal > fees ? bal - fees : 0;
+    }
+
+    function _skim(address token, uint256 amount) internal returns (uint256 net) {
+        uint256 fee = (amount * 30) / 10_000;
+        if (fee == 0 || fee > amount) return amount;
+        protocolFees[token] += fee;
+        emit ProtocolFeeCharged(token, fee);
+        return amount - fee;
     }
 
     function _hasOpenRoot(address token) internal view returns (bool) {
-        uint256 n = _ids.length;
-        for (uint256 i; i < n; ++i) {
-            Flow storage flow = _flows[_ids[i]];
-            if (flow.token == token && flow.parentId == 0 && !flow.settled) return true;
-        }
-        return false;
+        return liveRoots[token].length != 0;
     }
 }

@@ -6,8 +6,10 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {SfBase} from "./SfBase.sol";
 import {BalanceToken} from "./mocks/Mocks.sol";
-import {GroupRotation} from "../src/GroupRotation.sol";
+import {GroupRotation, IGroupCalls} from "../src/GroupRotation.sol";
+import {GroupRotationStore} from "../src/GroupRotationStore.sol";
 import {FlowVault} from "../src/FlowVault.sol";
+import {FlowVaultStore} from "../src/FlowVaultStore.sol";
 import {ITokenAllowlist} from "../src/interfaces/ITokenAllowlist.sol";
 
 contract GroupRotationTest is SfBase {
@@ -46,19 +48,19 @@ contract GroupRotationTest is SfBase {
         uint256 id = _startGroup(members, 5e18, 2 hours, 20 minutes, 10 minutes, 3, offsets, 1_000e6);
         uint256 t0 = vm.getBlockTimestamp();
 
-        vm.expectRevert(GroupRotation.TooEarly.selector);
+        vm.expectRevert(GroupRotationStore.TooEarly.selector);
         vm.prank(members[1]);
         groups.contribute(id);
         _pay(id, members[0], t0);
-        vm.expectRevert(GroupRotation.AlreadyPaid.selector);
+        vm.expectRevert(GroupRotationStore.AlreadyPaid.selector);
         vm.prank(members[0]);
         groups.contribute(id);
         _pay(id, members[1], t0 + 40 minutes);
         vm.warp(t0 + 80 minutes + 20 minutes + 1);
         vm.prank(members[2]);
         groups.contribute(id);
-        (, uint64 paidAt, GroupRotation.PayStatus status) = groups.payments(id, 0, 2);
-        assertEq(uint8(status), uint8(GroupRotation.PayStatus.Late));
+        (, uint64 paidAt, GroupRotationStore.PayStatus status) = groups.payments(id, 0, 2);
+        assertEq(uint8(status), uint8(GroupRotationStore.PayStatus.Late));
         assertGt(paidAt, 0);
         _assertSolvent(address(usdcx), address(groups));
         assertEq(_streamingTo(id), members[0]);
@@ -68,9 +70,9 @@ contract GroupRotationTest is SfBase {
         _pay(id, members[0], cycle1);
         uint256 slashAt = cycle1 + 40 minutes + 20 minutes + 10 minutes + 1;
         vm.warp(slashAt);
-        uint256 collateralBefore = groups.getMember(id, 1).collateral;
+        uint256 collateralBefore = IGroupCalls(address(groups)).getMember(id, 1).collateral;
         groups.settleMissed(id, 1, 1);
-        assertEq(groups.getMember(id, 1).collateral, collateralBefore - 5e18);
+        assertEq(IGroupCalls(address(groups)).getMember(id, 1).collateral, collateralBefore - 5e18);
         (uint256 funded,,) = groups.pots(id, 1);
         assertGt(funded, 0);
         groups.sync(id);
@@ -89,7 +91,7 @@ contract GroupRotationTest is SfBase {
         groups.finalize(id);
         _assertSolvent(address(usdcx), address(groups));
         for (uint256 i; i < 3; ++i) {
-            if (groups.getMember(id, i).collateral > 0) {
+            if (IGroupCalls(address(groups)).getMember(id, i).collateral > 0) {
                 vm.prank(members[i]);
                 groups.claimCollateral(id);
             }
@@ -129,60 +131,60 @@ contract GroupRotationTest is SfBase {
             _approveToken(members[i], address(usdcx), address(groups));
         }
         uint64[] memory offsets = _zeroOffsets(3);
-        vm.expectRevert(GroupRotation.BadParams.selector);
+        vm.expectRevert(GroupRotationStore.BadParams.selector);
         vm.prank(members[0]);
         groups.createGroup(address(usdcx), 0, 1 hours, 10 minutes, 0, 1, members, offsets);
         address[] memory small = _members(2, "small");
-        vm.expectRevert(GroupRotation.BadParams.selector);
+        vm.expectRevert(GroupRotationStore.BadParams.selector);
         vm.prank(small[0]);
         groups.createGroup(address(usdcx), 1e18, 1 hours, 10 minutes, 0, 1, small, _zeroOffsets(2));
         address[] memory big = _members(51, "big");
-        vm.expectRevert(GroupRotation.BadParams.selector);
+        vm.expectRevert(GroupRotationStore.BadParams.selector);
         vm.prank(big[0]);
         groups.createGroup(address(usdcx), 1, 1 hours, 10 minutes, 0, 1, big, _zeroOffsets(51));
-        vm.expectRevert(GroupRotation.BadParams.selector);
+        vm.expectRevert(GroupRotationStore.BadParams.selector);
         vm.prank(members[0]);
         groups.createGroup(address(usdcx), 1e18, 1 hours, 10 minutes, 0, 0, members, offsets);
-        vm.expectRevert(GroupRotation.BadParams.selector);
+        vm.expectRevert(GroupRotationStore.BadParams.selector);
         vm.prank(members[0]);
         groups.createGroup(address(usdcx), 1e18, 1 hours, 10 minutes, 0, 521, members, offsets);
-        vm.expectRevert(GroupRotation.BadParams.selector);
+        vm.expectRevert(GroupRotationStore.BadParams.selector);
         vm.prank(members[0]);
         groups.createGroup(address(usdcx), 1e18, 59 minutes, 10 minutes, 0, 1, members, offsets);
-        vm.expectRevert(GroupRotation.WindowOutOfRange.selector);
+        vm.expectRevert(GroupRotationStore.WindowOutOfRange.selector);
         vm.prank(members[0]);
         groups.createGroup(address(usdcx), 1e18, 1 hours, 50 minutes, 20 minutes, 1, members, offsets);
         address[] memory dup = new address[](3);
         dup[0] = members[0];
         dup[1] = members[1];
         dup[2] = members[1];
-        vm.expectRevert(GroupRotation.DuplicateMember.selector);
+        vm.expectRevert(GroupRotationStore.DuplicateMember.selector);
         vm.prank(members[0]);
         groups.createGroup(address(usdcx), 1e18, 1 hours, 10 minutes, 0, 1, dup, offsets);
         address[] memory outsider = new address[](3);
         outsider[0] = members[1];
         outsider[1] = members[2];
         outsider[2] = carol;
-        vm.expectRevert(GroupRotation.CreatorNotMember.selector);
+        vm.expectRevert(GroupRotationStore.CreatorNotMember.selector);
         vm.prank(alice);
         groups.createGroup(address(usdcx), 1e18, 1 hours, 10 minutes, 0, 1, outsider, offsets);
         address[] memory zeroed = new address[](3);
         zeroed[0] = members[0];
         zeroed[1] = address(0);
         zeroed[2] = members[2];
-        vm.expectRevert(GroupRotation.ZeroAddress.selector);
+        vm.expectRevert(GroupRotationStore.ZeroAddress.selector);
         vm.prank(members[0]);
         groups.createGroup(address(usdcx), 1e18, 1 hours, 10 minutes, 0, 1, zeroed, offsets);
-        vm.expectRevert(GroupRotation.BadParams.selector);
+        vm.expectRevert(GroupRotationStore.BadParams.selector);
         vm.prank(members[0]);
         groups.createGroup(address(usdcx), type(uint128).max, 1 hours, 10 minutes, 0, 2, members, offsets);
-        vm.expectRevert(GroupRotation.TokenNotAllowed.selector);
+        vm.expectRevert(GroupRotationStore.TokenNotAllowed.selector);
         vm.prank(members[0]);
         groups.createGroup(address(dai), 1e18, 1 hours, 10 minutes, 0, 1, members, offsets);
 
         vm.prank(admin);
         allow.setPaused(true);
-        vm.expectRevert(GroupRotation.Paused.selector);
+        vm.expectRevert(GroupRotationStore.Paused.selector);
         vm.prank(members[0]);
         groups.createGroup(address(usdcx), 1e18, 1 hours, 10 minutes, 0, 1, members, offsets);
         vm.prank(admin);
@@ -190,23 +192,23 @@ contract GroupRotationTest is SfBase {
 
         vm.prank(members[0]);
         uint256 id = groups.createGroup(address(usdcx), 1e18, 1 hours, 10 minutes, 5 minutes, 1, members, offsets);
-        vm.expectRevert(GroupRotation.NotMember.selector);
+        vm.expectRevert(GroupRotationStore.NotMember.selector);
         vm.prank(alice);
         groups.postCollateral(id);
         vm.prank(members[0]);
         groups.postCollateral(id);
-        vm.expectRevert(GroupRotation.AlreadyPosted.selector);
+        vm.expectRevert(GroupRotationStore.AlreadyPosted.selector);
         vm.prank(members[0]);
         groups.postCollateral(id);
-        vm.expectRevert(GroupRotation.NotCreator.selector);
+        vm.expectRevert(GroupRotationStore.NotAdmin.selector);
         vm.prank(members[1]);
         groups.start(id);
-        vm.expectRevert(GroupRotation.MissingCollateral.selector);
+        vm.expectRevert(GroupRotationStore.MissingCollateral.selector);
         vm.prank(members[0]);
         groups.start(id);
         vm.prank(members[0]);
         groups.cancelBeforeStart(id);
-        vm.expectRevert(GroupRotation.BadState.selector);
+        vm.expectRevert(GroupRotationStore.BadState.selector);
         vm.prank(members[0]);
         groups.start(id);
         vm.prank(members[0]);
@@ -215,12 +217,12 @@ contract GroupRotationTest is SfBase {
         (uint256 cycle, bool open) = groups.currentCycle(id);
         assertEq(cycle, 0);
         assertFalse(open);
-        vm.expectRevert(GroupRotation.BadCycle.selector);
+        vm.expectRevert(GroupRotationStore.BadCycle.selector);
         groups.recipientOf(id, 5);
-        vm.expectRevert(GroupRotation.BadState.selector);
+        vm.expectRevert(GroupRotationStore.BadState.selector);
         vm.prank(members[0]);
         groups.connect(id);
-        vm.expectRevert(GroupRotation.BadState.selector);
+        vm.expectRevert(GroupRotationStore.BadState.selector);
         groups.claimStream(id + 99);
 
         BalanceToken fee = new BalanceToken();
@@ -230,7 +232,7 @@ contract GroupRotationTest is SfBase {
         fee.mint(members[0], 100e18);
         vm.prank(members[0]);
         uint256 fid = groups.createGroup(address(fee), 10e18, 1 hours, 10 minutes, 0, 1, members, offsets);
-        vm.expectRevert(GroupRotation.FeeOnTransfer.selector);
+        vm.expectRevert(GroupRotationStore.FeeOnTransfer.selector);
         vm.prank(members[0]);
         groups.postCollateral(fid);
     }
@@ -241,10 +243,10 @@ contract GroupRotationTest is SfBase {
         uint256 t0 = vm.getBlockTimestamp();
         vm.prank(members[0]);
         groups.contribute(id);
-        vm.expectRevert(GroupRotation.AlreadyPaid.selector);
+        vm.expectRevert(GroupRotationStore.AlreadyPaid.selector);
         vm.prank(members[0]);
         groups.contribute(id);
-        vm.expectRevert(GroupRotation.StillOpen.selector);
+        vm.expectRevert(GroupRotationStore.StillOpen.selector);
         groups.settleMissed(id, 0, 1);
         vm.warp(t0 + 10 minutes + 5 minutes + 1);
         // Paying after the window records the miss and repays the person whose round it is.
@@ -253,25 +255,25 @@ contract GroupRotationTest is SfBase {
         assertEq(groups.paidFromTo(id, members[1], members[0]), 1e18);
         assertEq(groups.owedFromTo(id, members[1], members[0]), 0);
         assertEq(groups.owedFromTo(id, members[2], members[0]), 1e18);
-        vm.expectRevert(GroupRotation.AlreadyPaid.selector);
+        vm.expectRevert(GroupRotationStore.AlreadyPaid.selector);
         groups.settleMissed(id, 0, 1);
-        vm.expectRevert(GroupRotation.AlreadyPaid.selector);
+        vm.expectRevert(GroupRotationStore.AlreadyPaid.selector);
         groups.settleMissed(id, 0, 2);
-        vm.expectRevert(GroupRotation.AlreadyPaid.selector);
+        vm.expectRevert(GroupRotationStore.AlreadyPaid.selector);
         groups.settleMissed(id, 0, 1);
-        vm.expectRevert(GroupRotation.BadMember.selector);
+        vm.expectRevert(GroupRotationStore.BadMember.selector);
         groups.settleMissed(id, 0, 9);
-        vm.expectRevert(GroupRotation.BadCycle.selector);
+        vm.expectRevert(GroupRotationStore.BadCycle.selector);
         groups.settleMissed(id, 3, 0);
         vm.warp(t0 + 1 hours);
-        vm.expectRevert(GroupRotation.CycleOver.selector);
+        vm.expectRevert(GroupRotationStore.CycleOver.selector);
         vm.prank(members[0]);
         groups.contribute(id);
         groups.finalize(id);
-        vm.expectRevert(GroupRotation.BadState.selector);
+        vm.expectRevert(GroupRotationStore.BadState.selector);
         groups.finalize(id);
         _assertSolvent(address(usdcx), address(groups));
-        vm.expectRevert(GroupRotation.NothingToClaim.selector);
+        vm.expectRevert(GroupRotationStore.NothingToClaim.selector);
         vm.prank(members[2]);
         groups.claimCollateral(id);
     }
@@ -292,28 +294,28 @@ contract GroupRotationTest is SfBase {
         // Member 3 pays during member 5's window, after member 3's own interval.
         _pay(id, members[3], t0 + offsets[5]);
 
-        GroupRotation.Books memory late = groups.ledger(id, 3);
+        GroupRotationStore.Books memory late = IGroupCalls(address(groups)).ledger(id, 3);
         assertEq(late.given, 1e18);
         assertEq(late.owed, 0);
         assertEq(late.missed, 1);
         assertFalse(late.inOwe);
-        assertEq(uint8(groups.place(id, 3)), uint8(GroupRotation.Place.Missed));
+        assertEq(uint8(IGroupCalls(address(groups)).place(id, 3)), uint8(GroupRotationStore.Place.Missed));
         // The money is booked to member 0, whose round it was, not to member 5.
         assertEq(groups.paidFromTo(id, members[3], members[0]), 1e18);
         assertEq(groups.paidFromTo(id, members[3], members[5]), 0);
         assertEq(groups.owedFromTo(id, members[3], members[5]), 0);
         assertEq(groups.paidFromTo(id, members[5], members[0]), 1e18);
-        assertGt(groups.ledger(id, 0).received, 0);
+        assertGt(IGroupCalls(address(groups)).ledger(id, 0).received, 0);
 
         bool sawSlash;
         bool sawRepay;
-        uint256 legs = groups.legCount(id);
+        uint256 legs = IGroupCalls(address(groups)).legCount(id);
         for (uint256 i; i < legs; ++i) {
-            GroupRotation.Leg memory leg = groups.legAt(id, i);
+            GroupRotationStore.Leg memory leg = IGroupCalls(address(groups)).legAt(id, i);
             if (leg.from != members[3]) continue;
             assertEq(leg.to, members[0]);
-            if (leg.kind == GroupRotation.PayStatus.Slashed) sawSlash = true;
-            if (leg.kind == GroupRotation.PayStatus.Repaid) sawRepay = true;
+            if (leg.kind == GroupRotationStore.PayStatus.Slashed) sawSlash = true;
+            if (leg.kind == GroupRotationStore.PayStatus.Repaid) sawRepay = true;
         }
         assertTrue(sawSlash);
         assertTrue(sawRepay);
@@ -322,14 +324,14 @@ contract GroupRotationTest is SfBase {
         _pay(id, members[0], cycle1);
         vm.warp(cycle1 + 15 minutes + 1);
         groups.catchUp(id);
-        assertTrue(groups.ledger(id, 1).inOwe);
+        assertTrue(IGroupCalls(address(groups)).ledger(id, 1).inOwe);
         assertEq(groups.owedFromTo(id, members[1], members[2]), 1e18);
         assertEq(groups.recipientOf(id, 1), members[1]);
         assertEq(groups.activeRecipient(id, 1), members[2]);
         assertEq(_streamingTo(id), members[2]);
 
         groups.setGroupPaused(id, true);
-        vm.expectRevert(GroupRotation.Paused.selector);
+        vm.expectRevert(GroupRotationStore.Paused.selector);
         vm.prank(members[2]);
         groups.contribute(id);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, members[0]));
@@ -355,27 +357,27 @@ contract GroupRotationTest is SfBase {
         FlowVault vault = _open(alice);
         _depositUnderlying(vault, alice, usdc, usdcx, USDC_FUND);
         uint256 expense = _create(
-            vault, alice, _params(address(usdcx), bob, FlowVault.FlowKind.Expense, 100e18, 0, 1 days, 0, true, 0, FlowVault.ChainMode.None, false)
+            vault, alice, _params(address(usdcx), bob, FlowVaultStore.FlowKind.Expense, 100e18, 0, 1 days, 0, true, 0, FlowVaultStore.ChainMode.None, false)
         );
-        uint256 sub = _sub(vault, alice, expense, carol, FlowVault.FlowKind.Expense, FlowVault.RateMode.Share, 0, 2_000, 0, false);
+        uint256 sub = _sub(vault, alice, expense, carol, FlowVaultStore.FlowKind.Expense, FlowVaultStore.RateMode.Share, 0, 2_000, 0, false);
         uint256[] memory ids = new uint256[](6);
         ids[0] = expense;
         ids[1] = _create(
-            vault, alice, _params(address(usdcx), carol, FlowVault.FlowKind.Expense, 80e18, 0, 1 days, 0, false, 0, FlowVault.ChainMode.None, false)
+            vault, alice, _params(address(usdcx), carol, FlowVaultStore.FlowKind.Expense, 80e18, 0, 1 days, 0, false, 0, FlowVaultStore.ChainMode.None, false)
         );
         ids[2] = _create(
-            vault, alice, _params(address(usdcx), alice, FlowVault.FlowKind.SavingGoal, 50e18, 0, 1 days, 1e15, false, 0, FlowVault.ChainMode.None, false)
+            vault, alice, _params(address(usdcx), alice, FlowVaultStore.FlowKind.SavingGoal, 50e18, 0, 1 days, 1e15, false, 0, FlowVaultStore.ChainMode.None, false)
         );
         ids[3] = _create(
-            vault, alice, _params(address(usdcx), alice, FlowVault.FlowKind.SavingGoal, 40e18, 0, 1 days, 1e15, false, 0, FlowVault.ChainMode.None, false)
+            vault, alice, _params(address(usdcx), alice, FlowVaultStore.FlowKind.SavingGoal, 40e18, 0, 1 days, 1e15, false, 0, FlowVaultStore.ChainMode.None, false)
         );
         ids[4] = _create(
-            vault, alice, _params(address(usdcx), bob, FlowVault.FlowKind.FlowGoal, 30e18, 0, 1 days, 1e15, false, 0, FlowVault.ChainMode.None, false)
+            vault, alice, _params(address(usdcx), bob, FlowVaultStore.FlowKind.FlowGoal, 30e18, 0, 1 days, 1e15, false, 0, FlowVaultStore.ChainMode.None, false)
         );
         ids[5] = _create(
             vault,
             alice,
-            _params(address(usdcx), carol, FlowVault.FlowKind.Expense, 20e18, uint64(t0 + 1 hours), 1 days, 0, false, 0, FlowVault.ChainMode.None, false)
+            _params(address(usdcx), carol, FlowVaultStore.FlowKind.Expense, 20e18, uint64(t0 + 1 hours), 1 days, 0, false, 0, FlowVaultStore.ChainMode.None, false)
         );
 
         for (uint256 i; i < 5; ++i) {
@@ -384,9 +386,9 @@ contract GroupRotationTest is SfBase {
             assertEq(vault.getFlow(ids[i]).token, address(usdcx));
         }
         assertEq(vault.getFlow(sub).token, address(usdcx));
-        assertTrue(vault.getFlow(ids[2]).conduit != vault.getFlow(ids[3]).conduit);
-        assertGt(cfaFwd.getFlowrate(address(usdcx), vault.getFlow(ids[2]).conduit, alice), 0);
-        assertGt(cfaFwd.getFlowrate(address(usdcx), vault.getFlow(ids[3]).conduit, alice), 0);
+        assertEq(vault.getFlow(ids[2]).conduit, address(0));
+        assertEq(vault.getFlow(ids[3]).conduit, address(0));
+        assertEq(cfaFwd.getFlowrate(address(usdcx), address(vault), alice), 0);
 
         vm.warp(t0 + 30 minutes);
         groups.sync(groupId);
@@ -398,7 +400,7 @@ contract GroupRotationTest is SfBase {
         _assertSolvent(address(usdcx), address(groups));
         _assertSolvent(address(usdcx), alice);
 
-        vm.expectRevert(FlowVault.TooEarly.selector);
+        vm.expectRevert(FlowVaultStore.TooEarly.selector);
         vault.activate(ids[5]);
         vm.warp(t0 + 1 hours);
         vm.prank(alice);
@@ -436,6 +438,81 @@ contract GroupRotationTest is SfBase {
         _assertSolvent(address(usdcx), address(groups));
         vm.warp(t0 + cycle);
         groups.finalize(id);
+        _assertSolvent(address(usdcx), address(groups));
+    }
+
+    function test_adminsPhoneOrderFeeAndLock() public {
+        address[] memory members = _members(3, "admins");
+        for (uint256 i; i < 3; ++i) {
+            _giveUsdcx(members[i], 1_000e6);
+            _approveToken(members[i], address(usdcx), address(groups));
+        }
+        vm.prank(members[0]);
+        uint256 id = groups.createGroup(address(usdcx), 10e18, 1 hours, 20 minutes, 10 minutes, 1, members, _zeroOffsets(3));
+        vm.prank(members[1]);
+        vm.expectRevert(GroupRotationStore.NotAdmin.selector);
+        IGroupCalls(address(groups)).addGroupAdmin(id, members[1]);
+        vm.prank(members[0]);
+        IGroupCalls(address(groups)).addGroupAdmin(id, members[1]);
+        assertTrue(groups.groupAdmin(id, members[1]));
+
+        vm.prank(members[1]);
+        IGroupCalls(address(groups)).setMemberPhone(id, members[2], bytes32("256700000001"));
+        assertEq(groups.memberPhone(id, members[2]), bytes32("256700000001"));
+
+        uint16[] memory order = new uint16[](3);
+        order[0] = 2;
+        order[1] = 0;
+        order[2] = 1;
+        vm.prank(members[1]);
+        IGroupCalls(address(groups)).setPayoutOrder(id, order);
+        assertEq(groups.recipientOf(id, 0), members[2]);
+
+        vm.prank(members[1]);
+        IGroupCalls(address(groups)).setAdminFee(id, 2, 0, 500);
+        vm.prank(members[0]);
+        IGroupCalls(address(groups)).lockGroupSavings(id, 20e18, 2 hours);
+        vm.prank(members[2]);
+        vm.expectRevert(GroupRotationStore.NotAdmin.selector);
+        IGroupCalls(address(groups)).withdrawGroupSavings(id, 1e18);
+        vm.prank(members[0]);
+        vm.expectRevert(GroupRotationStore.TooEarly.selector);
+        IGroupCalls(address(groups)).withdrawGroupSavings(id, 1e18);
+
+        for (uint256 i; i < 3; ++i) {
+            vm.prank(members[i]);
+            groups.postCollateral(id);
+        }
+        vm.prank(members[1]);
+        groups.start(id);
+        for (uint256 i; i < 3; ++i) {
+            vm.prank(members[i]);
+            groups.connect(id);
+        }
+        uint256 feesBefore = groups.protocolFees(address(usdcx));
+        for (uint256 i; i < 3; ++i) {
+            vm.prank(members[i]);
+            groups.contribute(id);
+        }
+        assertGt(groups.protocolFees(address(usdcx)), feesBefore);
+        (uint8 mode, uint16 bps, uint128 flat, uint128 lockBalance,,,,,,) = groups.groupRules(id);
+        assertEq(mode, 2);
+        assertEq(bps, 500);
+        assertEq(flat, 0);
+        assertEq(lockBalance, 20e18);
+        (,,,,,, int96 adminRate,,,) = groups.groupRules(id);
+        assertGt(adminRate, 0);
+
+        address owner = Ownable(address(groups)).owner();
+        vm.prank(owner);
+        IGroupCalls(address(groups)).withdrawProtocolFees(address(usdcx), owner);
+        assertEq(groups.protocolFees(address(usdcx)), 0);
+
+        vm.warp(vm.getBlockTimestamp() + 2 hours);
+        vm.prank(members[0]);
+        IGroupCalls(address(groups)).withdrawGroupSavings(id, 20e18);
+        (,,, uint128 left,,,,,,) = groups.groupRules(id);
+        assertEq(left, 0);
         _assertSolvent(address(usdcx), address(groups));
     }
 

@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {SfBase} from "./SfBase.sol";
 import {FlowVault} from "../src/FlowVault.sol";
+import {FlowVaultStore} from "../src/FlowVaultStore.sol";
 import {LockVault} from "../src/LockVault.sol";
 import {GroupRotation} from "../src/GroupRotation.sol";
 import {VaultFactory} from "../src/VaultFactory.sol";
@@ -58,17 +59,17 @@ contract RvessHandler is Test {
         FlowVault vault = vaults[i];
         vm.prank(users[i]);
         uint256 id = vault.createFlow(
-            FlowVault.CreateFlowParams({
+            FlowVaultStore.CreateFlowParams({
                 token: address(token),
                 recipient: users[(i + 1) % 3],
-                kind: FlowVault.FlowKind.Expense,
+                kind: FlowVaultStore.FlowKind.Expense,
                 amount: perSecond * duration,
                 earliestStart: 0,
                 duration: duration,
                 goalAmount: 0,
                 allowSubflows: true,
                 predecessorId: 0,
-                chainMode: FlowVault.ChainMode.None,
+                chainMode: FlowVaultStore.ChainMode.None,
                 keeperGated: false,
                 name: bytes32("inv")
             })
@@ -76,11 +77,11 @@ contract RvessHandler is Test {
         if (withSub) {
             vm.prank(users[i]);
             vault.createSubflow(
-                FlowVault.CreateSubflowParams({
+                FlowVaultStore.CreateSubflowParams({
                     parentId: id,
                     recipient: users[(i + 2) % 3],
-                    kind: FlowVault.FlowKind.Expense,
-                    rateMode: FlowVault.RateMode.Share,
+                    kind: FlowVaultStore.FlowKind.Expense,
+                    rateMode: FlowVaultStore.RateMode.Share,
                     amount: 0,
                     shareBps: 2_500,
                     goalAmount: 0,
@@ -91,7 +92,7 @@ contract RvessHandler is Test {
         }
         vm.prank(users[i]);
         vault.activate(id);
-        FlowVault.Flow memory flow = vault.getFlow(id);
+        FlowVaultStore.Flow memory flow = vault.getFlow(id);
         vm.warp(flow.start + duration / 2);
         vault.protect(address(token));
     }
@@ -132,9 +133,10 @@ contract RvessHandler is Test {
         vm.prank(users[0]);
         groups.start(groupId);
         for (uint256 i; i < 3; ++i) {
-            vm.prank(users[i]);
+            vm.startPrank(users[i]);
             groups.connect(groupId);
             groups.contribute(groupId);
+            vm.stopPrank();
         }
         uint256 t0 = vm.getBlockTimestamp();
         vm.warp(t0 + 10 minutes);
@@ -149,7 +151,7 @@ contract RvessHandler is Test {
             uint256 n = vault.flowCount();
             for (uint256 i; i < n; ++i) {
                 uint256 id = vault.flowIdAt(i);
-                FlowVault.Flow memory flow = vault.getFlow(id);
+                FlowVaultStore.Flow memory flow = vault.getFlow(id);
                 if (flow.parentId != 0 || !flow.active || flow.settled) continue;
                 if (vm.getBlockTimestamp() < flow.end) vm.warp(flow.end);
                 vault.settle(id);
@@ -190,7 +192,7 @@ contract RvessInvariantTest is SfBase {
             uint256 n = vault.flowCount();
             for (uint256 i; i < n; ++i) {
                 uint256 id = vault.flowIdAt(i);
-                FlowVault.Flow memory flow = vault.getFlow(id);
+                FlowVaultStore.Flow memory flow = vault.getFlow(id);
                 uint256[] memory kids = vault.childrenOf(id);
                 uint256 sum;
                 for (uint256 k; k < kids.length; ++k) {

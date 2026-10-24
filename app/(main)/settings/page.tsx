@@ -1,8 +1,10 @@
 import { Suspense } from "react";
+import { ProfileForm } from "@/components/circle";
 import { CurrencyPick } from "@/components/currency-pick";
 import { AccountSwitch } from "@/components/forms";
 import Loading from "../loading";
 import { Fact, Facts, Page } from "@/components/ui-bits";
+import { contactOf } from "@/lib/circle";
 import { labeled, money, shortAddress } from "@/lib/display";
 import { loadQuote } from "@/lib/rates";
 import { signOut } from "@/lib/actions";
@@ -19,7 +21,7 @@ export default function SettingsPage() {
 
 async function SettingsBody() {
   const who = await viewer();
-  const [data, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
+  const [data, quote, contact] = await Promise.all([loadPortfolio(who), loadQuote(), contactOf(who.address)]);
   const signedIn =
     who.method === "passkey"
       ? "Passkey. The signing key stays on this device. This browser keeps an encrypted copy of the public credential."
@@ -40,6 +42,7 @@ async function SettingsBody() {
       </div>
       {quote.note ? <p className="mb-4 text-sm text-muted-foreground">{quote.note}</p> : null}
       <p className="mb-3 text-sm text-muted-foreground">Signed in as {data.me.name}. {signedIn}</p>
+      <ProfileForm contact={contact} demo={who.method === "tester"} />
       <form action={signOut} className="mb-6">
         <button type="submit" className="h-11 rounded-full border border-border bg-card px-5 text-sm font-medium">
           Sign out

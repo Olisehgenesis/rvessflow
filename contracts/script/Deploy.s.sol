@@ -74,9 +74,11 @@ abstract contract DeployRvess is Script {
         console2.log("TokenAllowlist", address(allow));
         console2.log("FlowConduitImplementation", address(conduit));
         console2.log("FlowVaultImplementation", address(implementation));
+        console2.log("FlowVaultExtension", implementation.extension());
         console2.log("VaultFactory", address(factory));
         console2.log("LockVault", address(locks));
         console2.log("GroupRotation", address(groups));
+        console2.log("GroupRotationExtension", groups.extension());
         console2.log("Host", host);
         console2.log("CFAv1Forwarder", cfa);
         console2.log("GDAv1Forwarder", gda);

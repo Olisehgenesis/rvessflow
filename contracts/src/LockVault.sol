@@ -12,16 +12,18 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ITokenAllowlist} from "./interfaces/ITokenAllowlist.sol";
 import {ISuperTokenMini, ICFAv1Forwarder, ISETHMini} from "./interfaces/ISuperfluidMini.sol";
 import {SuperTokenReceiver} from "./SuperTokenReceiver.sol";
+import {YieldPayer} from "./YieldPayer.sol";
 
 /// @title LockVault
 /// @notice Time-locked savings. Breaking a lock early pays a penalty (3% by default)
 ///         into a bonus pool. Savers who hold until maturity split that pool by
 ///         weight (principal × duration) among locks still open at completion.
-/// @dev Optional yield is a real CFA stream from this contract to the saver, funded
-///      by a separate yield budget. It is not lending. Streamed yield is already in
-///      the saver's wallet, so an early break cannot claw it back; the stream stops.
-///      The admin can change the penalty (max 10%) and the emission and cannot
-///      withdraw principal, penalties, or the yield budget.
+/// @dev Optional yield is a real CFA stream from {YieldPayer} to the saver, funded
+///      by a separate yield budget. The payer holds only that budget, so a reward
+///      stream cannot spend locked principal. It is not lending. Streamed yield is
+///      already in the saver's wallet, so an early break cannot claw it back.
+///      The penalty is copied onto the lock. A later admin change does not apply.
+///      The admin cannot withdraw principal, penalties, or the yield budget.
 contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGuard, SuperTokenReceiver {
     using SafeERC20 for IERC20;
 
@@ -30,6 +32,7 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
     uint64 public constant MIN_DURATION = 1 hours;
     uint64 public constant MAX_DURATION = 30 * 365 days;
     uint256 public constant PROTECT_WINDOW = 1 hours;
+    uint64 public constant UPGRADE_DELAY = 2 days;
 
     ITokenAllowlist public immutable allowlist;
     address public immutable host;
@@ -44,6 +47,12 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         uint256 weight;
         int96 yieldRate;
         bool settled;
+        /// @dev Penalty copied at creation. A later admin change does not apply.
+        uint16 lockedPenaltyBps;
+        bytes32 name;
+        uint128 targetAmount;
+        /// @dev Yield wei per second per 1e18 of principal, copied at creation.
+        uint256 yieldPerWei;
     }
 
     uint16 public penaltyBps = 300;
@@ -61,7 +70,15 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
     mapping(address token => uint64 timestamp) public lastYieldSync;
     mapping(address token => address[] users) private _yieldUsers;
 
+    /// @notice Reward streams leave from here. Locked principal stays in this contract.
+    YieldPayer public yieldPayer;
+    address public pendingImplementation;
+    uint64 public upgradeReadyAt;
+    mapping(address token => uint256 amount) public protocolFees;
+
     event Locked(uint256 indexed id, address indexed owner, address indexed token, uint256 principal, uint64 end, int96 yieldRate);
+    event ProtocolFeeCharged(address indexed token, uint256 amount);
+    event ProtocolFeeWithdrawn(address indexed token, address indexed to, uint256 amount);
     event Broken(uint256 indexed id, uint256 payout, uint256 penalty);
     event Matured(uint256 indexed id, uint256 principal, uint256 bonus);
     event YieldFunded(address indexed token, uint256 amount);
@@ -80,12 +97,14 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
     error PenaltyTooHigh();
     error InsufficientYield();
     error WrongTokenKind();
+    error UpgradeNotReady();
 
     constructor(address initialOwner, address allowlist_, address host_, address cfa_) Ownable(initialOwner) {
         if (allowlist_ == address(0) || host_ == address(0) || cfa_ == address(0)) revert ZeroAddress();
         allowlist = ITokenAllowlist(allowlist_);
         host = host_;
         cfa = ICFAv1Forwarder(cfa_);
+        yieldPayer = new YieldPayer(address(this), cfa_);
         _registerSuperTokenReceiver();
         _disableInitializers();
     }
@@ -95,15 +114,23 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         _transferOwnership(initialOwner);
         if (penaltyBps == 0) penaltyBps = 300;
         if (nextId == 0) nextId = 1;
+        yieldPayer = new YieldPayer(address(this), address(cfa));
         _registerSuperTokenReceiver();
     }
 
     function contractVersion() public pure virtual returns (uint256) {
-        return 1;
+        return 3;
+    }
+
+    /// @notice Schedule an upgrade. It can be executed after two days. Savers can still exit.
+    function scheduleUpgrade(address newImplementation) external onlyOwner {
+        if (newImplementation == address(0)) revert ZeroAddress();
+        pendingImplementation = newImplementation;
+        upgradeReadyAt = uint64(block.timestamp) + UPGRADE_DELAY;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
-        if (newImplementation == address(0)) revert ZeroAddress();
+        if (newImplementation != pendingImplementation || block.timestamp < upgradeReadyAt) revert UpgradeNotReady();
     }
 
     function setPenaltyBps(uint16 bps) external onlyOwner {
@@ -125,8 +152,10 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         if (amount == 0) revert ZeroAmount();
         _sync(token);
         uint256 got = _pull(token, amount);
+        ISuperTokenMini(token).transfer(address(yieldPayer), got);
         yieldBudget[token] += got;
         emit YieldFunded(token, got);
+        _resumeYield(token);
     }
 
     function fundYieldUnderlying(address token, uint256 underlyingAmount) external nonReentrant {
@@ -134,12 +163,25 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         if (allowlist.kindOf(token) != ITokenAllowlist.TokenKind.Wrapper) revert WrongTokenKind();
         _sync(token);
         uint256 minted = _upgrade(token, underlyingAmount);
+        ISuperTokenMini(token).transfer(address(yieldPayer), minted);
         yieldBudget[token] += minted;
         emit YieldFunded(token, minted);
+        _resumeYield(token);
     }
 
     function lock(address token, uint128 amount, uint64 duration, bool earnYield) external nonReentrant returns (uint256 id) {
-        id = _lock(token, _pull(token, amount), duration, earnYield);
+        if (!allowlist.isAllowed(token)) revert TokenNotAllowed();
+        id = _lock(token, _pull(token, amount), duration, earnYield, bytes32(0), 0);
+    }
+
+    /// @notice Lock toward a named target. `target` may be larger than `amount`. Top up later.
+    function lockGoal(address token, uint128 amount, uint64 duration, bool earnYield, bytes32 name, uint128 target)
+        external
+        nonReentrant
+        returns (uint256 id)
+    {
+        if (!allowlist.isAllowed(token)) revert TokenNotAllowed();
+        id = _lock(token, _pull(token, amount), duration, earnYield, name, target);
     }
 
     function lockUnderlying(address token, uint256 underlyingAmount, uint64 duration, bool earnYield)
@@ -149,8 +191,68 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
     {
         if (allowlist.kindOf(token) != ITokenAllowlist.TokenKind.Wrapper) revert WrongTokenKind();
         uint256 minted = _upgrade(token, underlyingAmount);
+        uint256 fee = (minted * 30) / 10_000;
+        if (fee != 0 && fee < minted) {
+            protocolFees[token] += fee;
+            emit ProtocolFeeCharged(token, fee);
+            minted -= fee;
+        }
         if (minted > type(uint128).max) revert BadAmount();
-        id = _lock(token, minted, duration, earnYield);
+        id = _lock(token, minted, duration, earnYield, bytes32(0), 0);
+    }
+
+    /// @notice Add principal to an open lock. The end date stays. Weight added is the new
+    ///         amount times the time still left.
+    function topUp(uint256 id, uint128 amount) external nonReentrant returns (uint256 principal) {
+        Lock storage entry = locks[id];
+        if (entry.settled || entry.owner != msg.sender) revert NotLock();
+        if (block.timestamp >= entry.end) revert Mature();
+        address token = entry.token;
+        uint256 got = _pull(token, amount);
+        _sync(token);
+        uint256 remaining = entry.end - block.timestamp;
+        entry.principal += uint128(got);
+        entry.weight += got * remaining;
+        totalWeight[token] += got * remaining;
+        principalHeld[token] += got;
+        if (entry.targetAmount < entry.principal) entry.targetAmount = entry.principal;
+        if (entry.yieldRate > 0) {
+            int96 extra = int96(int256(Math.mulDiv(got, _yieldPerWei(entry), 1e18)));
+            if (extra > 0) {
+                entry.yieldRate += extra;
+                _setUserFlow(token, msg.sender, yieldFlow[token][msg.sender] + extra);
+                if (_yieldDanger(token) || _criticalSoon(token)) revert InsufficientYield();
+            }
+        }
+        principal = entry.principal;
+    }
+
+    /// @notice Take part of the principal out early. The penalty is the rate copied onto
+    ///         this lock, applied only to the amount taken.
+    function withdrawPartial(uint256 id, uint128 amount) external nonReentrant returns (uint256 payout, uint256 penalty) {
+        Lock storage entry = locks[id];
+        if (entry.settled || entry.owner != msg.sender) revert NotLock();
+        if (block.timestamp >= entry.end) revert Mature();
+        if (amount == 0 || amount >= entry.principal) revert BadAmount();
+        address token = entry.token;
+        _sync(token);
+        penalty = Math.mulDiv(amount, entry.lockedPenaltyBps, BPS);
+        payout = uint256(amount) - penalty;
+        uint256 nextPrincipal = uint256(entry.principal) - amount;
+        uint256 nextWeight = Math.mulDiv(entry.weight, nextPrincipal, entry.principal);
+        totalWeight[token] = totalWeight[token] - entry.weight + nextWeight;
+        principalHeld[token] -= amount;
+        if (entry.yieldRate > 0) {
+            int96 cut = int96(int256(Math.mulDiv(uint256(uint96(entry.yieldRate)), amount, entry.principal)));
+            if (cut > 0) _reduceYield(token, msg.sender, cut);
+            entry.yieldRate -= cut;
+        }
+        entry.weight = nextWeight;
+        entry.principal = uint128(nextPrincipal);
+        bonusPool[token] += penalty;
+        ISuperTokenMini(token).transfer(msg.sender, payout);
+        _requirePrincipalSafe(token);
+        emit Broken(id, payout, penalty);
     }
 
     function breakEarly(uint256 id) external nonReentrant returns (uint256 payout, uint256 penalty) {
@@ -161,7 +263,7 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         _sync(token);
         if (entry.yieldRate > 0) _reduceYield(token, msg.sender, entry.yieldRate);
 
-        penalty = Math.mulDiv(entry.principal, penaltyBps, BPS);
+        penalty = Math.mulDiv(entry.principal, entry.lockedPenaltyBps, BPS);
         payout = uint256(entry.principal) - penalty;
         totalWeight[token] -= entry.weight;
         principalHeld[token] -= entry.principal;
@@ -210,6 +312,32 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         if (_yieldDanger(token)) _setUserFlow(token, user, 0);
     }
 
+    /// @notice Open reward streams again after the budget can cover them.
+    function resumeYield(address token) external nonReentrant {
+        _sync(token);
+        _resumeYield(token);
+    }
+
+    /// @notice Owner withdraws reward tokens the live streams do not need.
+    ///         Locked principal and the bonus pool stay in this contract.
+    function withdrawUnusedYield(address token, address to) external nonReentrant onlyOwner {
+        if (to == address(0)) revert ZeroAddress();
+        _sync(token);
+        uint256 reserve;
+        if (totalYieldFlow[token] > 0) {
+            uint256 deposit = cfa.getBufferAmountByFlowrate(token, totalYieldFlow[token]);
+            reserve = deposit + uint256(uint96(totalYieldFlow[token])) * PROTECT_WINDOW;
+        }
+        uint256 budget = yieldBudget[token];
+        if (budget <= reserve) revert ZeroAmount();
+        uint256 amount = budget - reserve;
+        uint256 liquid = yieldPayer.balance(token);
+        if (amount > liquid) amount = liquid;
+        if (amount == 0) revert ZeroAmount();
+        yieldBudget[token] -= amount;
+        yieldPayer.returnTokens(token, to, amount);
+    }
+
     function locksOf(address user) external view returns (uint256[] memory) {
         return _locksOf[user];
     }
@@ -217,8 +345,24 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
     function previewBreak(uint256 id) external view returns (uint256 payout, uint256 penalty) {
         Lock storage entry = locks[id];
         if (entry.settled) return (0, 0);
-        penalty = Math.mulDiv(entry.principal, penaltyBps, BPS);
+        penalty = Math.mulDiv(entry.principal, entry.lockedPenaltyBps, BPS);
         payout = uint256(entry.principal) - penalty;
+    }
+
+    /// @notice Principal, target, end, and what an early exit of the full lock returns today.
+    function progressOf(uint256 id)
+        external
+        view
+        returns (uint128 principal, uint128 target, uint64 end, uint256 breakPayout, uint256 penalty, bytes32 name)
+    {
+        Lock storage entry = locks[id];
+        principal = entry.principal;
+        target = entry.targetAmount;
+        end = entry.end;
+        name = entry.name;
+        if (entry.settled) return (principal, target, end, 0, 0, name);
+        penalty = Math.mulDiv(entry.principal, entry.lockedPenaltyBps, BPS);
+        breakPayout = uint256(entry.principal) - penalty;
     }
 
     function previewMature(uint256 id) external view returns (uint256 principal, uint256 bonus) {
@@ -231,7 +375,10 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         }
     }
 
-    function _lock(address token, uint256 received, uint64 duration, bool earnYield) internal returns (uint256 id) {
+    function _lock(address token, uint256 received, uint64 duration, bool earnYield, bytes32 name, uint128 target)
+        internal
+        returns (uint256 id)
+    {
         if (!allowlist.isAllowed(token)) revert TokenNotAllowed();
         if (allowlist.paused()) revert Paused();
         if (received == 0) revert ZeroAmount();
@@ -246,6 +393,7 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         }
 
         uint256 weight = received * uint256(duration);
+        uint128 goal = target == 0 || target < received ? uint128(received) : target;
         id = nextId++;
         uint64 start = uint64(block.timestamp);
         locks[id] = Lock({
@@ -256,7 +404,11 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
             end: start + duration,
             weight: weight,
             yieldRate: yieldRate,
-            settled: false
+            settled: false,
+            lockedPenaltyBps: penaltyBps,
+            name: name,
+            targetAmount: goal,
+            yieldPerWei: earnYield ? yieldPerTokenPerSecond[token] : 0
         });
         _locksOf[msg.sender].push(id);
         totalWeight[token] += weight;
@@ -270,6 +422,39 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         emit Locked(id, msg.sender, token, received, start + duration, yieldRate);
     }
 
+    function _yieldPerWei(Lock storage entry) internal view returns (uint256 per) {
+        per = entry.yieldPerWei;
+        if (per == 0 && entry.principal > 0 && entry.yieldRate > 0) {
+            per = (uint256(uint96(entry.yieldRate)) * 1e18) / entry.principal;
+        }
+    }
+
+    function _resumeYield(address token) internal {
+        if (totalYieldFlow[token] > 0 && _yieldDanger(token)) return;
+        address[] storage users = _yieldUsers[token];
+        uint256 n = users.length;
+        for (uint256 i; i < n; ++i) {
+            address user = users[i];
+            int96 rate = _lockedYield(token, user);
+            if (rate == 0 || yieldFlow[token][user] == rate) continue;
+            _setUserFlow(token, user, rate);
+            if (_yieldDanger(token) || _criticalSoon(token)) {
+                _setUserFlow(token, user, 0);
+                return;
+            }
+        }
+    }
+
+    function _lockedYield(address token, address user) internal view returns (int96 rate) {
+        uint256[] storage ids = _locksOf[user];
+        uint256 n = ids.length;
+        for (uint256 i; i < n; ++i) {
+            Lock storage entry = locks[ids[i]];
+            if (entry.settled || entry.token != token || entry.yieldRate <= 0 || block.timestamp >= entry.end) continue;
+            rate += entry.yieldRate;
+        }
+    }
+
     function _reduceYield(address token, address user, int96 amount) internal {
         int96 current = yieldFlow[token][user];
         _setUserFlow(token, user, current > amount ? current - amount : int96(0));
@@ -280,7 +465,7 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         int96 previous = yieldFlow[token][user];
         yieldFlow[token][user] = newRate;
         totalYieldFlow[token] = totalYieldFlow[token] - previous + newRate;
-        cfa.setFlowrate(token, user, newRate);
+        yieldPayer.setFlow(token, user, newRate);
     }
 
     function _closeYield(address token) internal {
@@ -315,7 +500,7 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
     }
 
     function _criticalSoon(address token) internal view returns (bool) {
-        return ISuperTokenMini(token).isAccountCritical(address(this), block.timestamp + PROTECT_WINDOW);
+        return ISuperTokenMini(token).isAccountCritical(address(yieldPayer), block.timestamp + PROTECT_WINDOW);
     }
 
     /// @dev Available balance must still cover principal and the bonus pool after the
@@ -327,12 +512,30 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         if (owned < principalHeld[token] + bonusPool[token]) revert InsufficientYield();
     }
 
+    function withdrawProtocolFees(address token, address to) external nonReentrant onlyOwner {
+        if (to == address(0)) revert ZeroAddress();
+        uint256 amount = protocolFees[token];
+        if (amount == 0) revert ZeroAmount();
+        protocolFees[token] = 0;
+        ISuperTokenMini(token).transfer(to, amount);
+        _requirePrincipalSafe(token);
+        emit ProtocolFeeWithdrawn(token, to, amount);
+    }
+
     function _pull(address token, uint256 amount) internal returns (uint256 got) {
         if (amount == 0) revert ZeroAmount();
+        uint256 fee = (amount * 30) / 10_000;
         uint256 beforeBal = ISuperTokenMini(token).balanceOf(address(this));
-        ISuperTokenMini(token).transferFrom(msg.sender, address(this), amount);
-        got = ISuperTokenMini(token).balanceOf(address(this)) - beforeBal;
-        if (got == 0) revert ZeroAmount();
+        ISuperTokenMini(token).transferFrom(msg.sender, address(this), amount + fee);
+        uint256 received = ISuperTokenMini(token).balanceOf(address(this)) - beforeBal;
+        if (received < amount) revert ZeroAmount();
+        uint256 skim = received - amount;
+        if (skim > fee) skim = fee;
+        if (skim != 0) {
+            protocolFees[token] += skim;
+            emit ProtocolFeeCharged(token, skim);
+        }
+        got = received - skim;
     }
 
     function _upgrade(address token, uint256 underlyingAmount) internal returns (uint256 minted) {

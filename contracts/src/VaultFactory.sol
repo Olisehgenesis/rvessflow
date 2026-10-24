@@ -22,12 +22,21 @@ contract VaultFactory is Initializable, Ownable2Step, UUPSUpgradeable {
 
     mapping(address user => address vault) public vaultOf;
 
+    uint64 public constant UPGRADE_DELAY = 2 days;
+    address public pendingVault;
+    address public pendingConduit;
+    address public pendingImplementation;
+    uint64 public vaultReadyAt;
+    uint64 public conduitReadyAt;
+    uint64 public upgradeReadyAt;
+
     event VaultCreated(address indexed owner, address indexed vault);
     event KeeperSet(address indexed keeper);
     event AllowlistSet(address indexed allowlist);
 
     error ZeroAddress();
     error VaultExists();
+    error UpgradeNotReady();
 
     constructor(address initialOwner, address allowlist_, address implementation) Ownable(initialOwner) {
         if (allowlist_ == address(0) || implementation == address(0)) revert ZeroAddress();
@@ -44,7 +53,7 @@ contract VaultFactory is Initializable, Ownable2Step, UUPSUpgradeable {
     }
 
     function contractVersion() public pure virtual returns (uint256) {
-        return 1;
+        return 2;
     }
 
     function createVault() external returns (address vault) {
@@ -56,13 +65,34 @@ contract VaultFactory is Initializable, Ownable2Step, UUPSUpgradeable {
         emit VaultCreated(msg.sender, vault);
     }
 
-    function upgradeVaults(address newImplementation) external onlyOwner {
+    /// @notice Schedule a vault upgrade. It can be executed after two days.
+    function scheduleVaultUpgrade(address newImplementation) external onlyOwner {
         if (newImplementation == address(0)) revert ZeroAddress();
+        pendingVault = newImplementation;
+        vaultReadyAt = uint64(block.timestamp) + UPGRADE_DELAY;
+    }
+
+    /// @notice Schedule a conduit upgrade. It can be executed after two days.
+    function scheduleConduitUpgrade(address newImplementation) external onlyOwner {
+        if (newImplementation == address(0)) revert ZeroAddress();
+        pendingConduit = newImplementation;
+        conduitReadyAt = uint64(block.timestamp) + UPGRADE_DELAY;
+    }
+
+    /// @notice Schedule a factory upgrade. It can be executed after two days.
+    function scheduleUpgrade(address newImplementation) external onlyOwner {
+        if (newImplementation == address(0)) revert ZeroAddress();
+        pendingImplementation = newImplementation;
+        upgradeReadyAt = uint64(block.timestamp) + UPGRADE_DELAY;
+    }
+
+    function upgradeVaults(address newImplementation) external onlyOwner {
+        if (newImplementation != pendingVault || block.timestamp < vaultReadyAt) revert UpgradeNotReady();
         vaultBeacon.upgradeTo(newImplementation);
     }
 
     function upgradeConduits(address newImplementation) external onlyOwner {
-        if (newImplementation == address(0)) revert ZeroAddress();
+        if (newImplementation != pendingConduit || block.timestamp < conduitReadyAt) revert UpgradeNotReady();
         conduitBeacon.upgradeTo(newImplementation);
     }
 
@@ -75,7 +105,7 @@ contract VaultFactory is Initializable, Ownable2Step, UUPSUpgradeable {
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
-        if (newImplementation == address(0)) revert ZeroAddress();
+        if (newImplementation != pendingImplementation || block.timestamp < upgradeReadyAt) revert UpgradeNotReady();
     }
 
     function setKeeper(address keeper_) external onlyOwner {

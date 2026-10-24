@@ -7,23 +7,51 @@ import {
   addToGoal,
   explain,
   groupAct,
+  shiftPayout,
   lockBreak,
   lockMature,
   lockTopUp,
-  openGroup,
+  linkPhone,
   openLock,
   openSaving,
   openStream,
   releaseGoal,
   vaultCall,
 } from "@/lib/protocol";
-import { cyclePlan } from "@/lib/cycle";
-import { accountIndex, clearSession, rememberCurrency, rememberTester, rememberWallet } from "@/lib/session";
+import { currencyForCountry } from "@/lib/place";
+import {
+  acceptApplicant,
+  addDraftMember,
+  applyToDraft,
+  declineApplicant,
+  deleteDraft,
+  dropPhone,
+  launchDraft,
+  moveDraftMember,
+  openDraft,
+  phoneFor,
+  removeDraftMember,
+  saveEmail,
+  saveIdentity,
+  savePassword,
+  savePhone,
+  setDraftOpen,
+} from "@/lib/circle";
+import { accountIndex, clearSession, currencyChoice, rememberCurrency, rememberName, rememberTester, rememberWallet } from "@/lib/session";
 
 export type ActionState = { error: string } | null;
 
 function refresh() {
   revalidatePath("/", "layout");
+}
+
+function spoken(error: unknown): ActionState {
+  if (typeof error === "object" && error !== null && "digest" in error && String((error as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")) {
+    throw error;
+  }
+  const message = error instanceof Error ? error.message : "";
+  if (message && message.length < 180 && !message.includes("\n")) return { error: message };
+  return { error: explain(error) };
 }
 
 export async function enterApp() {
@@ -35,9 +63,13 @@ export async function openSession(address: string, method: "passkey" | "wallet",
   if ((method !== "passkey" && method !== "wallet") || !isAddress(address)) {
     throw new Error("That sign-in could not be saved.");
   }
-  const name = label.trim().slice(0, 32) || (method === "passkey" ? "Passkey" : "Wallet");
-  await rememberWallet(getAddress(address), method, name);
+  await rememberWallet(getAddress(address), method, label.trim().slice(0, 32));
   redirect("/home");
+}
+
+export async function saveDisplayName(formData: FormData) {
+  await rememberName(String(formData.get("name") ?? ""));
+  refresh();
 }
 
 export async function signOut() {
@@ -54,6 +86,14 @@ export async function switchAccount(formData: FormData) {
 export async function setCurrency(formData: FormData) {
   await rememberCurrency(String(formData.get("currency") ?? "fusdcx"));
   refresh();
+}
+
+export async function rememberPlace(country: string) {
+  if (!/^[A-Za-z]{2}$/.test(country)) return;
+  if (await currencyChoice()) return;
+  const code = currencyForCountry(country);
+  if (!code) return;
+  await rememberCurrency(code);
 }
 
 const FLOW_MIN = 60;
@@ -124,24 +164,190 @@ export async function createLock(_prev: ActionState, formData: FormData): Promis
   redirect(id ? `/vaults/${id}?fresh=1` : "/vaults");
 }
 
-export async function createGroup(_prev: ActionState, formData: FormData): Promise<ActionState> {
+export async function createDraft(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  let id = "";
   try {
-    const members = formData.getAll("member").map(String) as Address[];
-    const plan = cyclePlan(String(formData.get("cycle") ?? ""), Number(formData.get("days")));
-    if (!plan) return { error: "That cycle length is outside what the contract allows. Use 1 to 366 days." };
-    await openGroup(await accountIndex(), {
+    id = await openDraft({
       contribution: String(formData.get("contribution") ?? ""),
-      members,
       cycles: Number(formData.get("cycles") ?? "4"),
-      cycleSeconds: plan.cycle,
-      windowSeconds: plan.window,
-      graceSeconds: plan.grace,
+      cycle: String(formData.get("cycle") ?? ""),
+      days: String(formData.get("days") ?? ""),
     });
   } catch (error) {
-    return { error: explain(error) };
+    return spoken(error);
+  }
+  refresh();
+  redirect(`/groups/draft/${id}`);
+}
+
+export async function addMember(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await addDraftMember(String(formData.get("id") ?? ""), String(formData.get("who") ?? ""));
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function moveMember(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const dir = formData.get("dir") === "up" ? -1 : 1;
+    await moveDraftMember(String(formData.get("id") ?? ""), Number(formData.get("from")), dir);
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function removeMember(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await removeDraftMember(String(formData.get("id") ?? ""), String(formData.get("address") ?? ""));
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function applyJoin(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await applyToDraft(String(formData.get("id") ?? ""));
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function acceptJoin(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await acceptApplicant(String(formData.get("id") ?? ""), String(formData.get("address") ?? ""));
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function declineJoin(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await declineApplicant(String(formData.get("id") ?? ""), String(formData.get("address") ?? ""));
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function toggleApplications(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await setDraftOpen(String(formData.get("id") ?? ""), formData.get("open") === "yes");
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function removeDraft(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await deleteDraft(String(formData.get("id") ?? ""));
+  } catch (error) {
+    return spoken(error);
   }
   refresh();
   redirect("/groups");
+}
+
+export async function startDraft(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  let chainId = "";
+  try {
+    chainId = await launchDraft(String(formData.get("id") ?? ""));
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  redirect(chainId ? `/groups/${chainId}` : "/groups");
+}
+
+export async function moveTurn(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const dir = formData.get("dir") === "up" ? -1 : 1;
+    await shiftPayout(await accountIndex(), BigInt(String(formData.get("id"))), Number(formData.get("from")), dir);
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function useMyPhone(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const who = String(formData.get("address") ?? "") as Address;
+    const phone = isAddress(who) ? await phoneFor(who) : "";
+    await linkPhone(await accountIndex(), BigInt(String(formData.get("id"))), phone);
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function addPhone(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await savePhone(String(formData.get("phone") ?? ""));
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function removePhone(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await dropPhone(String(formData.get("phone") ?? ""));
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function keepEmail(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await saveEmail(String(formData.get("email") ?? ""));
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function keepIdentity(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await saveIdentity({
+      memberCode: String(formData.get("memberCode") ?? ""),
+      idStatus: String(formData.get("idStatus") ?? ""),
+      kinName: String(formData.get("kinName") ?? ""),
+      kinContact: String(formData.get("kinContact") ?? ""),
+    });
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
+}
+
+export async function keepPassword(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await savePassword(String(formData.get("password") ?? ""));
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  return null;
 }
 
 async function run(work: () => Promise<void>): Promise<ActionState> {

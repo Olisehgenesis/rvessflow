@@ -16,13 +16,22 @@ function useNow(readAt: number) {
   return now;
 }
 
+function asWei(value: string): bigint {
+  try {
+    return BigInt(value);
+  } catch {
+    return 0n;
+  }
+}
+
 function moved(readAt: number, now: number, base: string, perSecond: string, floor = "0", ceiling?: string) {
-  const elapsed = BigInt(Math.max(0, now - readAt));
-  let value = BigInt(base) + BigInt(perSecond) * elapsed;
-  const low = BigInt(floor);
+  const delta = Number.isFinite(now) && Number.isFinite(readAt) ? Math.max(0, Math.trunc(now - readAt)) : 0;
+  const elapsed = BigInt(delta);
+  let value = asWei(base) + asWei(perSecond) * elapsed;
+  const low = asWei(floor);
   if (value < low) value = low;
   if (ceiling !== undefined) {
-    const high = BigInt(ceiling);
+    const high = asWei(ceiling);
     if (value > high) value = high;
   }
   return value;

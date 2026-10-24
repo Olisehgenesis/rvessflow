@@ -12,6 +12,7 @@ import {TestToken} from "@superfluid-finance/ethereum-contracts/contracts/utils/
 import {TokenAllowlist} from "../src/TokenAllowlist.sol";
 import {VaultFactory} from "../src/VaultFactory.sol";
 import {FlowVault} from "../src/FlowVault.sol";
+import {FlowVaultStore} from "../src/FlowVaultStore.sol";
 import {FlowConduit} from "../src/FlowConduit.sol";
 import {ITokenAllowlist} from "../src/interfaces/ITokenAllowlist.sol";
 
@@ -51,17 +52,17 @@ contract SmokeTest is Test {
         usdc.approve(address(vault), type(uint256).max);
         vault.depositUnderlying(address(usdcx), underlying);
         uint256 id = vault.createFlow(
-            FlowVault.CreateFlowParams({
+            FlowVaultStore.CreateFlowParams({
                 token: address(usdcx),
                 recipient: bob,
-                kind: FlowVault.FlowKind.Expense,
+                kind: FlowVaultStore.FlowKind.Expense,
                 amount: 1e18,
                 earliestStart: 0,
                 duration: 1 days,
                 goalAmount: 0,
                 allowSubflows: false,
                 predecessorId: 0,
-                chainMode: FlowVault.ChainMode.None,
+                chainMode: FlowVaultStore.ChainMode.None,
                 keeperGated: false,
                 name: "rent"
             })
@@ -73,19 +74,19 @@ contract SmokeTest is Test {
         int96 rate = sf.cfaV1Forwarder.getAccountFlowrate(usdcx, bob);
         assertGt(rate, 0);
 
-        FlowVault.Flow memory f = vault.getFlow(id);
+        FlowVaultStore.Flow memory f = vault.getFlow(id);
         vm.warp(f.start + 12 hours);
         assertGt(usdcx.balanceOf(bob), 0);
 
         vm.warp(f.end);
         vault.settle(id);
         assertApproxEqAbs(usdcx.balanceOf(bob), 1e18, 1e12);
-        assertEq(usdcx.balanceOf(address(vault)), vault.unallocated(address(usdcx)));
+        assertEq(usdcx.balanceOf(address(vault)), vault.unallocated(address(usdcx)) + vault.protocolFees(address(usdcx)));
         assertFalse(usdcx.isAccountCritical(address(vault), vm.getBlockTimestamp() + 1));
 
         uint256 idle = vault.unallocated(address(usdcx));
         vm.prank(alice);
         vault.withdraw(address(usdcx), idle);
-        assertEq(usdcx.balanceOf(address(vault)), 0);
+        assertEq(usdcx.balanceOf(address(vault)), vault.protocolFees(address(usdcx)));
     }
 }

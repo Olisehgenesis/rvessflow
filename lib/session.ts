@@ -1,8 +1,9 @@
 import "server-only";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { isAddress, type Address } from "viem";
 import { people } from "@/lib/protocol";
+import { currencyForCountry } from "@/lib/place";
 import { currencyByCode } from "@/lib/quote";
 
 const WHO = "rvess-account";
@@ -19,7 +20,15 @@ export type Viewer = {
   name: string;
   method: AuthMethod;
   index: number;
+  needsName: boolean;
 };
+
+export function displayName(method: AuthMethod, label: string | undefined): { name: string; needsName: boolean } {
+  const trimmed = label?.trim() ?? "";
+  if (method === "wallet" && (trimmed === "" || trimmed === "Wallet")) return { name: "Wallet", needsName: true };
+  if (!trimmed) return { name: method === "passkey" ? "Passkey" : "Wallet", needsName: false };
+  return { name: trimmed.slice(0, 32), needsName: false };
+}
 
 const cookie = { httpOnly: true, sameSite: "lax" as const, path: "/" };
 
@@ -27,7 +36,7 @@ function testerAt(index: number): Viewer {
   const roster = people();
   const person = roster[index];
   if (!person) throw new Error("That account is not one of the funded test accounts.");
-  return { address: person.address, name: person.name, method: "tester", index };
+  return { address: person.address, name: person.name, method: "tester", index, needsName: false };
 }
 
 export async function viewer(): Promise<Viewer> {
@@ -37,9 +46,8 @@ export async function viewer(): Promise<Viewer> {
   if ((method === "passkey" || method === "wallet") && address && isAddress(address)) {
     const roster = people();
     const index = roster.findIndex((person) => person.address.toLowerCase() === address.toLowerCase());
-    const fallback = method === "passkey" ? "Passkey" : "Wallet";
-    const name = jar.get(LABEL)?.value?.trim() || fallback;
-    return { address, name, method, index };
+    const shown = displayName(method, jar.get(LABEL)?.value);
+    return { address, name: shown.name, method, index, needsName: shown.needsName };
   }
   const count = people().length;
   const value = Number(jar.get(WHO)?.value ?? "0");
@@ -72,11 +80,26 @@ export async function rememberTester(index: number) {
 
 export async function rememberWallet(address: Address, method: "passkey" | "wallet", label: string) {
   const jar = await cookies();
+  const previousAddress = jar.get(ADDR)?.value ?? "";
+  const same = previousAddress.toLowerCase() === address.toLowerCase();
+  const kept = displayName(method, same ? jar.get(LABEL)?.value : "");
+  const incoming = label.trim().slice(0, 32);
+  const unnamed = method === "wallet" && (incoming === "" || incoming === "Wallet");
+  const name = unnamed ? (kept.needsName ? "" : kept.name) : incoming;
   jar.set(ADDR, address, cookie);
   jar.set(METHOD, method, cookie);
-  jar.set(LABEL, label.slice(0, 32), cookie);
+  jar.set(LABEL, name, cookie);
   jar.set(IN, "1", cookie);
   jar.delete(WHO);
+}
+
+export async function rememberName(name: string) {
+  const who = await viewer();
+  if (who.method !== "wallet") return;
+  const next = name.trim().slice(0, 32);
+  if (!next || next === "Wallet") return;
+  const jar = await cookies();
+  jar.set(LABEL, next, cookie);
 }
 
 export async function rememberAccount(index: number) {
@@ -97,9 +120,26 @@ export async function clearSession() {
   jar.delete(LABEL);
 }
 
+async function requestCountry(): Promise<string | null> {
+  const country = (await headers()).get("x-vercel-ip-country");
+  if (!country || country === "XX") return null;
+  return country;
+}
+
+export async function currencyChoice(): Promise<string | null> {
+  const saved = (await cookies()).get(CURRENCY)?.value;
+  return saved ? currencyByCode(saved).code : null;
+}
+
+export async function placeIsKnown(): Promise<boolean> {
+  if (await currencyChoice()) return true;
+  return currencyForCountry(await requestCountry()) !== null;
+}
+
 export async function currencyCode(): Promise<string> {
-  const jar = await cookies();
-  return currencyByCode(jar.get(CURRENCY)?.value ?? "fusdcx").code;
+  const chosen = await currencyChoice();
+  if (chosen) return chosen;
+  return currencyForCountry(await requestCountry()) ?? "usd";
 }
 
 export async function rememberCurrency(code: string) {

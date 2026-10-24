@@ -12,7 +12,7 @@ The protocol owner is the admin. The owner can pause new positions, set the lock
 
 Each person gets one `FlowVault`, and each flow gets one `FlowConduit`. Both are beacon proxies. The factory owner calls `scheduleVaultUpgrade` or `scheduleConduitUpgrade`, waits two days, then `upgradeVaults` or `upgradeConduits`. A new vault implementation must be constructed with the same Superfluid host and CFA forwarder.
 
-`contractVersion` returns `1` on the current implementations.
+`contractVersion` returns `2` on the allowlist and the factory, and `3` on the lock vault and the group.
 
 ## TokenAllowlist
 
@@ -74,9 +74,11 @@ Yield is optional per lock. The owner sets `yieldPerTokenPerSecond`: wei of the 
 
 ## GroupRotation
 
-`createGroup` takes the token, contribution, cycle length, window, grace, cycle count, members, and each member's offset from the start of the cycle. The creator must be a member. Offsets, the window, and the grace must fit inside the cycle. Windows may differ per member.
+`createGroup` takes the token, contribution, cycle length, window, grace, cycle count, members, and each member's offset from the start of the cycle. The creator must be a member. Offsets, the window, and the grace must fit inside the cycle. Windows may differ per member. `setMemberWindow` sets one member's window before start. Zero means the group window.
 
-Collateral is `contribution * totalCycles`. Every member calls `postCollateral`. Before `start`, `exitBeforeStart` returns that member's collateral and removes them. `start` then requires at least three members, each of whom has posted. The creator calls `start`. If the creator has already left, any remaining member may. `start` opens a GDA pool whose admin is the group. Units are not transferable, and only the group can distribute. Each member calls `connect` so the pool streams to them. The forwarder's `connectPool` would connect the group itself, so the contract uses `tryConnectPoolFor` for the member. That path uses an autoconnect slot. A member has four autoconnect slots. `claimStream` still works without one.
+Collateral is `contribution * totalCycles`. Every member calls `postCollateral`. Before `start`, `exitBeforeStart` returns that member's collateral and removes them, and the payout order is remapped rather than wiped. `removeBeforeStart` drops a member who never posted, and returns collateral if they had. `start` then requires at least three members, each of whom has posted. The creator calls `start`. If the creator has already left, any remaining member may, and that former creator is no longer an admin. `start` opens a GDA pool whose admin is the group. Units are not transferable, and only the group can distribute.
+
+Each member calls `connect` so the pool streams to them. The contract can attach a member to four pools on one token. Someone in ten groups still receives ten streams: the first four use `connect`, and the member's own wallet calls the GDA forwarder's `connectPool` for each pool after that. Superfluid allows 256 of those self-connections per token. USDCx and ETHx are separate. A finished group keeps its slot until that member disconnects the pool. `claimStream` still pulls a pool they have not connected. An admin-fee pool is a second stream and is not attached automatically. An admin calls `connectAdminFee`, or `connectPool` on that pool once the four contract attachments are used.
 
 `contribute` pulls one contribution during that member's window, or during the grace period after it. On time and late-but-inside-grace are both recorded. The pot streams to `activeRecipient`. `recipientOf` remains the scheduled turn.
 
@@ -86,7 +88,7 @@ If the window and grace have passed, the next `contribute`, `sync`, `catchUp`, o
 
 `received` is what the pool has accounted to that member, which can be a little under the nominal rate. At the end of a cycle the remainder of the pot is distributed without spending collateral. `claimPayout` is the member the pot is streaming to. It stops that stream and distributes the funded remainder in one lump, still without spending collateral. Later contributions in the cycle can start a stream again.
 
-`finalize` waits until every cycle has ended, settles any still-open misses, stops the stream, and lets members `claimCollateral`. `cancelBeforeStart` is only the creator, and only before `start`. `previewMember` returns one member's offset, window, grace, and the cycle index on which they are paid.
+`finalize` waits until every cycle has ended, settles still-open misses, stops the stream, and lets members `claimCollateral`. One call books at most 50 misses. If a long silence is still catching up, `finalize` returns without marking the group final and emits `GroupCatchingUp`. The caller repeats it until every cycle is booked. `cancelBeforeStart` is an admin, or any remaining member once the creator has left. `previewMember` returns one member's offset, window, grace, and the cycle index on which they are paid.
 
 `setGroupPaused` is the owner. While a group is paused its clock stays at the moment the pause began, the pool stream is stopped, and `contribute`, `repay`, and `settleMissed` revert. `sync` does not slash. Unpausing adds the paused seconds back, so a window that was open stays open.
 

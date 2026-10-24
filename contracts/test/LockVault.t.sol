@@ -10,9 +10,9 @@ import {ISuperTokenMini} from "../src/interfaces/ISuperfluidMini.sol";
 
 contract LockVaultTest is SfBase {
     function test_penaltyBonusAndMature() public {
-        _giveUsdcx(alice, 10_000e6);
-        _giveUsdcx(bob, 10_000e6);
-        _giveUsdcx(carol, 10_000e6);
+        _giveUsdcx(alice, 10_030e6);
+        _giveUsdcx(bob, 10_030e6);
+        _giveUsdcx(carol, 10_030e6);
         _approveToken(alice, address(usdcx), address(locks));
         _approveToken(bob, address(usdcx), address(locks));
         _approveToken(carol, address(usdcx), address(locks));
@@ -83,13 +83,13 @@ contract LockVaultTest is SfBase {
         vm.prank(alice);
         locks.breakEarly(id);
         assertGe(_bal(address(usdcx), alice), streamed);
-        assertEq(cfaFwd.getFlowrate(address(usdcx), address(locks), alice), 0);
-        assertGt(cfaFwd.getFlowrate(address(usdcx), address(locks), bob), 0);
+        assertEq(cfaFwd.getFlowrate(address(usdcx), address(locks.yieldPayer()), alice), 0);
+        assertGt(cfaFwd.getFlowrate(address(usdcx), address(locks.yieldPayer()), bob), 0);
 
         vm.warp(t0 + 11 hours);
         locks.protect(address(usdcx));
         locks.protectUser(address(usdcx), bob);
-        assertEq(cfaFwd.getFlowrate(address(usdcx), address(locks), bob), 0);
+        assertEq(cfaFwd.getFlowrate(address(usdcx), address(locks.yieldPayer()), bob), 0);
         _assertSolvent(address(usdcx), address(locks));
         vm.warp(t0 + 7 days);
         vm.prank(bob);

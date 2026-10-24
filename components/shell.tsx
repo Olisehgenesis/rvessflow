@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconHome, IconLock, IconMore, IconPeople, IconSeed } from "@/components/icons";
+import { IconHome, IconLock, IconMark, IconMore, IconPeople, IconSeed } from "@/components/icons";
 
 const items = [
   { href: "/home", label: "Home", icon: IconHome },
@@ -17,7 +17,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh bg-background text-foreground lg:grid lg:grid-cols-[minmax(0,1fr)_30rem]">
       <aside className="relative hidden bg-background text-foreground lg:flex lg:flex-col lg:p-12">
-        <p className="text-sm font-medium">RvessFlow</p>
+        <p className="flex items-center gap-2 text-sm font-medium">
+          <IconMark className="size-8" />
+          RvessFlow
+        </p>
         <p className="mt-4 max-w-sm text-lg">A hold stays still. A stream moves every second.</p>
       </aside>
       <div className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-background lg:border-l lg:border-border">

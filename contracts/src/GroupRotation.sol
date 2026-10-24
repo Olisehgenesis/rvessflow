@@ -18,6 +18,8 @@ import {
     IGDAv1Autoconnect
 } from "./interfaces/ISuperfluidMini.sol";
 import {SuperTokenReceiver} from "./SuperTokenReceiver.sol";
+import {GroupRotationExtension} from "./GroupRotationExtension.sol";
+import {GroupRotationStore} from "./GroupRotationStore.sol";
 
 /// @title GroupRotation
 /// @notice A ROSCA / chama. Members contribute once per cycle inside their own
@@ -32,170 +34,13 @@ import {SuperTokenReceiver} from "./SuperTokenReceiver.sol";
 ///      rewrite the round; it repays the person the round actually went to.
 ///      The owner can pause a group and upgrade this contract. The owner
 ///      cannot take collateral, the pot, or rewrite a leg.
-contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGuard, SuperTokenReceiver {
+contract GroupRotation is GroupRotationStore {
     using SafeERC20 for IERC20;
 
-    uint256 public constant MIN_MEMBERS = 3;
-    uint256 public constant MAX_MEMBERS = 50;
-    uint16 public constant MAX_CYCLES = 520;
-    uint64 public constant MIN_CYCLE = 1 hours;
-    uint64 public constant MAX_CYCLE = 366 days;
-    uint256 public constant PROTECT_WINDOW = 1 hours;
+    address public immutable extension;
 
-    enum PayStatus {
-        None,
-        OnTime,
-        Late,
-        Slashed,
-        Repaid
-    }
-
-    /// @notice Where a member stands in the open cycle.
-    enum Place {
-        Clear,
-        Waiting,
-        InWindow,
-        Missed,
-        InOwe
-    }
-
-    struct Group {
-        address creator;
-        address token;
-        address pool;
-        uint128 contribution;
-        uint128 collateralRequired;
-        uint64 cycleDuration;
-        uint64 windowDuration;
-        uint64 graceDuration;
-        uint64 startTime;
-        uint16 totalCycles;
-        uint16 memberCount;
-        bool started;
-        bool cancelled;
-        bool finalized;
-        uint16 streamingCycle;
-        address streamingTo;
-        int96 rate;
-        uint64 rateUpdatedAt;
-        bool cycleOpen;
-        /// @dev Pool receipt counter of `streamingTo` when this cycle's stream began.
-        uint256 receivedSnapshot;
-    }
-
-    struct Member {
-        address account;
-        uint64 offset;
-        uint128 collateral;
-        bool collateralPosted;
-        bool defaulted;
-        /// @dev Tokens this member actually sent (on-time, late-in-grace, or a later repay).
-        uint256 given;
-        /// @dev What the pool has accounted to this member.
-        uint256 received;
-        /// @dev Contributions they still have not given.
-        uint256 owed;
-        uint16 missed;
-    }
-
-    /// @notice One booked payment: `from` paid `to` for `cycle`.
-    ///         `to` is the member the round actually streamed to, not whoever's
-    ///         window happened to be open when a late payment arrived.
-    struct Leg {
-        address from;
-        address to;
-        uint128 amount;
-        uint128 repaid;
-        uint64 at;
-        uint16 cycle;
-        PayStatus kind;
-    }
-
-    struct Books {
-        uint256 given;
-        uint256 received;
-        uint256 owed;
-        uint16 missed;
-        bool inOwe;
-    }
-
-    struct Payment {
-        uint128 amount;
-        uint64 paidAt;
-        PayStatus status;
-    }
-
-    struct Cycle {
-        uint256 funded;
-        uint256 accounted;
-        bool closed;
-    }
-
-    ITokenAllowlist public immutable allowlist;
-    address public immutable host;
-    IGDAv1Forwarder public immutable gda;
-    uint256 public nextId = 1;
-
-    mapping(uint256 id => Group group) public groups;
-    mapping(uint256 id => Member[] members) private _members;
-    mapping(uint256 id => mapping(address account => uint256 indexPlusOne)) private _indexOf;
-    mapping(uint256 id => mapping(uint256 cycle => mapping(uint256 index => Payment payment))) public payments;
-    mapping(uint256 id => mapping(uint256 cycle => Cycle pot)) public pots;
-    mapping(address user => uint256[] ids) private _groupsOf;
-    mapping(uint256 id => Leg[] legs) private _legs;
-    mapping(uint256 id => mapping(address from => uint256[] indexes)) private _debtLegs;
-    mapping(uint256 id => mapping(address from => mapping(address to => uint256 amount))) public paidFromTo;
-    mapping(uint256 id => mapping(address from => mapping(address to => uint256 amount))) public owedFromTo;
-    mapping(uint256 id => uint16 nextCycle) public settledThrough;
-    mapping(uint256 id => bool paused) public groupPaused;
-
-    event GroupCreated(uint256 indexed id, address indexed creator, address indexed token, uint16 members, uint16 cycles);
-    event CollateralPosted(uint256 indexed id, address indexed member, uint256 amount);
-    event GroupStarted(uint256 indexed id, uint64 startTime, address pool);
-    event GroupCancelled(uint256 indexed id);
-    event Contributed(uint256 indexed id, uint256 indexed cycle, address indexed member, PayStatus status, uint256 amount);
-    event MissSettled(uint256 indexed id, uint256 indexed cycle, uint256 indexed memberIndex, uint256 slashed);
-    event PoolRetargeted(uint256 indexed id, uint256 indexed cycle, address indexed recipient, int96 rate);
-    event GroupFinalized(uint256 indexed id);
-    event Claimed(uint256 indexed id, address indexed member, uint256 collateral);
-    event Paid(
-        uint256 indexed id, address indexed from, address indexed to, uint256 cycle, PayStatus kind, uint256 amount
-    );
-    event Repaid(uint256 indexed id, address indexed from, uint256 amount, uint256 owedLeft);
-    event GroupPausedSet(uint256 indexed id, bool paused);
-
-    error ZeroAddress();
-    error TokenNotAllowed();
-    error Paused();
-    error BadParams();
-    error WindowOutOfRange();
-    error DuplicateMember();
-    error CreatorNotMember();
-    error BadState();
-    error NotCreator();
-    error NotMember();
-    error AlreadyPosted();
-    error MissingCollateral();
-    error FeeOnTransfer();
-    error CycleOver();
-    error BadCycle();
-    error BadMember();
-    error AlreadyPaid();
-    error TooEarly();
-    error TooLate();
-    error StillOpen();
-    error StillRunning();
-    error NothingToClaim();
-    error ConnectFailed();
-    error NothingOwed();
-
-    uint256[40] private __gap;
-
-    constructor(address allowlist_, address host_, address gda_) Ownable(msg.sender) {
-        if (allowlist_ == address(0) || host_ == address(0) || gda_ == address(0)) revert ZeroAddress();
-        allowlist = ITokenAllowlist(allowlist_);
-        host = host_;
-        gda = IGDAv1Forwarder(gda_);
+    constructor(address allowlist_, address host_, address gda_) GroupRotationStore(allowlist_, host_, gda_) {
+        extension = address(new GroupRotationExtension(allowlist_, host_, gda_));
         _registerSuperTokenReceiver();
         _disableInitializers();
     }
@@ -208,18 +53,39 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
     }
 
     function contractVersion() public pure virtual returns (uint256) {
-        return 1;
+        return 3;
+    }
+
+    /// @notice Schedule an upgrade. It can be executed after two days. Members can still exit a group
+    ///         that has not started, and can still claim after it ends.
+    function scheduleUpgrade(address newImplementation) external onlyOwner {
+        if (newImplementation == address(0)) revert ZeroAddress();
+        pendingImplementation = newImplementation;
+        upgradeReadyAt = uint64(block.timestamp) + UPGRADE_DELAY;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
-        if (newImplementation == address(0)) revert ZeroAddress();
+        if (newImplementation != pendingImplementation || block.timestamp < upgradeReadyAt) revert UpgradeNotReady();
     }
 
     /// @notice Stop new contributions and repayments. Sync, protect, settle, and
     ///         claims still run, so a pause cannot hide a miss or trap collateral.
-    function setGroupPaused(uint256 id, bool paused_) external onlyOwner {
+    function setGroupPaused(uint256 id, bool paused_) external nonReentrant onlyOwner {
         if (groups[id].creator == address(0)) revert BadState();
-        groupPaused[id] = paused_;
+        if (paused_ == groupPaused[id]) {
+            emit GroupPausedSet(id, paused_);
+            return;
+        }
+        if (paused_) {
+            // Freeze the group clock at this moment so a pause cannot expire windows.
+            pauseBegan[id] = uint64(block.timestamp);
+            groupPaused[id] = true;
+            if (groups[id].rate != 0) _setRate(id, 0);
+        } else {
+            pauseAccum[id] += uint64(block.timestamp) - pauseBegan[id];
+            pauseBegan[id] = 0;
+            groupPaused[id] = false;
+        }
         emit GroupPausedSet(id, paused_);
     }
 
@@ -284,6 +150,7 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
             _indexOf[id][accounts[i]] = i + 1;
             _groupsOf[accounts[i]].push(id);
         }
+        groupAdmin[id][msg.sender] = true;
         emit GroupCreated(id, msg.sender, token, uint16(n), totalCycles);
     }
 
@@ -294,6 +161,7 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
         Member storage m = _members[id][index];
         if (m.collateralPosted) revert AlreadyPosted();
         uint256 got = _pullExact(g.token, g.collateralRequired);
+        _pullProtocol(g.token, g.collateralRequired);
         m.collateral = uint128(got);
         m.collateralPosted = true;
         emit CollateralPosted(id, msg.sender, got);
@@ -301,10 +169,16 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
 
     function start(uint256 id) external {
         Group storage g = groups[id];
-        if (msg.sender != g.creator) revert NotCreator();
+        // The creator starts the group. If the creator already left, any remaining member may.
+        if (_indexOf[id][g.creator] != 0) {
+            if (!_isAdmin(id, msg.sender)) revert NotAdmin();
+        } else {
+            _memberIndex(id, msg.sender);
+        }
         if (groupPaused[id]) revert Paused();
         if (g.started || g.cancelled || allowlist.paused()) revert BadState();
         uint256 n = g.memberCount;
+        if (n < MIN_MEMBERS) revert BadParams();
         for (uint256 i; i < n; ++i) {
             if (!_members[id][i].collateralPosted) revert MissingCollateral();
         }
@@ -320,7 +194,8 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
     /// @notice Stop a group that has not started. Members pull their own collateral.
     function cancelBeforeStart(uint256 id) external {
         Group storage g = groups[id];
-        if (msg.sender != g.creator) revert NotCreator();
+        if (_indexOf[id][g.creator] == 0) _memberIndex(id, msg.sender);
+        else if (!_isAdmin(id, msg.sender)) revert NotAdmin();
         if (g.started || g.cancelled) revert BadState();
         g.cancelled = true;
         emit GroupCancelled(id);
@@ -345,12 +220,16 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
         }
         if (p.status != PayStatus.None) revert AlreadyPaid();
 
-        (uint64 windowStart, uint64 graceEnd, uint64 cycleEnd) = _bounds(g, cycle, m.offset);
-        if (block.timestamp < windowStart) revert TooEarly();
-        if (block.timestamp > graceEnd || block.timestamp >= cycleEnd) revert TooLate();
+        (uint64 windowStart, uint64 graceEnd, uint64 cycleEnd) = _bounds(id, cycle, index);
+        uint64 nowT = _now(id);
+        if (nowT < windowStart) revert TooEarly();
+        if (nowT > graceEnd || nowT >= cycleEnd) revert TooLate();
 
-        PayStatus status = block.timestamp <= windowStart + g.windowDuration ? PayStatus.OnTime : PayStatus.Late;
+        PayStatus status = nowT <= windowStart + _windowAt(id, index) ? PayStatus.OnTime : PayStatus.Late;
         _pullExact(g.token, g.contribution);
+        _pullProtocol(g.token, g.contribution);
+        adminFeeGate = id;
+        _ext(abi.encodeWithSignature("takeAdminFee(uint256)", id));
         p.amount = g.contribution;
         p.paidAt = uint64(block.timestamp);
         p.status = status;
@@ -380,14 +259,42 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
     }
 
     function settleMissed(uint256 id, uint256 cycle, uint256 memberIndex) external nonReentrant {
+        if (groupPaused[id]) revert Paused();
         _settle(id, cycle, memberIndex);
         _sync(id, false);
     }
 
+    /// @notice Pay the current recipient the funded pot now, as one distribution.
+    ///         The stream stops for what was already funded. Later contributions can stream again.
+    function claimPayout(uint256 id) external nonReentrant {
+        if (groupPaused[id]) revert Paused();
+        Group storage g = groups[id];
+        if (!g.started || g.finalized) revert BadState();
+        _sync(id, false);
+        if (g.streamingTo != msg.sender) revert NotMember();
+        _setRate(id, 0);
+        _noteStreamed(id);
+        uint256 left = _remainingPot(id);
+        uint256 bal = ISuperTokenMini(g.token).balanceOf(address(this));
+        uint256 reserved = _reserved(id);
+        uint256 free = bal > reserved ? bal - reserved : 0;
+        if (left > free) left = free;
+        if (left == 0) revert NothingToClaim();
+        _point(id, msg.sender);
+        uint256 beforeBal = ISuperTokenMini(g.token).balanceOf(address(this));
+        gda.distribute(g.token, address(this), g.pool, left, "");
+        uint256 spent = beforeBal - ISuperTokenMini(g.token).balanceOf(address(this));
+        pots[id][g.streamingCycle].accounted += spent;
+        _creditReceived(id, msg.sender, spent);
+        emit PayoutClaimed(id, msg.sender, spent);
+    }
+
     /// @notice Connect `msg.sender` to the group's pool so the pot can stream to them.
-    /// @dev `GDAv1Forwarder.connectPool` attributes the caller. Invoking it from this
-    ///      contract would connect the group, not the member. `tryConnectPoolFor`
-    ///      takes the member explicitly. The caller must be that member.
+    /// @dev Superfluid lets this contract attach a member to four pools on one token.
+    ///      A fifth pool, and every pool after it up to 256, is connected by the member's
+    ///      own wallet with `GDAv1Forwarder.connectPool`. That is how one person receives
+    ///      ten group streams at once. Calling `connectPool` from this contract would
+    ///      connect the group, not the member.
     function connect(uint256 id) external nonReentrant returns (bool) {
         Group storage g = groups[id];
         if (!g.started || g.pool == address(0)) revert BadState();
@@ -402,7 +309,7 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
             ""
         );
         (bool success,) = abi.decode(ret, (bool, bytes));
-        if (!success) revert ConnectFailed();
+        if (!success) revert SelfConnectRequired(g.pool);
         return true;
     }
 
@@ -426,15 +333,12 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
         Group storage g = groups[id];
         if (!g.started || g.finalized || g.cancelled) revert BadState();
         uint64 end = g.startTime + uint64(g.totalCycles) * g.cycleDuration;
-        if (block.timestamp < end) revert StillRunning();
-        uint256 cycles = g.totalCycles;
-        uint256 n = g.memberCount;
-        for (uint256 c; c < cycles; ++c) {
-            for (uint256 i; i < n; ++i) {
-                if (payments[id][c][i].status == PayStatus.None) _settle(id, c, i);
-            }
-        }
+        if (_now(id) < end) revert StillRunning();
         _sync(id, true);
+        if (settledThrough[id] < g.totalCycles) {
+            emit GroupCatchingUp(id, settledThrough[id]);
+            return;
+        }
         g.finalized = true;
         emit GroupFinalized(id);
     }
@@ -454,8 +358,9 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
 
     function currentCycle(uint256 id) public view returns (uint256 cycle, bool open) {
         Group storage g = groups[id];
-        if (!g.started || block.timestamp < g.startTime) return (0, false);
-        cycle = (block.timestamp - g.startTime) / g.cycleDuration;
+        uint64 nowT = _now(id);
+        if (!g.started || nowT < g.startTime) return (0, false);
+        cycle = (nowT - g.startTime) / g.cycleDuration;
         if (cycle >= g.totalCycles) return (g.totalCycles, false);
         open = true;
     }
@@ -463,53 +368,12 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
     function recipientOf(uint256 id, uint256 cycle) public view returns (address) {
         Group storage g = groups[id];
         if (cycle >= g.totalCycles || g.memberCount == 0) revert BadCycle();
-        return _members[id][cycle % g.memberCount].account;
+        return _members[id][_memberSeat(id, cycle)].account;
     }
 
     /// @notice Who the pot is streaming to for `cycle` after misses are applied.
     function activeRecipient(uint256 id, uint256 cycle) external view returns (address) {
         return _activeRecipient(id, cycle);
-    }
-
-    function ledger(uint256 id, uint256 index) external view returns (Books memory books) {
-        if (index >= groups[id].memberCount) revert BadMember();
-        Member storage m = _members[id][index];
-        books = Books({given: m.given, received: m.received, owed: m.owed, missed: m.missed, inOwe: m.owed > 0});
-    }
-
-    function ledgerOf(uint256 id, address account) external view returns (Books memory books) {
-        uint256 index = _memberIndex(id, account);
-        Member storage m = _members[id][index];
-        books = Books({given: m.given, received: m.received, owed: m.owed, missed: m.missed, inOwe: m.owed > 0});
-    }
-
-    function place(uint256 id, uint256 index) public view returns (Place) {
-        if (index >= groups[id].memberCount) revert BadMember();
-        Member storage m = _members[id][index];
-        if (m.owed > 0) return Place.InOwe;
-        (uint256 cycle, bool open) = currentCycle(id);
-        if (!groups[id].started || !open) {
-            return payments[id][cycle][index].status == PayStatus.Slashed ? Place.Missed : Place.Clear;
-        }
-        Payment storage p = payments[id][cycle][index];
-        if (p.status == PayStatus.Slashed) return Place.Missed;
-        if (p.status == PayStatus.OnTime || p.status == PayStatus.Late) return Place.Clear;
-        (uint64 windowStart, uint64 graceEnd,) = _bounds(groups[id], cycle, m.offset);
-        if (block.timestamp < windowStart) return Place.Waiting;
-        if (block.timestamp > graceEnd) return Place.Missed;
-        return Place.InWindow;
-    }
-
-    function legCount(uint256 id) external view returns (uint256) {
-        return _legs[id].length;
-    }
-
-    function legAt(uint256 id, uint256 index) external view returns (Leg memory) {
-        return _legs[id][index];
-    }
-
-    function getMember(uint256 id, uint256 index) external view returns (Member memory) {
-        return _members[id][index];
     }
 
     function groupsOf(address user) external view returns (uint256[] memory) {
@@ -530,31 +394,46 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
     function _sync(uint256 id, bool forceClose) internal {
         Group storage g = groups[id];
         if (!g.started || g.finalized || g.pool == address(0)) return;
+        // A pause freezes misses and stops the stream. It does not move collateral.
+        if (groupPaused[id]) {
+            if (g.rate != 0) _setRate(id, 0);
+            _touchAdminFee(id);
+            return;
+        }
         (uint256 cycle, bool open) = currentCycle(id);
         _catchUp(id, cycle, open && !forceClose);
-        uint256 through = forceClose || !open ? g.totalCycles : cycle;
+        uint256 settled = settledThrough[id];
         _noteStreamed(id);
-        if (g.cycleOpen && g.streamingCycle < through) {
-            _finishStreamingCycle(id);
-        }
-        for (uint256 c; c < through; ++c) {
+        if (g.cycleOpen && g.streamingCycle < settled) _finishStreamingCycle(id);
+        uint256 distributeUpTo = settled;
+        if (!forceClose && open && distributeUpTo > cycle) distributeUpTo = cycle;
+        for (uint256 c; c < distributeUpTo; ++c) {
             if (!pots[id][c].closed) _distributePot(id, c);
         }
         if (forceClose || !open) {
             _setRate(id, 0);
+            _touchAdminFee(id);
             return;
         }
+        // Prior cycles still have misses to book. Don't open this cycle's stream on top of that.
+        if (settled < cycle) {
+            _touchAdminFee(id);
+            return;
+        }
+        bool opened;
         if (!g.cycleOpen) {
             g.streamingCycle = uint16(cycle);
             g.cycleOpen = true;
             g.rateUpdatedAt = uint64(block.timestamp);
+            opened = true;
         }
         address recipient = _activeRecipient(id, cycle);
         bool switched = g.streamingTo != recipient;
         _point(id, recipient);
-        if (switched) _setSnapshot(id);
+        if (switched || opened) _setSnapshot(id);
         _setRate(id, _safeRate(id));
         emit PoolRetargeted(id, cycle, recipient, g.rate);
+        _touchAdminFee(id);
     }
 
     function _finishStreamingCycle(uint256 id) internal {
@@ -572,21 +451,23 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
         Cycle storage pot = pots[id][cycle];
         if (pot.closed) return;
         uint256 left = pot.funded > pot.accounted ? pot.funded - pot.accounted : 0;
-        if (left != 0) {
-            _point(id, _activeRecipient(id, cycle));
-            uint256 bal = ISuperTokenMini(g.token).balanceOf(address(this));
-            uint256 reserved = collateralOwed(id);
-            uint256 free = bal > reserved ? bal - reserved : 0;
-            if (left > free) left = free;
-            if (left != 0) {
-                uint256 beforeBal = ISuperTokenMini(g.token).balanceOf(address(this));
-                gda.distribute(g.token, address(this), g.pool, left, "");
-                uint256 spent = beforeBal - ISuperTokenMini(g.token).balanceOf(address(this));
-                pot.accounted += spent;
-                _creditReceived(id, g.streamingTo, spent);
-            }
+        if (left == 0) {
+            pot.closed = true;
+            return;
         }
-        pot.closed = true;
+        _point(id, _activeRecipient(id, cycle));
+        uint256 bal = ISuperTokenMini(g.token).balanceOf(address(this));
+        uint256 reserved = _reserved(id);
+        uint256 free = bal > reserved ? bal - reserved : 0;
+        if (left > free) left = free;
+        // Nothing can move yet. Leave the pot open so the next sync can pay it.
+        if (left == 0) return;
+        uint256 beforeBal = ISuperTokenMini(g.token).balanceOf(address(this));
+        gda.distribute(g.token, address(this), g.pool, left, "");
+        uint256 spent = beforeBal - ISuperTokenMini(g.token).balanceOf(address(this));
+        pot.accounted += spent;
+        _creditReceived(id, g.streamingTo, spent);
+        if (pot.accounted >= pot.funded) pot.closed = true;
     }
 
     function _point(uint256 id, address recipient) internal {
@@ -624,8 +505,9 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
         uint256 remaining = _remainingPot(id);
         if (remaining == 0) return 0;
         uint64 cycleEnd = _cycleStart(g, g.streamingCycle) + g.cycleDuration;
-        if (block.timestamp >= cycleEnd) return 0;
-        return _capRate(g.token, remaining, cycleEnd - block.timestamp, collateralOwed(id));
+        uint64 nowT = _now(id);
+        if (nowT >= cycleEnd) return 0;
+        return _capRate(g.token, remaining, cycleEnd - nowT, _reserved(id));
     }
 
     function _remainingPot(uint256 id) internal view returns (uint256) {
@@ -668,8 +550,9 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
         Payment storage p = payments[id][cycle][memberIndex];
         if (p.status != PayStatus.None) revert AlreadyPaid();
         Member storage m = _members[id][memberIndex];
-        (, uint64 graceEnd, uint64 cycleEnd) = _bounds(g, cycle, m.offset);
-        if (block.timestamp < cycleEnd && block.timestamp <= graceEnd) revert StillOpen();
+        (, uint64 graceEnd, uint64 cycleEnd) = _bounds(id, cycle, memberIndex);
+        uint64 nowT = _now(id);
+        if (nowT < cycleEnd && nowT <= graceEnd) revert StillOpen();
 
         uint128 slash = g.contribution;
         if (slash > m.collateral) slash = m.collateral;
@@ -685,14 +568,15 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
         emit MissSettled(id, cycle, memberIndex, slash);
     }
 
-    function _bounds(Group storage g, uint256 cycle, uint64 offset)
+    function _bounds(uint256 id, uint256 cycle, uint256 index)
         internal
         view
         returns (uint64 windowStart, uint64 graceEnd, uint64 cycleEnd)
     {
+        Group storage g = groups[id];
         uint64 cycleStart = _cycleStart(g, cycle);
-        windowStart = cycleStart + offset;
-        graceEnd = windowStart + g.windowDuration + g.graceDuration;
+        windowStart = cycleStart + _members[id][index].offset;
+        graceEnd = windowStart + _windowAt(id, index) + g.graceDuration;
         cycleEnd = cycleStart + g.cycleDuration;
     }
 
@@ -722,22 +606,37 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
         return ISuperTokenMini(token).isAccountCritical(address(this), block.timestamp + PROTECT_WINDOW);
     }
 
+    /// @dev One call books at most this many misses. A quiet group is finished by calling again.
+    uint256 internal constant MAX_SETTLE_OPS = 50;
+
     function _catchUp(uint256 id, uint256 cycle, bool open) internal {
         Group storage g = groups[id];
         uint256 n = g.memberCount;
+        uint256 budget = MAX_SETTLE_OPS;
         uint256 cursor = settledThrough[id];
         uint256 end = open ? cycle : g.totalCycles;
         for (uint256 c = cursor; c < end; ++c) {
+            bool done = true;
             for (uint256 i; i < n; ++i) {
-                if (payments[id][c][i].status == PayStatus.None) _settle(id, c, i);
+                if (payments[id][c][i].status != PayStatus.None) continue;
+                if (budget == 0) {
+                    done = false;
+                    break;
+                }
+                _settle(id, c, i);
+                budget--;
             }
+            if (!done) return;
             _bind(id, uint16(c));
+            settledThrough[id] = uint16(c + 1);
         }
-        if (end > cursor) settledThrough[id] = uint16(end);
-        if (!open) return;
+        if (!open || budget == 0) return;
         for (uint256 i; i < n; ++i) {
             if (payments[id][cycle][i].status != PayStatus.None) continue;
-            if (_graceClosed(id, cycle, i)) _settle(id, cycle, i);
+            if (!_graceClosed(id, cycle, i)) continue;
+            if (budget == 0) return;
+            _settle(id, cycle, i);
+            budget--;
         }
         _bind(id, uint16(cycle));
     }
@@ -759,12 +658,41 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
         Group storage g = groups[id];
         uint256 n = g.memberCount;
         if (n == 0 || cycle >= g.totalCycles) return address(0);
-        uint256 start = cycle % n;
+        uint256 origin = cycle % n;
         for (uint256 k; k < n; ++k) {
-            uint256 i = (start + k) % n;
-            if (!_skipped(id, cycle, i)) return _members[id][i].account;
+            uint256 index = _memberSeat(id, origin + k);
+            if (!_skipped(id, cycle, index)) return _members[id][index].account;
         }
-        return _members[id][start].account;
+        return _members[id][_memberSeat(id, origin)].account;
+    }
+
+    function _reserved(uint256 id) internal view returns (uint256) {
+        return collateralOwed(id) + kept[groups[id].token];
+    }
+
+    function _pullProtocol(address token, uint256 base) internal {
+        uint256 fee = (base * 30) / 10_000;
+        if (fee == 0) return;
+        _pullExact(token, fee);
+        protocolFees[token] += fee;
+        kept[token] += fee;
+        emit ProtocolFeeCharged(token, fee);
+    }
+
+    function _touchAdminFee(uint256 id) internal {
+        if (groupRules[id].feePool == address(0) && groupRules[id].feeFunded == 0) return;
+        _ext(abi.encodeWithSignature("syncAdminFee(uint256)", id));
+    }
+
+    function _ext(bytes memory data) internal {
+        address ext = extension;
+        assembly ("memory-safe") {
+            let ok := delegatecall(gas(), ext, add(data, 0x20), mload(data), 0, 0)
+            if iszero(ok) {
+                returndatacopy(0, 0, returndatasize())
+                revert(0, returndatasize())
+            }
+        }
     }
 
     function _skipped(uint256 id, uint256 cycle, uint256 index) internal view returns (bool) {
@@ -775,10 +703,19 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
     }
 
     function _graceClosed(uint256 id, uint256 cycle, uint256 index) internal view returns (bool) {
-        (, uint64 graceEnd, uint64 cycleEnd) = _bounds(groups[id], cycle, _members[id][index].offset);
-        return block.timestamp > graceEnd || block.timestamp >= cycleEnd;
+        (, uint64 graceEnd, uint64 cycleEnd) = _bounds(id, cycle, index);
+        uint64 nowT = _now(id);
+        return nowT > graceEnd || nowT >= cycleEnd;
     }
 
+    /// @dev Wall time, minus every second the group has spent paused. During a pause
+    ///      the clock stays at the moment the pause began.
+    function _now(uint256 id) internal view returns (uint64) {
+        if (groupPaused[id]) return pauseBegan[id] - pauseAccum[id];
+        return uint64(block.timestamp) - pauseAccum[id];
+    }
+
+    /// @notice One member's offset, window, and the cycle index on which they are paid.
     function _pushLeg(uint256 id, address from, address to, uint256 amount, uint16 cycle, PayStatus kind) internal {
         _legs[id].push(
             Leg({
@@ -802,6 +739,7 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
         Member storage m = _members[id][index];
         if (amount == 0 || m.owed == 0 || amount > m.owed) revert NothingOwed();
         _pullExact(groups[id].token, amount);
+        _pullProtocol(groups[id].token, amount);
         uint256 room = uint256(groups[id].collateralRequired) - uint256(m.collateral);
         uint256 restore = amount < room ? amount : room;
         m.collateral += uint128(restore);
@@ -833,4 +771,51 @@ contract GroupRotation is Initializable, Ownable2Step, UUPSUpgradeable, Reentran
         if (index == 0) return;
         _members[id][index - 1].received += amount;
     }
+
+    /// @dev These calls live on the extension. The fallback forwards them so this
+    ///      contract stays under the EIP-170 size limit. See {IGroupCalls}.
+    fallback() external {
+        _delegate();
+    }
+
+    function _delegate() internal {
+        address ext = extension;
+        assembly ("memory-safe") {
+            calldatacopy(0, 0, calldatasize())
+            let ok := delegatecall(gas(), ext, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            switch ok
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
+        }
+    }
+}
+
+/// @notice Calls implemented on {GroupRotationExtension} and reached through
+///         {GroupRotation}'s fallback. Kept off the main contract so it deploys.
+interface IGroupCalls {
+    function exitBeforeStart(uint256 id) external;
+    function removeBeforeStart(uint256 id, address account) external;
+    function setMemberWindow(uint256 id, uint256 index, uint64 window) external;
+    function connectAdminFee(uint256 id) external returns (bool);
+    function addGroupAdmin(uint256 id, address account) external;
+    function removeGroupAdmin(uint256 id, address account) external;
+    function setMemberPhone(uint256 id, address account, bytes32 phone) external;
+    function setPayoutOrder(uint256 id, uint16[] calldata indexes) external;
+    function setAdminFee(uint256 id, uint8 mode, uint128 flat, uint16 bps) external;
+    function lockGroupSavings(uint256 id, uint128 amount, uint64 duration) external;
+    function withdrawGroupSavings(uint256 id, uint128 amount) external;
+    function withdrawProtocolFees(address token, address to) external;
+    function claimAdminFee(uint256 id) external returns (bool);
+    function payoutOrder(uint256 id) external view returns (uint16[] memory);
+    function ledger(uint256 id, uint256 index) external view returns (GroupRotationStore.Books memory);
+    function ledgerOf(uint256 id, address account) external view returns (GroupRotationStore.Books memory);
+    function place(uint256 id, uint256 index) external view returns (GroupRotationStore.Place);
+    function legCount(uint256 id) external view returns (uint256);
+    function legAt(uint256 id, uint256 index) external view returns (GroupRotationStore.Leg memory);
+    function getMember(uint256 id, uint256 index) external view returns (GroupRotationStore.Member memory);
+    function previewMember(uint256 id, uint256 index)
+        external
+        view
+        returns (address account, uint64 offset, uint64 window, uint64 grace, uint256 payoutIndex, bool stillIn);
 }

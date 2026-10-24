@@ -22,6 +22,9 @@ contract TokenAllowlist is Initializable, Ownable2Step, UUPSUpgradeable, ITokenA
 
     mapping(address superToken => Config config) private _tokens;
     bool public paused;
+    uint64 public constant UPGRADE_DELAY = 2 days;
+    address public pendingImplementation;
+    uint64 public upgradeReadyAt;
 
     event SuperTokenSet(address indexed superToken, bool allowed, TokenKind kind, address underlying, uint8 decimals);
     event PausedSet(bool paused);
@@ -29,6 +32,7 @@ contract TokenAllowlist is Initializable, Ownable2Step, UUPSUpgradeable, ITokenA
     error ZeroAddress();
     error TokenMismatch();
     error BadDecimals();
+    error UpgradeNotReady();
 
     constructor(address initialOwner) Ownable(initialOwner) {
         _disableInitializers();
@@ -40,11 +44,17 @@ contract TokenAllowlist is Initializable, Ownable2Step, UUPSUpgradeable, ITokenA
     }
 
     function contractVersion() public pure virtual returns (uint256) {
-        return 1;
+        return 2;
+    }
+
+    function scheduleUpgrade(address newImplementation) external onlyOwner {
+        if (newImplementation == address(0)) revert ZeroAddress();
+        pendingImplementation = newImplementation;
+        upgradeReadyAt = uint64(block.timestamp) + UPGRADE_DELAY;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
-        if (newImplementation == address(0)) revert ZeroAddress();
+        if (newImplementation != pendingImplementation || block.timestamp < upgradeReadyAt) revert UpgradeNotReady();
     }
 
     function setPaused(bool paused_) external onlyOwner {

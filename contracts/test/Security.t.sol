@@ -10,6 +10,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {SfBase} from "./SfBase.sol";
 import {BalanceToken} from "./mocks/Mocks.sol";
 import {FlowVault} from "../src/FlowVault.sol";
+import {FlowVaultStore} from "../src/FlowVaultStore.sol";
 import {LockVault} from "../src/LockVault.sol";
 import {ITokenAllowlist} from "../src/interfaces/ITokenAllowlist.sol";
 import {ISuperTokenMini, ISuperfluidHost} from "../src/interfaces/ISuperfluidMini.sol";
@@ -77,7 +78,7 @@ contract SecurityTest is SfBase {
         vault.protect(address(usdcx));
         assertTrue(vault.getFlow(id).settled);
         _assertSolvent(address(usdcx), address(vault));
-        assertEq(_bal(address(usdcx), address(vault)), vault.unallocated(address(usdcx)));
+        assertEq(_bal(address(usdcx), address(vault)), vault.unallocated(address(usdcx)) + vault.protocolFees(address(usdcx)));
     }
 
     function test_reentrancyAndEmptyHookDoNotCreditTwice() public {
@@ -106,12 +107,12 @@ contract SecurityTest is SfBase {
         uint256 id = _create(
             vault,
             alice,
-            _params(address(usdcx), bob, FlowVault.FlowKind.Expense, 1_000e18, 0, 1 days, 0, true, 0, FlowVault.ChainMode.None, true)
+            _params(address(usdcx), bob, FlowVaultStore.FlowKind.Expense, 1_000e18, 0, 1 days, 0, true, 0, FlowVaultStore.ChainMode.None, true)
         );
-        _sub(vault, alice, id, carol, FlowVault.FlowKind.Expense, FlowVault.RateMode.Share, 0, 7_000, 0, false);
-        vm.expectRevert(FlowVault.RateExceeded.selector);
-        _sub(vault, alice, id, makeAddr("erin"), FlowVault.FlowKind.Expense, FlowVault.RateMode.Share, 0, 4_000, 0, false);
-        vm.expectRevert(FlowVault.NotTriggered.selector);
+        _sub(vault, alice, id, carol, FlowVaultStore.FlowKind.Expense, FlowVaultStore.RateMode.Share, 0, 7_000, 0, false);
+        vm.expectRevert(FlowVaultStore.RateExceeded.selector);
+        _sub(vault, alice, id, makeAddr("erin"), FlowVaultStore.FlowKind.Expense, FlowVaultStore.RateMode.Share, 0, 4_000, 0, false);
+        vm.expectRevert(FlowVaultStore.NotTriggered.selector);
         vault.activate(id);
         vm.prank(keeper);
         vault.trigger(id);
@@ -156,7 +157,7 @@ contract SecurityTest is SfBase {
         id = _create(
             vault,
             alice,
-            _params(address(usdcx), bob, FlowVault.FlowKind.Expense, 100e18, 0, 1 days, 0, false, 0, FlowVault.ChainMode.None, false)
+            _params(address(usdcx), bob, FlowVaultStore.FlowKind.Expense, 100e18, 0, 1 days, 0, false, 0, FlowVaultStore.ChainMode.None, false)
         );
         uint256 idle = vault.unallocated(address(usdcx));
         vm.prank(alice);

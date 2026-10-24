@@ -12,6 +12,7 @@ import {TestToken} from "@superfluid-finance/ethereum-contracts/contracts/utils/
 import {TokenAllowlist} from "../src/TokenAllowlist.sol";
 import {VaultFactory} from "../src/VaultFactory.sol";
 import {FlowVault} from "../src/FlowVault.sol";
+import {FlowVaultStore} from "../src/FlowVaultStore.sol";
 import {FlowConduit} from "../src/FlowConduit.sol";
 import {LockVault} from "../src/LockVault.sol";
 import {GroupRotation} from "../src/GroupRotation.sol";
@@ -126,17 +127,17 @@ abstract contract SfBase is Test, SuperTokenReceiver {
     function _params(
         address token,
         address to,
-        FlowVault.FlowKind kind,
+        FlowVaultStore.FlowKind kind,
         uint256 amount,
         uint64 startAt,
         uint64 duration,
         uint256 goal,
         bool subs,
         uint256 pred,
-        FlowVault.ChainMode mode,
+        FlowVaultStore.ChainMode mode,
         bool gated
-    ) internal pure returns (FlowVault.CreateFlowParams memory) {
-        return FlowVault.CreateFlowParams({
+    ) internal pure returns (FlowVaultStore.CreateFlowParams memory) {
+        return FlowVaultStore.CreateFlowParams({
             token: token,
             recipient: to,
             kind: kind,
@@ -152,7 +153,7 @@ abstract contract SfBase is Test, SuperTokenReceiver {
         });
     }
 
-    function _create(FlowVault vault, address user, FlowVault.CreateFlowParams memory p) internal returns (uint256 id) {
+    function _create(FlowVault vault, address user, FlowVaultStore.CreateFlowParams memory p) internal returns (uint256 id) {
         vm.prank(user);
         id = vault.createFlow(p);
     }
@@ -162,8 +163,8 @@ abstract contract SfBase is Test, SuperTokenReceiver {
         address user,
         uint256 parentId,
         address to,
-        FlowVault.FlowKind kind,
-        FlowVault.RateMode mode,
+        FlowVaultStore.FlowKind kind,
+        FlowVaultStore.RateMode mode,
         uint256 amount,
         uint16 share,
         uint256 goal,
@@ -171,7 +172,7 @@ abstract contract SfBase is Test, SuperTokenReceiver {
     ) internal returns (uint256 id) {
         vm.prank(user);
         id = vault.createSubflow(
-            FlowVault.CreateSubflowParams({
+            FlowVaultStore.CreateSubflowParams({
                 parentId: parentId,
                 recipient: to,
                 kind: kind,

@@ -1,9 +1,11 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Loading from "../../loading";
+import { LinkPhone, TurnMove } from "@/components/circle";
 import { GroupButton } from "@/components/forms";
 import { ProductMark } from "@/components/product";
 import { Fact, Facts, Notice, Page } from "@/components/ui-bits";
+import { phoneFor } from "@/lib/circle";
 import { spanLabel } from "@/lib/cycle";
 import { labeled } from "@/lib/display";
 import { loadQuote } from "@/lib/rates";
@@ -27,6 +29,9 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
   const me = group.members.find((member) => member.account.toLowerCase() === data.me.address.toLowerCase());
   const allPosted = group.members.every((member) => member.posted);
   const mine = data.me.address.toLowerCase() === group.creator.toLowerCase();
+  const order = group.payout.length === group.members.length ? group.payout : group.members.map((_, index) => index);
+  const canMove = Boolean(mine && group.canArrange && !group.started && !group.cancelled);
+  const myPhone = await phoneFor(data.me.address);
   return (
     <Page title={`Group ${group.id}`} back="/groups">
       <div className="mb-4">
@@ -43,24 +48,36 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
         <Fact label="Created by" value={group.creatorName} />
       </Facts>
       <h2 className="mt-6 mb-2 text-sm font-semibold">Members</h2>
+      {canMove ? <p className="mb-2 text-sm text-muted-foreground">Turn 1 receives the first cycle. Rearrange until the order is right. It locks when the rotation starts.</p> : null}
       <ul className="divide-y divide-border border-y border-border">
-        {group.members.map((member) => {
+        {order.map((memberIndex, place) => {
+          const member = group.members[memberIndex];
+          if (!member) return null;
           const you = member.account.toLowerCase() === data.me.address.toLowerCase();
           return (
             <li key={member.account} className="py-3 text-sm">
               <div className="flex items-center justify-between gap-3">
-                <p className="font-medium">{you ? `${member.name} (you)` : member.name}</p>
+                <p className="font-medium">
+                  Turn {place + 1}
+                  <span className="font-normal text-muted-foreground"> · </span>
+                  {you ? `${member.name} (you)` : member.name}
+                </p>
                 <p className="text-xs text-muted-foreground">{member.posted ? "Collateral in" : "Not posted"}</p>
               </div>
+              {member.phone ? <p className="mt-1 text-xs text-muted-foreground">{member.phone}</p> : null}
               <p className="mt-1 text-xs text-muted-foreground">
                 Given {labeled(member.given, quote)}. Received {labeled(member.received, quote)}. Owed {labeled(member.owed, quote)}.
                 {member.missed ? ` Missed ${member.missed}.` : ""}
               </p>
+              {canMove ? <div className="mt-2"><TurnMove id={group.id} from={place} first={place === 0} last={place === order.length - 1} /></div> : null}
             </li>
           );
         })}
       </ul>
       <div className="mt-5 space-y-3">
+        {me && group.canPhone && myPhone && me.phone !== myPhone && !group.cancelled && !group.finalized ? (
+          <LinkPhone id={group.id} address={data.me.address} />
+        ) : null}
         {!group.started && !group.cancelled && me && !me.posted ? (
           <>
             <Notice>Posting collateral moves {labeled(group.collateral, quote)} from your wallet into the group. You get it back if the group is cancelled before it starts, or when it finishes.</Notice>

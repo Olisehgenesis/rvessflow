@@ -22,6 +22,9 @@ broadcast/
 lcov.info
 coverage/
 
+# group directory (phones, emails, link passwords)
+/data
+
 # secrets
 .env
 .env*

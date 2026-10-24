@@ -1,12 +1,19 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { NameAsk } from "@/components/name-ask";
 import { Shell } from "@/components/shell";
-import { hasEntered } from "@/lib/session";
+import { hasEntered, viewer } from "@/lib/session";
 import Loading from "./loading";
 
 async function Entered({ children }: { children: React.ReactNode }) {
   if (!(await hasEntered())) redirect("/");
-  return children;
+  const who = await viewer();
+  return (
+    <>
+      {who.needsName ? <NameAsk /> : null}
+      {children}
+    </>
+  );
 }
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
