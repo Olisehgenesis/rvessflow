@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { percent, show, streamDigits } from "@/lib/display";
 import { chainQuote, type Quote } from "@/lib/quote";
 import { Progress } from "@/components/ui/progress";
@@ -50,21 +50,20 @@ function RollingMoney({ value, quote, digits }: { value: bigint; quote: Quote; d
 
 function RollChar({ char }: { char: string }) {
   const digit = /\d/.test(char);
-  const previous = useRef(char);
-  const [leaving, setLeaving] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState({ char, leaving: null as string | null });
+  if (char !== snapshot.char) {
+    const before = snapshot.char;
+    setSnapshot({ char, leaving: digit && /\d/.test(before) ? before : null });
+  }
+  const leaving = snapshot.leaving;
 
   useEffect(() => {
-    if (previous.current === char) return;
-    const before = previous.current;
-    previous.current = char;
-    if (!digit) {
-      setLeaving(null);
-      return;
-    }
-    setLeaving(before);
-    const id = window.setTimeout(() => setLeaving(null), 280);
+    if (!leaving) return;
+    const id = window.setTimeout(() => {
+      setSnapshot((current) => (current.leaving === leaving ? { ...current, leaving: null } : current));
+    }, 280);
     return () => window.clearTimeout(id);
-  }, [char, digit]);
+  }, [leaving]);
 
   if (!digit || leaving === null) return <span className="inline-block">{char}</span>;
 

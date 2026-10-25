@@ -1,6 +1,6 @@
 # RvessFlow
 
-RvessFlow is a savings wallet on Base, built on Superfluid. Money moves as real Superfluid streams: a constant-flow agreement (CFA) stream or a general-distribution agreement (GDA) pool. The tokens are USDCx and ETHx on Base, and fUSDCx and ETHx on Base Sepolia.
+RvessFlow is a savings wallet on Base mainnet, built on Superfluid. Money moves as real Superfluid streams: a constant-flow agreement (CFA) stream or a general-distribution agreement (GDA) pool. The app uses USDCx and ETHx on Base. Base Sepolia addresses in the contracts are historical and the app does not read them.
 
 **These contracts have not been audited. Do not put real funds in them.**
 
@@ -57,24 +57,32 @@ FOUNDRY_PROFILE=coverage forge coverage --ir-minimum --no-match-coverage "test/*
 
 ## Deploy
 
-Copy `.env.example` to `.env`. Set `PRIVATE_KEY` and, if you want one, `KEEPER`. Never commit `.env` or anything in `wallet/`.
+Copy `.env.example` to `.env`. Set `PRIVATE_KEY` and, if you want one, `KEEPER`. Never commit `.env` or anything in `wallet/`. Do not broadcast a new mainnet deploy from a cloud agent or with a key you do not control.
 
 ```shell
 source .env
 cd contracts
-forge script script/Deploy.s.sol:DeployBaseSepolia --rpc-url "$BASE_SEPOLIA_RPC_URL" --broadcast
+forge script script/Deploy.s.sol:DeployBaseMainnet --rpc-url "$BASE_RPC_URL" --broadcast
 ```
 
-Mainnet uses `DeployBaseMainnet` and `BASE_RPC_URL`. The script deploys upgradeable proxies and registers the chain's Super Tokens. On Base that is USDCx and ETHx. On Base Sepolia there is no Circle USDCx, so the stable token is fUSDCx. Addresses are in `src/SuperfluidAddresses.sol`.
+`DeployBaseSepolia` remains for the old testnet set. The script deploys upgradeable proxies and registers the chain's Super Tokens. On Base that is USDCx and ETHx. On Base Sepolia there is no Circle USDCx, so the stable token is fUSDCx. Addresses are in `src/SuperfluidAddresses.sol`. The live Base mainnet proxies the app talks to are listed in [CONTRACTS.md](CONTRACTS.md).
 
-The owner can upgrade the allowlist, factory, lock vault, and group through their proxies. `upgradeVaults` and `upgradeConduits` on the factory upgrade every vault or every conduit.
+The owner can upgrade the allowlist, factory, lock vault, and group through their proxies. An upgrade waits two days. `upgradeVaults` and `upgradeConduits` on the factory upgrade every vault or every conduit.
 
 ## App
 
-The web app is the Next.js project at the repository root. It reads the Base Sepolia deployment and signs with the four accounts in `wallet/testers.json`. Those keys stay on disk.
+The web app is the Next.js project at the repository root. It reads Base mainnet (`BASE_RPC_URL`, or `https://mainnet.base.org`).
+
+Signing depends on how you entered:
+
+- **Test account.** The server signs with a key from `wallet/testers.json`. Those keys stay on disk. This path is for development.
+- **Wallet.** WalletConnect sends each transaction from the connected account. The app never sees that key.
+- **Passkey.** A Kernel 0.3.1 smart account signs a user operation. Set `NEXT_PUBLIC_BUNDLER_URL` to a Base bundler. There is no paymaster, so the smart account pays its own gas.
+
+A saving goal cannot be paused on chain (`pause` reverts for that kind). Pausing one in the app only stops further top-ups. The hold stays in the vault until you resume. Flow and expense pauses still call the contract.
 
 ```shell
 npm run dev
 ```
 
-Contract tests still run from `contracts/`.
+`npm run lint` checks the app. Contract tests still run from `contracts/` with `forge test`. The last full run of that suite in this workspace passed (69 tests).

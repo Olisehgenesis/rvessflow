@@ -27,6 +27,15 @@ export function flowingMoney(value: string | bigint): string {
   return `${negative ? "-" : ""}${n.toLocaleString("en-US")}.${(frac + "000000").slice(0, 6)}`;
 }
 
+export function asTokenAmount(typed: string, quote: Quote): string {
+  const clean = typed.replace(/,/g, "").trim();
+  if (quote.code === "fusdcx" || !(quote.perToken > 0)) return clean;
+  if (!/^\d+(\.\d+)?$/.test(clean)) return clean;
+  const tokens = Number(clean) / quote.perToken;
+  if (!Number.isFinite(tokens) || tokens <= 0) return clean;
+  return tokens.toFixed(8).replace(/\.?0+$/, "");
+}
+
 export function show(value: string | bigint, quote: Quote, digits?: number): string {
   const places = digits ?? quote.digits;
   if (quote.code === "fusdcx") return places >= 6 ? flowingMoney(value) : money(value, places);

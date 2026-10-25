@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 type InstallEvent = Event & {
   prompt: () => Promise<void>;
@@ -12,25 +12,32 @@ function alreadyInstalled() {
   return window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true;
 }
 
+function subscribeInstall() {
+  return () => undefined;
+}
+
 export function InstallButton({ className = "" }: { className?: string }) {
   const [prompt, setPrompt] = useState<InstallEvent | null>(null);
-  const [visible, setVisible] = useState(false);
-  const [ios, setIos] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const [help, setHelp] = useState(false);
+  const installed = useSyncExternalStore(subscribeInstall, alreadyInstalled, () => true);
+  const ios = useSyncExternalStore(
+    subscribeInstall,
+    () => /iphone|ipad|ipod/i.test(navigator.userAgent),
+    () => false,
+  );
 
   useEffect(() => {
-    if (alreadyInstalled()) return;
-    setVisible(true);
-    setIos(/iphone|ipad|ipod/i.test(navigator.userAgent));
+    if (installed) return;
     const onPrompt = (event: Event) => {
       event.preventDefault();
       setPrompt(event as InstallEvent);
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
     return () => window.removeEventListener("beforeinstallprompt", onPrompt);
-  }, []);
+  }, [installed]);
 
-  if (!visible) return null;
+  if (installed || dismissed) return null;
 
   async function install() {
     if (!prompt) {
@@ -40,7 +47,7 @@ export function InstallButton({ className = "" }: { className?: string }) {
     await prompt.prompt();
     const choice = await prompt.userChoice;
     setPrompt(null);
-    if (choice.outcome === "accepted") setVisible(false);
+    if (choice.outcome === "accepted") setDismissed(true);
   }
 
   return (

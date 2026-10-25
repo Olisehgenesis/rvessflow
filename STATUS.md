@@ -1,31 +1,20 @@
 # RvessFlow status
 
-Stopped so the founder can continue on a laptop. This commit is a snapshot, not a finished release.
+The app and the contracts it calls are on Base mainnet. Base Sepolia addresses in the Foundry scripts are unused by the app.
 
 ## Done
 
 - Foundry project (Solidity 0.8.35, via IR, optimizer 200) with OpenZeppelin and a vendored Superfluid framework for local tests.
-- Streaming is Superfluid only. The old internal stream maths are gone.
-- `FlowVault` plus per-flow `FlowConduit` clones: every flow and subflow is a real CFA stream. Subflow residuals, schedule, keeper gate, and chain checks live in the vault.
-- `LockVault`: 3% early-break penalty (max 10%) into a bonus pool weighted by principal × duration. Optional yield is a real CFA stream and is not clawed back.
-- `GroupRotation`: ROSCA/chama on a real GDA pool. Collateral is contribution × cycles. Missed windows can be slashed. Refunds are pull-based.
-- `TokenAllowlist` reads underlying decimals from the super token. Deploy script registers Base USDCx and ETHx, and Base Sepolia fUSDCx and ETHx. `PRIVATE_KEY` is read from the environment and is not hardcoded.
-- Solvency margin: protocol deposit plus a one-hour cushion, and a permissionless `protect`. Vaults are not Super Apps and do not take flow-operator permissions.
-- Nested subflows open a CFA only for the residual rate. Group pots account for what the pool actually delivered, then distribute the remainder without touching collateral.
-
-## In progress
-
-- `test/Smoke.t.sol` deploys a local Superfluid framework and opens one CFA flow. The stream starts, but `settle` is still red: the test clock does not reach the flow end (`StillActive`).
-- The full suite (many accounts, fuzz, invariants, security proofs) has not been written. `SfBase` was not added.
+- Streaming is Superfluid only. `FlowVault` plus per-flow `FlowConduit` clones. `LockVault` holds principal with a 3% early-break penalty (max 10%) and optional admin-funded yield. `GroupRotation` runs a rotating pot on a real GDA pool.
+- `TokenAllowlist` accepts Base USDCx and ETHx. Live proxy addresses are in [CONTRACTS.md](CONTRACTS.md).
+- `forge test` from `contracts/` passed in this workspace: 69 tests, 0 failed. That includes the flow, lock, group, smoke, and invariant suites. Coverage is not claimed at 100%.
+- Next.js wallet on Base mainnet. Test accounts still sign on the server from `wallet/testers.json`. Passkey and WalletConnect users sign on their own device. A passkey payment needs `NEXT_PUBLIC_BUNDLER_URL`. No paymaster is wired.
+- Saving-goal pause is stored with the goal note. The contract rejects `pause` for a saving goal, and this change does not upgrade mainnet. Flow and expense pause still go to the contract.
+- Goal descriptions, frequency labels, and the activity feed that the chain does not store live in MotherDuck when `MOTHERDUCK_TOKEN` is set, otherwise in `data/local-store.json` (gitignored).
 
 ## Left
 
-- Get `forge test` green, including groups of 3, 10, and 50, many vaults with multiple flows and subflows, 6- and 18-decimal tokens, and warps of a year or more.
-- Fuzz and invariant tests. `forge coverage` at or near 100% line and branch on `src/`.
-- `SECURITY.md`. Liquidation of a critical account is Superfluid's documented sentinel design, an integration risk for RvessFlow, not a protocol bug unless a passing proof breaks a documented invariant.
-- Next.js wallet on Base Sepolia (demo mode is fine if nothing is deployed).
-- Replace the stock Foundry `README.md` with architecture, rules, how to test, deploy, and run the frontend, plus a clear not-audited warning.
-
-## Not verified
-
-Contracts compiled with `via_ir` in the cloud session before this snapshot. Do not treat that as a green test run. No deploy has been made. No private key is in the repo.
+- A bundler paymaster, so a new passkey account can pay gas without already holding ETH.
+- An on-chain description and a way to raise a saving goal's target after creation. The create form matches the mockup and sets the target equal to the first deposit.
+- Activity history before the factory's recent logs, and top-ups that were never written to the app database, are absent from the feed.
+- `SECURITY.md` and an external audit. These contracts are unaudited. Do not add real funds beyond what you can afford to lose.

@@ -3,8 +3,6 @@ import { SavingForm, StreamForm } from "@/components/forms";
 import Loading from "../../loading";
 import { KindIntro } from "@/components/product";
 import { Page } from "@/components/ui-bits";
-import { labeled } from "@/lib/display";
-import { loadQuote } from "@/lib/rates";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,12 +17,11 @@ export default function NewGoalPage({ searchParams }: { searchParams: Promise<{ 
 
 async function NewGoalBody({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
   const who = await viewer();
-  const [data, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
+  const data = await loadPortfolio(who);
   const params = await searchParams;
   const initial = params.kind === "flow" || params.kind === "expense" ? params.kind : "saving";
   return (
     <Page title="Create goal" back="/goals">
-      <p className="mb-4 text-sm text-muted-foreground">Wallet balance {labeled(data.wallet, quote)}. A goal spends from this wallet.</p>
       <Tabs defaultValue={initial}>
         <TabsList className="grid h-11 w-full grid-cols-3 rounded-full bg-muted p-1">
           <TabsTrigger value="saving" className="rounded-full">Saving</TabsTrigger>
@@ -33,7 +30,7 @@ async function NewGoalBody({ searchParams }: { searchParams: Promise<{ kind?: st
         </TabsList>
         <TabsContent value="saving" className="mt-4">
           <KindIntro kind="saving" />
-          <SavingForm />
+          <SavingForm people={data.people} me={data.me.address} />
         </TabsContent>
         <TabsContent value="flow" className="mt-4">
           <KindIntro kind="flow" />

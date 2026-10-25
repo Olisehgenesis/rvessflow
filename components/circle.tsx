@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useSignedAction } from "@/components/sign-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorNote } from "@/components/ui-bits";
@@ -88,7 +89,7 @@ export function DraftTerms() {
 }
 
 function RowMove({ id, from, first, last, action }: { id: string; from: number; first: boolean; last: boolean; action: (state: ActionState, data: FormData) => Promise<ActionState> }) {
-  const [state, run, pending] = useActionState(action, null);
+  const [state, run, pending] = useSignedAction(action);
   return (
     <form action={run} className="flex items-center gap-2">
       <input type="hidden" name="id" value={id} />
@@ -242,7 +243,7 @@ export function ApplyLink({ id }: { id: string }) {
 }
 
 function StartGroup({ id, count }: { id: string; count: number }) {
-  const [state, action, pending] = useActionState(startDraft, null);
+  const [state, action, pending] = useSignedAction(startDraft);
   const [dropState, drop, dropping] = useActionState(removeDraft, null);
   return (
     <div className="space-y-3">
@@ -274,7 +275,7 @@ export function TurnMove({ id, from, first, last }: { id: string; from: number; 
 }
 
 export function LinkPhone({ id, address }: { id: string; address: string }) {
-  const [state, action, pending] = useActionState(useMyPhone, null);
+  const [state, action, pending] = useSignedAction(useMyPhone);
   return (
     <form action={action} className="space-y-2">
       <input type="hidden" name="id" value={id} />

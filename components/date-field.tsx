@@ -66,6 +66,7 @@ export function DateField({
   onChange,
   min,
   max,
+  presentation = "plain",
 }: {
   label: string;
   hint?: string;
@@ -73,6 +74,7 @@ export function DateField({
   onChange: (next: Date) => void;
   min: Date;
   max: Date;
+  presentation?: "plain" | "ends" | "unlock";
 }) {
   const [open, setOpen] = useState(false);
   const [shown, setShown] = useState(() => new Date(value.getFullYear(), value.getMonth(), 1));
@@ -82,7 +84,7 @@ export function DateField({
   const earliest = new Date(min.getFullYear(), min.getMonth(), 1);
   const latest = new Date(max.getFullYear(), max.getMonth(), 1);
   const isToday = sameDay(value, today);
-  const summary = isToday ? `Today · ${formatDay(value)}` : formatDay(value);
+  const summary = presentation === "ends" ? `Ends · ${formatDay(value)}` : presentation === "unlock" ? formatDay(value) : isToday ? `Today · ${formatDay(value)}` : formatDay(value);
 
   function shift(by: number) {
     const next = new Date(shown.getFullYear(), shown.getMonth() + by, 1);
@@ -100,9 +102,17 @@ export function DateField({
         }}
         className="flex w-full items-center justify-between rounded-2xl border border-border bg-card px-4 py-3 text-left"
       >
-        <span>
-          <span className="block text-xs text-muted-foreground">{label}</span>
-          <span className="mt-0.5 block text-sm font-medium tabular-nums">{summary}</span>
+        <span className="flex items-center gap-3">
+          {presentation === "plain" ? null : (
+            <svg viewBox="0 0 24 24" className="size-4 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+              <rect x="4" y="5.5" width="16" height="14" rx="2" />
+              <path d="M8 3.8v3.2M16 3.8v3.2M4 10h16" />
+            </svg>
+          )}
+          <span>
+            <span className="block text-xs text-muted-foreground">{label}</span>
+            <span className="mt-0.5 block text-sm font-medium tabular-nums">{summary}</span>
+          </span>
         </span>
         <span aria-hidden className="text-muted-foreground">›</span>
       </button>

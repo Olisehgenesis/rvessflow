@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { FlowingText } from "@/components/flowing";
 import { IconMark } from "@/components/icons";
-import { ProductGlyph, type MarkName } from "@/components/landing-icons";
+import { ProductGlyph } from "@/components/landing-icons";
 import { rememberPlace } from "@/lib/actions";
 import { show, streamDigits } from "@/lib/display";
 import { currencyForCountry } from "@/lib/place";
@@ -26,10 +26,11 @@ function usdToWei(usd: number): string {
 
 function useLocalQuote(quote: Quote, placed: boolean) {
   const [current, setCurrent] = useState(quote);
-
-  useEffect(() => {
+  const [basis, setBasis] = useState(quote);
+  if (quote.code !== basis.code || quote.perToken !== basis.perToken || quote.unit !== basis.unit) {
+    setBasis(quote);
     setCurrent(quote);
-  }, [quote]);
+  }
 
   useEffect(() => {
     if (placed) return;
@@ -221,13 +222,17 @@ function Device({ quote, readAt, still, hold }: { quote: Quote; readAt: number |
   );
 }
 
+let stageClock = 0;
+
+function stageReadAt() {
+  if (!stageClock) stageClock = Math.floor(Date.now() / 1000);
+  return stageClock;
+}
+
 export function PhoneStage({ quote, placed, hold = false }: { quote: Quote; placed: boolean; hold?: boolean }) {
   const current = useLocalQuote(quote, placed);
   const still = useStill();
-  const [readAt, setReadAt] = useState<number | null>(null);
-  useEffect(() => {
-    setReadAt(Math.floor(Date.now() / 1000));
-  }, []);
+  const readAt = useSyncExternalStore(() => () => undefined, stageReadAt, () => 0);
   return (
     <div className="relative mx-auto h-[430px] w-full max-w-[440px] sm:h-[500px] lg:h-[620px] lg:max-w-[560px]" aria-hidden="true">
       <div className="absolute top-0 left-1/2 w-[520px] origin-top -translate-x-1/2 scale-[0.74] sm:scale-[0.86] lg:scale-100">
@@ -253,7 +258,7 @@ export function PhoneStage({ quote, placed, hold = false }: { quote: Quote; plac
           </svg>
 
           <div className="absolute top-[18px] left-1/2 w-[278px] -translate-x-1/2">
-            <Device quote={current} readAt={readAt} still={still} hold={hold} />
+            <Device quote={current} readAt={readAt || null} still={still} hold={hold} />
           </div>
 
           <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible" viewBox="0 0 520 600" fill="none">

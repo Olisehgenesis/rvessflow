@@ -1,14 +1,15 @@
 import Link from "next/link";
+import { IconBack } from "@/components/icons";
 import { money, show } from "@/lib/display";
 import type { Quote } from "@/lib/quote";
 
-export function Page({ title, back, children, action }: { title: string; back?: string; children: React.ReactNode; action?: React.ReactNode }) {
+export function Page({ title = "", back, children, action }: { title?: string; back?: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <main className="px-4 pb-8 pt-4">
       <header className={`mb-5 flex items-center gap-2 ${back ? "" : "justify-between"}`}>
         {back ? (
-          <Link href={back} className="grid size-9 shrink-0 place-items-center text-xl text-foreground" aria-label="Back">
-            ‹
+          <Link href={back} className="grid size-9 shrink-0 place-items-center text-foreground" aria-label="Back">
+            <IconBack className="size-5" />
           </Link>
         ) : null}
         <h1 className={`font-display text-lg font-semibold tracking-tight ${back ? "flex-1 text-center" : ""}`}>{title}</h1>
@@ -59,9 +60,24 @@ export function ErrorNote({ error }: { error?: string }) {
   return <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>;
 }
 
+const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 export function when(unix: number): string {
   if (!unix) return "Not started";
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(unix * 1000);
+  const date = new Date(unix * 1000);
+  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+export function activityWhen(unix: number): string {
+  const date = new Date(unix * 1000);
+  const time = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const today = new Date();
+  const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const startThat = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diff = Math.round((startToday - startThat) / 86400000);
+  if (diff === 0) return `Today · ${time}`;
+  if (diff === 1) return `Yesterday · ${time}`;
+  return `${date.getDate()} ${months[date.getMonth()]} · ${time}`;
 }
 
 export function durationLabel(seconds: number): string {

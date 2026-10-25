@@ -85,6 +85,90 @@ export function IconMore(props: IconProps) {
   );
 }
 
+export function IconMenu(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+    </svg>
+  );
+}
+
+export function IconEye(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M2.5 12S6.2 6.5 12 6.5 21.5 12 21.5 12 17.8 17.5 12 17.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="2.4" />
+    </svg>
+  );
+}
+
+export function IconEyeOff(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 5.5 19 19" />
+      <path d="M9.2 6.8A9 9 0 0 1 12 6.5c5.8 0 9.5 5.5 9.5 5.5a16 16 0 0 1-3.2 3.6" />
+      <path d="M6.1 8.2C3.8 10 2.5 12 2.5 12S6.2 17.5 12 17.5c1.2 0 2.3-.2 3.3-.6" />
+      <path d="M10 10.2a2.4 2.4 0 0 0 3.3 3.4" />
+    </svg>
+  );
+}
+
+export function IconInfo(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 11v5" />
+      <path d="M12 8h.01" />
+    </svg>
+  );
+}
+
+export function IconCalendar(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="4" y="5.5" width="16" height="14" rx="2" />
+      <path d="M8 3.8v3.2" />
+      <path d="M16 3.8v3.2" />
+      <path d="M4 10h16" />
+    </svg>
+  );
+}
+
+export function IconPlay(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8.5 6.5v11l9-5.5-9-5.5Z" />
+    </svg>
+  );
+}
+
+export function IconDown(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 5v12" />
+      <path d="M7 12.5 12 17.5l5-5" />
+    </svg>
+  );
+}
+
+export function IconChevron(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 6.5 15 12l-6 5.5" />
+    </svg>
+  );
+}
+
+export function IconBack(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M15 6.5 9 12l6 5.5" />
+    </svg>
+  );
+}
+
 export function IconMark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 256 256" fill="none" aria-hidden>

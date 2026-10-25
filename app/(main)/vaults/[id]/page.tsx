@@ -23,7 +23,7 @@ async function LockBody({ params }: { params: Promise<{ id: string }> }) {
   const [data, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
   const lock = data.locks.find((item) => item.id === id);
   if (!lock) notFound();
-  const now = Math.floor(Date.now() / 1000);
+  const now = data.readAt;
   const mature = now >= lock.end;
   return (
     <Page title={lock.name} back="/vaults">

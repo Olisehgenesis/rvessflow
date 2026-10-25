@@ -21,7 +21,7 @@ export function NameAsk() {
         }}
       >
         <h2 className="text-[1.65rem] leading-none font-semibold tracking-[-0.04em]">What should we call you?</h2>
-        <p className="mt-2 text-sm text-[#6B7280]">You're signed in with your wallet. Add a name if this account doesn't have one yet.</p>
+        <p className="mt-2 text-sm text-[#6B7280]">You are signed in with your wallet. Add a name if this account does not have one yet.</p>
         <label className="mt-6 block text-sm font-medium" htmlFor={fieldId}>
           Your name
         </label>
