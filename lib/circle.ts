@@ -433,6 +433,32 @@ export async function contactOf(address: Address): Promise<Contact> {
   };
 }
 
+const blankContact: Contact = {
+  phones: [],
+  email: "",
+  passwordSet: false,
+  memberCode: "",
+  idStatus: "none",
+  kinName: "",
+  kinContact: "",
+};
+
+export async function contactIfReady(address: Address): Promise<{ contact: Contact; down: boolean }> {
+  try {
+    return { contact: await contactOf(address), down: false };
+  } catch {
+    return { contact: blankContact, down: true };
+  }
+}
+
+export async function draftsIfReady(address: Address): Promise<{ drafts: DraftCard[]; down: boolean }> {
+  try {
+    return { drafts: await visibleDrafts(address), down: false };
+  } catch {
+    return { drafts: [], down: true };
+  }
+}
+
 function statusOf(value: string | undefined): IdStatus {
   if (value === "submitted" || value === "checked") return value;
   return "none";

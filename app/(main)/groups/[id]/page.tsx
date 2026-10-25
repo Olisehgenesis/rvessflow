@@ -31,7 +31,7 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
   const mine = data.me.address.toLowerCase() === group.creator.toLowerCase();
   const order = group.payout.length === group.members.length ? group.payout : group.members.map((_, index) => index);
   const canMove = Boolean(mine && group.canArrange && !group.started && !group.cancelled);
-  const myPhone = await phoneFor(data.me.address);
+  const myPhone = await phoneFor(data.me.address).catch(() => "");
   return (
     <Page title={`Group ${group.id}`} back="/groups">
       <div className="mb-4">

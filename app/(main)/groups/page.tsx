@@ -5,7 +5,7 @@ import { ApplyLink } from "@/components/circle";
 import { GroupLink, ProductMark } from "@/components/product";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
-import { visibleDrafts } from "@/lib/circle";
+import { draftsIfReady } from "@/lib/circle";
 import { loadQuote } from "@/lib/rates";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
@@ -20,7 +20,8 @@ export default function GroupsPage() {
 
 async function GroupsBody() {
   const who = await viewer();
-  const [data, quote, drafts] = await Promise.all([loadPortfolio(who), loadQuote(), visibleDrafts(who.address)]);
+  const [data, quote, directory] = await Promise.all([loadPortfolio(who), loadQuote(), draftsIfReady(who.address)]);
+  const drafts = directory.drafts;
   return (
     <Page
       title="Groups"
@@ -30,6 +31,7 @@ async function GroupsBody() {
         </Link>
       }
     >
+      {directory.down ? <p className="mb-4 text-sm text-muted-foreground">The member directory is unavailable, so drafts cannot load. Groups already on Base still show here.</p> : null}
       {drafts.length === 0 && data.groups.length === 0 ? (
         <div className="space-y-3">
           <div className="flex items-center gap-3">
