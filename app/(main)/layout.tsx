@@ -2,15 +2,16 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { NameAsk } from "@/components/name-ask";
 import { Shell } from "@/components/shell";
-import { hasEntered, viewer } from "@/lib/session";
+import { TermsAsk } from "@/components/terms-ask";
+import { acceptedTerms, hasEntered, viewer } from "@/lib/session";
 import Loading from "./loading";
 
 async function Entered({ children }: { children: React.ReactNode }) {
   if (!(await hasEntered())) redirect("/");
-  const who = await viewer();
+  const [who, agreed] = await Promise.all([viewer(), acceptedTerms()]);
   return (
     <>
-      {who.needsName ? <NameAsk /> : null}
+      {agreed ? who.needsName ? <NameAsk /> : null : <TermsAsk />}
       {children}
     </>
   );

@@ -29,8 +29,22 @@ export function ensureSchema() {
   return schema;
 }
 
+const tableSql = (bucket: Bucket) => [
+  `CREATE SCHEMA IF NOT EXISTS ${bucket}`,
+  `CREATE TABLE IF NOT EXISTS ${bucket}.profiles (address VARCHAR PRIMARY KEY, name VARCHAR NOT NULL, email VARCHAR NOT NULL DEFAULT '', password VARCHAR NOT NULL DEFAULT '', member_code VARCHAR DEFAULT '', id_status VARCHAR DEFAULT 'none', kin_name VARCHAR DEFAULT '', kin_contact VARCHAR DEFAULT '')`,
+  `CREATE TABLE IF NOT EXISTS ${bucket}.phones (address VARCHAR NOT NULL, phone VARCHAR NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (address, phone))`,
+  `CREATE TABLE IF NOT EXISTS ${bucket}.drafts (id VARCHAR PRIMARY KEY, creator VARCHAR NOT NULL, contribution VARCHAR NOT NULL, cycles INTEGER NOT NULL, cycle VARCHAR NOT NULL, days VARCHAR NOT NULL, is_open BOOLEAN NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS ${bucket}.draft_members (draft_id VARCHAR NOT NULL, position INTEGER NOT NULL, address VARCHAR NOT NULL, PRIMARY KEY (draft_id, position))`,
+  `CREATE TABLE IF NOT EXISTS ${bucket}.applications (draft_id VARCHAR NOT NULL, address VARCHAR NOT NULL, name VARCHAR NOT NULL, PRIMARY KEY (draft_id, address))`,
+  `CREATE TABLE IF NOT EXISTS ${bucket}.group_profiles (ref VARCHAR PRIMARY KEY, creator VARCHAR NOT NULL, name VARCHAR NOT NULL, purpose VARCHAR NOT NULL, rules VARCHAR NOT NULL, require_id BOOLEAN NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS ${bucket}.milestones (id VARCHAR PRIMARY KEY, owner VARCHAR NOT NULL, subject_kind VARCHAR NOT NULL, subject_ref VARCHAR NOT NULL, position INTEGER NOT NULL, label VARCHAR NOT NULL, amount VARCHAR NOT NULL DEFAULT '', rate_per_day VARCHAR NOT NULL DEFAULT '', days INTEGER NOT NULL DEFAULT 0, reached BOOLEAN NOT NULL DEFAULT false)`,
+];
+
 async function applySchema() {
+  await rows(sql.raw(`CREATE SCHEMA IF NOT EXISTS app`));
+  await rows(sql.raw(`CREATE TABLE IF NOT EXISTS app.meta (key VARCHAR PRIMARY KEY, value VARCHAR NOT NULL)`));
   for (const bucket of buckets) {
+    for (const statement of tableSql(bucket)) await rows(sql.raw(statement));
     const profiles = raw(bucket, "profiles");
     await rows(sql.raw(`ALTER TABLE ${profiles} ADD COLUMN IF NOT EXISTS member_code VARCHAR DEFAULT ''`));
     await rows(sql.raw(`ALTER TABLE ${profiles} ADD COLUMN IF NOT EXISTS id_status VARCHAR DEFAULT 'none'`));

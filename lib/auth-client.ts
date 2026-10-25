@@ -4,14 +4,14 @@ import { isAddress } from "viem";
 import { openSession } from "@/lib/actions";
 import { savePasskey, type SavedPasskey } from "@/lib/passkey-vault";
 
-const rpc = "https://sepolia.base.org";
+const rpc = "https://mainnet.base.org";
 
 export const walletConnectProjectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "fb48461bfb6043c40729e05706109f1a";
 
 export async function createPasskeyWallet(label: string): Promise<{ address: string; label: string }> {
   const name = label.trim().slice(0, 32) || "Passkey";
-  const [{ createPublicClient, http }, { baseSepolia }, accountAbstraction, { toKernelSmartAccount }] = await Promise.all([
+  const [{ createPublicClient, http }, { base }, accountAbstraction, { toKernelSmartAccount }] = await Promise.all([
     import("viem"),
     import("viem/chains"),
     import("viem/account-abstraction"),
@@ -26,7 +26,7 @@ export async function createPasskeyWallet(label: string): Promise<{ address: str
     rpId: window.location.hostname,
   });
   const account = await toKernelSmartAccount({
-    client: createPublicClient({ chain: baseSepolia, transport: http(rpc) }),
+    client: createPublicClient({ chain: base, transport: http(rpc) }),
     owners: [owner],
     version: "0.3.1",
     entryPoint: { address: accountAbstraction.entryPoint07Address, version: "0.7" },
@@ -52,19 +52,19 @@ export async function unlockPasskey(saved: SavedPasskey) {
 
 export async function connectWallet(label = "") {
   if (!walletConnectProjectId) throw new Error("WalletConnect is not configured.");
-  const { baseSepolia } = await import("viem/chains");
+  const { base } = await import("viem/chains");
   const { default: EthereumProvider } = await import("@walletconnect/ethereum-provider");
   const provider = await EthereumProvider.init({
     projectId: walletConnectProjectId,
-    chains: [baseSepolia.id],
+    chains: [base.id],
     showQrModal: true,
     metadata: {
       name: "RvessFlow",
       description: "Your money, in motion.",
       url: window.location.origin,
-      icons: [`${window.location.origin}/mark.svg`],
+      icons: [`${window.location.origin}/icon-512.png`],
     },
-    rpcMap: { [baseSepolia.id]: rpc },
+    rpcMap: { [base.id]: rpc },
   });
   await provider.connect();
   const address = provider.accounts[0];

@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Caveat, Geist_Mono, Inter } from "next/font/google";
+import { PwaRegister } from "@/components/install-app";
 import "./globals.css";
 
 const inter = Inter({
@@ -23,14 +24,32 @@ const mono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "RvessFlow",
-  description: "Your money, in motion.",
-  icons: { icon: "/mark.svg" },
+  description: "Beta. Your money, in motion on Base.",
+  applicationName: "RvessFlow",
+  appleWebApp: { capable: true, title: "RvessFlow", statusBarStyle: "default" },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#F7F6F3",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable} ${caveat.variable} h-full antialiased`}>
-      <body className="min-h-full bg-background font-sans text-foreground">{children}</body>
+      <body className="min-h-full bg-background font-sans text-foreground">
+        <PwaRegister />
+        {children}
+      </body>
     </html>
   );
 }

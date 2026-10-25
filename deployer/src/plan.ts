@@ -17,7 +17,7 @@ export type Piece = {
 
 export type Deployment = {
   deployer: Address;
-  calldata: Hex;
+  calls: Hex[];
   pieces: Piece[];
   addresses: {
     safe: Address;
@@ -116,13 +116,53 @@ function proxy(implementation: Address, init: Hex): Hex {
 
 export const deployerBytecode = bytecode.ProtocolDeployer;
 
-/** Fresh deployment. `startNonce` is the ProtocolDeployer's next nonce, 1 on a new contract. */
+/** A wallet RPC rejects one transaction that carries every contract. Stay under that limit. */
+const maxCallBytes = 48_000;
+
+function encodeDeploy(safe: OwnerContract, initCodes: Hex[]): Hex {
+  return encodeFunctionData({
+    abi: deployAbi,
+    functionName: "deploy",
+    args: [safe.factory, safe.singleton, safe.initializer, safe.saltNonce, safe.address, initCodes],
+  });
+}
+
+function chunkInitCodes(safe: OwnerContract, initCodes: Hex[], alreadyCreated: number): Hex[] {
+  const batches: Hex[][] = [];
+  let batch: Hex[] = [];
+  for (const code of initCodes) {
+    const next = [...batch, code];
+    const size = (encodeDeploy(safe, next).length - 2) / 2;
+    if (batch.length > 0 && size > maxCallBytes) {
+      batches.push(batch);
+      batch = [code];
+    } else {
+      batch = next;
+    }
+  }
+  if (batch.length > 0) batches.push(batch);
+
+  let skip = alreadyCreated;
+  const calls: Hex[] = [];
+  for (const item of batches) {
+    if (skip >= item.length) {
+      skip -= item.length;
+      continue;
+    }
+    if (skip > 0) throw new Error("A signature stopped halfway. Review the addresses, then sign again.");
+    calls.push(encodeDeploy(safe, item));
+  }
+  return calls;
+}
+
+/** Fresh deployment. Addresses are predicted from nonce 1. `alreadyCreated` skips finished signatures. */
 export function buildDeployment(
   deployer: Address,
   startNonce: bigint,
   chain: ProtocolChain,
   keeper: string,
   safe: OwnerContract,
+  alreadyCreated = 0,
 ): Deployment {
   const owner = safe.address;
   let nonce = startNonce;
@@ -265,11 +305,7 @@ export function buildDeployment(
 
   return {
     deployer,
-    calldata: encodeFunctionData({
-      abi: deployAbi,
-      functionName: "deploy",
-      args: [safe.factory, safe.singleton, safe.initializer, safe.saltNonce, safe.address, initCodes],
-    }),
+    calls: chunkInitCodes(safe, initCodes, alreadyCreated),
     pieces,
     addresses: { safe: safe.address, allowlist, conduit, vaultImplementation, factory, locks, groups },
   };

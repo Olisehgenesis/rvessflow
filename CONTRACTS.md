@@ -102,6 +102,58 @@ The group keeps collateral as its solvency margin and caps the pool flow so the 
 
 A solvent vault cannot be liquidated by a third party. Deleting its stream reverts with `CFA_NON_CRITICAL_SENDER`. After the cushion, liquidation is Superfluid's rule: the liquidator can delete the stream and take the deposit reward.
 
+## Deployments
+
+Base mainnet and Base Sepolia are separate deployments. Money on one does not move to the other. A person using the app accepts the terms before they sign. The terms are at `/terms` in the app.
+
+### Base mainnet
+
+Deployed 25 October 2026. These contracts have not had an external audit. Any two of the three wallets below can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. The owner is the 2-of-3 Safe.
+
+| | Address |
+| --- | --- |
+| First wallet | `0x9b6A52A88a1Ee029Bd14170fFb8fB15839Bd18cB` |
+| Second wallet | `0xf7dbD2867f55832E4A05E16Cd69cB57A70923cDD` |
+| Third wallet | `0x53eaF4CD171842d8144e45211308e5D90B4b0088` |
+| Owner | `0x780c78D104090477300eb148148b3329f8959899` |
+| Signing contract | `0x87d7801994fec45e2a5565d201f3967af427222b` |
+| Allowlist implementation | `0xcD83B2C687d89DE94f6A528E69d5953De0b71Fda` |
+| Allowlist | `0x34e748f13c294ED3b8Cdd1dd65C45b58981dBe8b` |
+| Conduit implementation | `0xC0fcEF3C1165B72a9e6170b0a77c0F9D7F2558f1` |
+| Vault implementation | `0xDEf73c9c39e0adE09faDC928254e792bf8F51371` |
+| Factory implementation | `0xD148E2e27357a6903Ab46c2d530Ef84Ba65D5478` |
+| Factory | `0xc21B7Bd68F8235b7DB2827334d2039fD8B3C118d` |
+| Lock vault implementation | `0xBD675F1c5395d1B6764a9B6b268550F15E48A017` |
+| Lock vault | `0x68B0667E098A62b3e3F437DBeb0aEdB746cD4c41` |
+| Group implementation | `0x3920469b30958FE92d32F19Bc552DC315EE9FFFc` |
+| Group | `0x13008059FAd0348Fb8848A0737F9E826C82199fa` |
+
+On this deployment `contractVersion` is 3 on the allowlist, 2 on the factory, 3 on the lock vault, and 4 on the group. No keeper was set.
+
+The constructors also created these contracts. The live beacons are the ones owned by the factory proxy. The yield payer used by the lock vault is the second one.
+
+| | Address |
+| --- | --- |
+| Vault code extension | `0x2eE04C683f14C5de76131131E46050f5Ee38b399` |
+| Group extension | `0x52A24bc5E3b060ce83F2a48cbA6f6F4EB0AE6295` |
+| Yield payer, lock implementation | `0xA99Cb51AC79D47ff791859BDf049984EAc026A42` |
+| Yield payer, lock vault | `0xd93cbeCD471bD0ED4ecdF4c5A658b8924dE72A79` |
+| Vault beacon | `0x8bBf21fd3fC858ABE9aaf83E7551D1fE6B604719` |
+| Conduit beacon | `0xfce3999211f63c5B11175A885E4DCEa56fD030f1` |
+
+Source for every address above, including the OpenZeppelin proxies and beacons, is an exact match on Sourcify and verified on Basescan. The allowlist is [on Basescan](https://basescan.org/address/0x34e748f13c294ED3b8Cdd1dd65C45b58981dBe8b#code) and [on Sourcify](https://sourcify.dev/server/v2/contract/8453/0x34e748f13c294ED3b8Cdd1dd65C45b58981dBe8b). Basescan treats the four proxies as proxies and points each one at its implementation.
+
+### Base Sepolia
+
+The app reads the Base mainnet contracts above. This Sepolia set is unchanged. Its owner is `0xB1819b7287B8e709A526D942f5c3e1ae7389054D`. The mainnet deployment did not change these proxies.
+
+| | Address |
+| --- | --- |
+| Allowlist | `0xD1c99f91c3495735929F49D62E430B9a1536D4EE` |
+| Factory | `0xf60322153F176b98e552263465F05A9c260A0979` |
+| Lock vault | `0xD28D065E0A9d1F12f14E3d51e245658A7aAAb410` |
+| Group | `0x37F0d018517Ce6F7E72476155b41251F0d6aA6F8` |
+
 ## Deployed token addresses
 
 Forwarders are the same on Base and Base Sepolia.

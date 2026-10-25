@@ -17,18 +17,19 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { base } from "viem/chains";
 import { money, shortAddress } from "@/lib/display";
 
-export const chain = baseSepolia;
-export const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL || "https://base-sepolia-rpc.publicnode.com";
+export const chain = base;
+export const rpcUrl = process.env.BASE_RPC_URL || "https://mainnet.base.org";
+export const explorer = "https://basescan.org";
 
 export const addresses = {
-  allowlist: "0xD1c99f91c3495735929F49D62E430B9a1536D4EE" as Address,
-  factory: "0xf60322153F176b98e552263465F05A9c260A0979" as Address,
-  locks: "0xD28D065E0A9d1F12f14E3d51e245658A7aAAb410" as Address,
-  groups: "0x37F0d018517Ce6F7E72476155b41251F0d6aA6F8" as Address,
-  fusdcx: "0x1650581F573eAd727B92073B5Ef8B4f5B94D1648" as Address,
+  allowlist: "0x34e748f13c294ED3b8Cdd1dd65C45b58981dBe8b" as Address,
+  factory: "0xc21B7Bd68F8235b7DB2827334d2039fD8B3C118d" as Address,
+  locks: "0x68B0667E098A62b3e3F437DBeb0aEdB746cD4c41" as Address,
+  groups: "0x13008059FAd0348Fb8848A0737F9E826C82199fa" as Address,
+  fusdcx: "0xD04383398dD2426297da660F9CCA3d439AF9ce1b" as Address,
   cfa: "0xcfA132E353cB4E398080B9700609bb008eceB125" as Address,
 };
 
@@ -58,7 +59,7 @@ const vaultAbi = parseAbi([
   "function unallocated(address) view returns (uint256)",
   "function flowCount() view returns (uint256)",
   "function flowIdAt(uint256) view returns (uint256)",
-  "function getFlow(uint256) view returns ((address token, address recipient, address conduit, uint8 kind, uint8 chainMode, uint8 rateMode, uint16 shareBps, uint8 depth, bool allowSubflows, bool keeperGated, bool triggered, bool active, bool settled, bytes32 name, uint64 earliestStart, uint64 duration, uint64 createdAt, uint64 triggeredAt, uint64 start, uint64 end, int96 rate, int96 childRate, int96 liveRate, uint256 parentId, uint256 predecessorId, uint256 goalAmount, uint256 reserved, uint256 buffers, uint256 cushion, bool paused, uint64 remaining))",
+  "function getFlow(uint256) view returns ((address token, address recipient, address conduit, uint8 kind, uint8 chainMode, uint8 rateMode, uint16 shareBps, uint8 depth, bool allowSubflows, bool keeperGated, bool triggered, bool active, bool settled, bytes32 name, uint64 earliestStart, uint64 duration, uint64 createdAt, uint64 triggeredAt, uint64 start, uint64 end, int96 rate, int96 childRate, int96 liveRate, uint256 parentId, uint256 predecessorId, uint256 goalAmount, uint256 reserved, uint256 buffers, uint256 cushion, bool paused, uint64 remaining, uint64 ran))",
   "function balanceSheet(address) view returns (uint256 idle, uint256 held, uint256 streaming)",
   "function depositSuper(address token, uint256 amount)",
   "function withdraw(address token, uint256 amount)",
@@ -83,7 +84,7 @@ const lockAbi = parseAbi([
   "function yieldBudget(address) view returns (uint256)",
   "function yieldPerTokenPerSecond(address) view returns (uint256)",
   "function locksOf(address) view returns (uint256[])",
-  "function locks(uint256) view returns (address owner, address token, uint128 principal, uint64 start, uint64 end, uint256 weight, int96 yieldRate, bool settled, uint16 lockedPenaltyBps, bytes32 name, uint128 targetAmount)",
+  "function locks(uint256) view returns (address owner, address token, uint128 principal, uint64 start, uint64 end, uint256 weight, int96 yieldRate, bool settled, uint16 lockedPenaltyBps, bytes32 name, uint128 targetAmount, uint256 yieldPerWei)",
   "function previewBreak(uint256) view returns (uint256 payout, uint256 penalty)",
   "function previewMature(uint256) view returns (uint256 principal, uint256 bonus)",
   "function lockGoal(address token, uint128 amount, uint64 duration, bool earnYield, bytes32 name, uint128 target) returns (uint256)",
@@ -598,7 +599,7 @@ async function deposit(index: number, vault: Address, amount: bigint) {
   });
   const due = withProtocolFee(amount);
   if (balance < due) {
-    throw new Error(`This needs ${money(due)} fUSDCx in the wallet, including the 0.3% protocol fee. This account has ${money(balance)}.`);
+    throw new Error(`This needs ${money(due)} USDCx in the wallet, including the 0.3% protocol fee. This account has ${money(balance)}.`);
   }
   await ensureAllowance(index, account.address, vault, due);
   await write(index, {
@@ -922,7 +923,7 @@ export async function groupAct(
 export function explain(error: unknown): string {
   const text = error instanceof Error ? error.message : "The transaction failed.";
   const known: Record<string, string> = {
-    Insufficient: "The vault does not have enough fUSDCx set aside for this.",
+    Insufficient: "The vault does not have enough USDCx set aside for this.",
     TooEarly: "This is not ready yet.",
     TooLate: "The payment window for this cycle has closed.",
     WindowOutOfRange: "The payment window does not fit inside that cycle.",
@@ -936,7 +937,7 @@ export function explain(error: unknown): string {
     NotActive: "That position is not running.",
     StillActive: "It has not reached its date yet.",
     Paused: "The protocol is paused for new positions.",
-    TokenNotAllowed: "fUSDCx is not on the allowlist.",
+    TokenNotAllowed: "USDCx is not on the allowlist.",
   };
   for (const [key, message] of Object.entries(known)) {
     if (text.includes(key)) return message;

@@ -7,7 +7,7 @@ export type Quote = {
 };
 
 export const CURRENCIES = [
-  { code: "fusdcx", label: "fUSDCx", country: "On chain" },
+  { code: "fusdcx", label: "USDCx", country: "On chain" },
   { code: "usd", label: "USD", country: "United States" },
   { code: "eur", label: "EUR", country: "Euro area" },
   { code: "gbp", label: "GBP", country: "United Kingdom" },
@@ -26,8 +26,10 @@ export const CURRENCIES = [
   { code: "ugx", label: "UGX", country: "Uganda" },
 ] as const;
 
+export const chainToken = "USDCx";
+
 export function chainQuote(): Quote {
-  return { code: "fusdcx", unit: "fUSDCx", perToken: 1, digits: 2, note: "" };
+  return { code: "fusdcx", unit: chainToken, perToken: 1, digits: 2, note: "" };
 }
 
 export function currencyByCode(code: string) {

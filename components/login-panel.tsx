@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Dialog } from "radix-ui";
 import { Check, UserRound, Wallet, X } from "lucide-react";
 import { IconMark } from "@/components/icons";
-import { enterApp, openSession } from "@/lib/actions";
+import { enterApp, noteTerms, openSession } from "@/lib/actions";
 import { connectWallet, createPasskeyWallet, unlockPasskey } from "@/lib/auth-client";
 import { shortAddress } from "@/lib/display";
 import { readPasskeys, type SavedPasskey } from "@/lib/passkey-vault";
@@ -44,6 +44,8 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
   const [nameError, setNameError] = useState("");
   const [vaultNote, setVaultNote] = useState("");
   const [returning, setReturning] = useState(intent === "login");
+  const [agreed, setAgreed] = useState(false);
+  const [termsError, setTermsError] = useState("");
   const [phase, setPhase] = useState<Phase>(intent === "login" ? { name: "method" } : { name: "name" });
 
   useEffect(() => {
@@ -68,7 +70,18 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
     return next;
   }
 
+  async function agreeFirst() {
+    if (!agreed) {
+      setTermsError("Accept the terms before you sign.");
+      return false;
+    }
+    setTermsError("");
+    await noteTerms();
+    return true;
+  }
+
   async function startPasskey() {
+    if (!(await agreeFirst())) return;
     const label = requireName();
     if (!label) return;
     setPhase({ name: "creating" });
@@ -82,6 +95,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
   }
 
   async function startWallet() {
+    if (!(await agreeFirst())) return;
     setPhase({ name: "connecting" });
     try {
       await connectWallet(name.trim());
@@ -92,6 +106,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
   }
 
   async function startUnlock(passkey: SavedPasskey) {
+    if (!(await agreeFirst())) return;
     setPhase({ name: "confirming", label: passkey.label });
     try {
       await unlockPasskey(passkey);
@@ -167,6 +182,8 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
           >
             Continue
           </button>
+          <TermsBox checked={agreed} onChange={setAgreed} />
+          {termsError ? <p className="mt-2 text-sm text-[#C5362B]">{termsError}</p> : null}
           <button
             type="button"
             onClick={() => {
@@ -197,6 +214,8 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
               ? "Sign in with the passkey on this device, or the wallet you already use."
               : "How would you like to get started?"}
           </Dialog.Description>
+          <TermsBox checked={agreed} onChange={setAgreed} />
+          {termsError ? <p className="mt-2 text-sm text-[#C5362B]">{termsError}</p> : null}
 
           {saved.map((passkey, index) => (
             <div key={passkey.address} className={`${index === 0 ? "mt-5" : "mt-3"} rounded-2xl border border-[#E3EDD4] bg-[#F4F8EE] p-3.5`}>
@@ -294,7 +313,16 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
             </button>
           ) : null}
 
-          <form action={enterApp} className="mt-1">
+          <form
+            action={enterApp}
+            className="mt-1"
+            onSubmit={(event) => {
+              if (agreed) return;
+              event.preventDefault();
+              setTermsError("Accept the terms before you sign.");
+            }}
+          >
+            <input type="hidden" name="terms" value={agreed ? "yes" : ""} />
             <button
               type="submit"
               className="h-10 w-full text-xs font-medium text-[#8B919A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
@@ -473,6 +501,26 @@ function WaitMark({ icon }: { icon: ReactNode }) {
       </svg>
       {icon}
     </span>
+  );
+}
+
+function TermsBox({ checked, onChange }: { checked: boolean; onChange: (next: boolean) => void }) {
+  return (
+    <label className="mt-4 flex items-start gap-2.5 text-[13px] leading-snug text-[#3A3F47]">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-0.5 size-4 accent-[#171717]"
+      />
+      <span>
+        I agree to the{" "}
+        <a href="/terms" target="_blank" rel="noreferrer" className="font-medium underline">
+          terms
+        </a>{" "}
+        before I sign.
+      </span>
+    </label>
   );
 }
 

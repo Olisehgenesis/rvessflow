@@ -1,5 +1,7 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { ProfileForm } from "@/components/circle";
+import { InstallButton } from "@/components/install-app";
 import { CurrencyPick } from "@/components/currency-pick";
 import { AccountSwitch } from "@/components/forms";
 import Loading from "../loading";
@@ -8,7 +10,7 @@ import { contactOf } from "@/lib/circle";
 import { labeled, money, shortAddress } from "@/lib/display";
 import { loadQuote } from "@/lib/rates";
 import { signOut } from "@/lib/actions";
-import { addresses, loadPortfolio } from "@/lib/protocol";
+import { addresses, explorer, loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
 export default function SettingsPage() {
@@ -36,28 +38,36 @@ async function SettingsBody() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">Currency</p>
-          <p className="text-xs text-muted-foreground">fUSDCx stays on chain. Other countries use the USDC price and that country’s rate.</p>
+          <p className="text-xs text-muted-foreground">USDCx stays on Base. Other countries use the USDC price and that country’s rate.</p>
         </div>
         <CurrencyPick code={quote.code} />
       </div>
       {quote.note ? <p className="mb-4 text-sm text-muted-foreground">{quote.note}</p> : null}
       <p className="mb-3 text-sm text-muted-foreground">Signed in as {data.me.name}. {signedIn}</p>
       <ProfileForm contact={contact} demo={who.method === "tester"} />
-      <form action={signOut} className="mb-6">
+      <form action={signOut} className="mb-3">
         <button type="submit" className="h-11 rounded-full border border-border bg-card px-5 text-sm font-medium">
           Sign out
         </button>
       </form>
-      <p className="mb-3 text-sm text-muted-foreground">These four accounts are funded on Base Sepolia. Switching to one of them is what lets this preview send transactions. Their keys never leave this machine.</p>
+      <p className="mb-3 text-sm">
+        <Link href="/terms" className="font-medium underline">
+          Terms
+        </Link>
+      </p>
+      <div className="mb-6">
+        <InstallButton />
+      </div>
+      <p className="mb-3 text-sm text-muted-foreground">These four accounts sign from this machine on Base. They need ETH for gas and USDCx before a transaction can send. Their keys never leave this computer.</p>
       <AccountSwitch people={data.people} current={data.me.address} />
       <div className="mt-6">
       <Facts>
-        <Fact label="Network" value="Base Sepolia" />
+        <Fact label="Network" value="Base" />
         <Fact label="Account" value={shortAddress(data.me.address)} />
         <Fact label="Gas" value={`${Number(data.eth).toFixed(4)} ETH`} />
-        <Fact label="On chain" value={`${money(data.total)} fUSDCx`} />
+        <Fact label="On chain" value={`${money(data.total)} USDCx`} />
         <Fact label="Vault" value={data.vault ? shortAddress(data.vault) : "Not created yet"} />
-        <Fact label="fUSDCx" value={data.protocol.tokenAllowed ? "Allowlisted" : "Not allowlisted"} />
+        <Fact label="USDCx" value={data.protocol.tokenAllowed ? "Allowlisted" : "Not allowlisted"} />
         <Fact label="New positions" value={data.protocol.paused ? "Paused" : "Open"} />
         <Fact label="Lock penalty" value={`${(data.protocol.penaltyBps / 100).toFixed(2).replace(/\.00$/, "")}%`} />
         <Fact label="Yield budget" value={labeled(data.protocol.yieldBudget, quote)} />
@@ -69,26 +79,26 @@ async function SettingsBody() {
       </p>
       <section className="mt-6 text-sm leading-relaxed text-muted-foreground">
         <h2 className="text-base font-semibold text-foreground">Before real money</h2>
-        <p className="mt-2">These contracts are unaudited. The admin can upgrade them without a waiting period. An expense stream can be liquidated if nobody closes it during the one-hour cushion. Yield pays only from a funded budget, and that budget is empty until someone fills it.</p>
+        <p className="mt-2">These contracts are unaudited. An upgrade waits two days after the owners schedule it. An expense stream can be liquidated if nobody closes it during the one-hour cushion. Yield pays only from a funded budget, and that budget is empty until someone fills it.</p>
       </section>
       <ul className="mt-4 space-y-2 text-sm">
         <li>
-          <a className="text-foreground" href={`https://sepolia.basescan.org/address/${data.me.address}`}>
+          <a className="text-foreground" href={`${explorer}/address/${data.me.address}`}>
             This account on Basescan
           </a>
         </li>
         <li>
-          <a className="text-foreground" href={`https://sepolia.basescan.org/address/${addresses.factory}`}>
+          <a className="text-foreground" href={`${explorer}/address/${addresses.factory}`}>
             Vault factory
           </a>
         </li>
         <li>
-          <a className="text-foreground" href={`https://sepolia.basescan.org/address/${addresses.locks}`}>
+          <a className="text-foreground" href={`${explorer}/address/${addresses.locks}`}>
             Lock vault
           </a>
         </li>
         <li>
-          <a className="text-foreground" href={`https://sepolia.basescan.org/address/${addresses.groups}`}>
+          <a className="text-foreground" href={`${explorer}/address/${addresses.groups}`}>
             Group rotation
           </a>
         </li>

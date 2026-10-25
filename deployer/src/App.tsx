@@ -28,6 +28,15 @@ function writeSaved(chainId: number, account: Address, saved: Saved) {
   localStorage.setItem(storageKey(chainId, account), JSON.stringify(saved));
 }
 
+function readableError(err: unknown): string {
+  const message = err instanceof Error ? err.message : "The wallet did not sign.";
+  const line = message.split("\n")[0] ?? message;
+  if (line.includes("Request too large")) {
+    return "The wallet refused that signature because it was too large. Refresh the page and sign again.";
+  }
+  return line.length > 240 ? `${line.slice(0, 240)}…` : line;
+}
+
 export function App() {
   const [chainId, setChainId] = useState<84532 | 8453>(84532);
   const [wallets, setWallets] = useState(["", "", ""]);
@@ -48,7 +57,7 @@ export function App() {
   async function prepare(current: ConnectedWallet, selected: ProtocolChain) {
     const saved = readSaved(selected.id, current.address);
     if (saved?.addresses) {
-      const code = await current.getBytecode(saved.addresses.allowlist);
+      const code = await current.getBytecode(saved.addresses.groups);
       if (code && code !== "0x") {
         return { deployment: null, deployer: saved.deployer, deployerReady: true, done: true, saved };
       }
@@ -75,8 +84,8 @@ export function App() {
         saved,
       };
     }
-    const deployment = buildDeployment(deployer, nonce, selected, keeper, ownerContract(owners));
-    const created = await current.getBytecode(deployment.addresses.allowlist);
+    const deployment = buildDeployment(deployer, 1n, selected, keeper, ownerContract(owners), Number(nonce - 1n));
+    const created = await current.getBytecode(deployment.addresses.groups);
     const deployerCode = await current.getBytecode(deployer);
     return {
       deployment,
@@ -99,7 +108,7 @@ export function App() {
         if (next.done && next.saved?.addresses && !next.deployment) {
           setPlan({
             deployer: next.saved.deployer,
-            calldata: "0x",
+            calls: [],
             pieces: [],
             addresses: next.saved.addresses,
           });
@@ -156,7 +165,7 @@ export function App() {
         setDone(true);
         setDeployerReady(true);
         if (fresh.saved?.addresses) {
-          setPlan({ deployer: fresh.saved.deployer, calldata: "0x", pieces: [], addresses: fresh.saved.addresses });
+          setPlan({ deployer: fresh.saved.deployer, calls: [], pieces: [], addresses: fresh.saved.addresses });
         }
         setStatus("This wallet already deployed the RvessFlow Protocol on this chain.");
         return;
@@ -176,12 +185,16 @@ export function App() {
         setDeployerReady(true);
         const next = await prepare(wallet, chain);
         if (next.deployment) setPlan(next.deployment);
-        setStatus("First signature is in. Sign once more to create the protocol.");
+        setStatus("First signature is in. The protocol takes a few more signatures. The addresses stay the same.");
         return;
       }
 
-      setStatus("Confirm the second signature in your wallet.");
-      await sendCall(wallet, chain, fresh.deployment.deployer, fresh.deployment.calldata);
+      const calls = fresh.deployment.calls;
+      if (calls.length === 0) throw new Error("Nothing left to sign.");
+      for (let index = 0; index < calls.length; index += 1) {
+        setStatus(`Confirm signature ${index + 1} of ${calls.length} in your wallet.`);
+        await sendCall(wallet, chain, fresh.deployment.deployer, calls[index]);
+      }
       writeSaved(chain.id, wallet.address, {
         deployer: fresh.deployment.deployer,
         addresses: fresh.deployment.addresses,
@@ -190,7 +203,7 @@ export function App() {
       setDone(true);
       setStatus("The protocol is deployed. Any two of the three wallets can change it.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The wallet did not sign.");
+      setError(readableError(err));
     } finally {
       setBusy(false);
     }
@@ -202,7 +215,7 @@ export function App() {
     <main className="page">
       <h1>Sign the deployment</h1>
       <p className="lede">
-        Any two of these three wallets can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. You connect one of them and sign twice to create the protocol. People using RvessFlow do not sign here. This page stores no key, and it does not change the contracts already on Base Sepolia.
+        Any two of these three wallets can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. You connect one of them and sign. The first signature creates a small contract. The protocol takes a few more signatures, because a wallet cannot fit every contract into one transaction. The addresses stay the same. People using RvessFlow do not sign here. This page stores no key, and it does not change the contracts already on Base Sepolia.
       </p>
 
       <div className="choices" role="group" aria-label="Network">
@@ -262,7 +275,7 @@ export function App() {
           {plan && <span>{plan.deployer}</span>}
         </li>
         <li>
-          {done ? "Protocol, deployed" : "Second signature, the protocol"}
+          {done ? "Protocol, deployed" : "Protocol signatures"}
           {plan && plan.pieces.length > 0 && (
             <ol className="pieces">
               {plan.pieces.map((piece) => (
@@ -290,7 +303,11 @@ export function App() {
       )}
       {wallet && !done && (
         <button className="sign" type="button" onClick={onSign} disabled={busy || !plan}>
-          {deployerReady ? "Sign the second transaction" : "Sign the first transaction"}
+          {deployerReady
+            ? plan && plan.calls.length > 1
+              ? `Sign the protocol, ${plan.calls.length} signatures`
+              : "Sign the protocol"
+            : "Sign the first transaction"}
         </button>
       )}
 

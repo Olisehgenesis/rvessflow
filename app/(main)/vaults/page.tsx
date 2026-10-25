@@ -34,7 +34,7 @@ async function VaultsBody() {
         <div>
           <KindIntro kind="lock" />
           <Link href="/vaults/new" className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground">
-            Lock fUSDCx
+            Lock USDCx
           </Link>
         </div>
       ) : (

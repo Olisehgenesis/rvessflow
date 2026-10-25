@@ -12,6 +12,7 @@ const CURRENCY = "rvess-currency";
 const ADDR = "rvess-address";
 const METHOD = "rvess-auth";
 const LABEL = "rvess-label";
+const TERMS = "rvess-terms";
 
 export type AuthMethod = "passkey" | "wallet" | "tester";
 
@@ -68,6 +69,16 @@ export async function hasEntered(): Promise<boolean> {
   return jar.get(IN)?.value === "1";
 }
 
+export async function acceptedTerms(): Promise<boolean> {
+  const jar = await cookies();
+  return jar.get(TERMS)?.value === "1";
+}
+
+export async function rememberTerms() {
+  const jar = await cookies();
+  jar.set(TERMS, "1", cookie);
+}
+
 export async function rememberTester(index: number) {
   const who = testerAt(index);
   const jar = await cookies();
@@ -118,6 +129,7 @@ export async function clearSession() {
   jar.delete(ADDR);
   jar.delete(METHOD);
   jar.delete(LABEL);
+  jar.delete(TERMS);
 }
 
 async function requestCountry(): Promise<string | null> {

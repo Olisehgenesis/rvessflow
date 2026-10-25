@@ -23,7 +23,7 @@ export function Amount({ value, unit, quote }: { value: string; unit?: string; q
   return (
     <p className="flex items-baseline gap-2">
       <span className="font-display text-[2.6rem] font-semibold leading-none tracking-tight tabular-nums">{quote ? show(value, quote) : money(value)}</span>
-      <span className="text-sm font-medium text-muted-foreground">{quote?.unit ?? unit ?? "fUSDCx"}</span>
+      <span className="text-sm font-medium text-muted-foreground">{quote?.unit ?? unit ?? "USDCx"}</span>
     </p>
   );
 }

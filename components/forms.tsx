@@ -226,7 +226,7 @@ export function VaultButtons({ id, paused, canSettle }: { id: string; paused: bo
 }
 
 export function WithdrawIdle({ amount }: { amount: string }) {
-  return <NamedAction id={amount} fn="withdraw" action={doVault} label="Move idle fUSDCx to this wallet" tone="quiet" />;
+  return <NamedAction id={amount} fn="withdraw" action={doVault} label="Move idle USDCx to this wallet" tone="quiet" />;
 }
 
 export function BreakLock({ id }: { id: string }) {

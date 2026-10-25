@@ -37,7 +37,7 @@ import {
   savePhone,
   setDraftOpen,
 } from "@/lib/circle";
-import { accountIndex, clearSession, currencyChoice, rememberCurrency, rememberName, rememberTester, rememberWallet } from "@/lib/session";
+import { acceptedTerms, accountIndex, clearSession, currencyChoice, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet } from "@/lib/session";
 
 export type ActionState = { error: string } | null;
 
@@ -54,7 +54,22 @@ function spoken(error: unknown): ActionState {
   return { error: explain(error) };
 }
 
-export async function enterApp() {
+async function requireTerms() {
+  if (!(await acceptedTerms())) throw new Error("Accept the terms before you sign.");
+}
+
+export async function noteTerms() {
+  await rememberTerms();
+}
+
+export async function acceptTerms() {
+  await rememberTerms();
+  refresh();
+}
+
+export async function enterApp(formData: FormData) {
+  if (String(formData.get("terms")) !== "yes") throw new Error("Accept the terms before you sign.");
+  await rememberTerms();
   await rememberTester(0);
   redirect("/home");
 }
@@ -63,6 +78,7 @@ export async function openSession(address: string, method: "passkey" | "wallet",
   if ((method !== "passkey" && method !== "wallet") || !isAddress(address)) {
     throw new Error("That sign-in could not be saved.");
   }
+  await requireTerms();
   await rememberWallet(getAddress(address), method, label.trim().slice(0, 32));
   redirect("/home");
 }
@@ -111,6 +127,7 @@ function readSpan(formData: FormData, min: number): number {
 export async function createSaving(_prev: ActionState, formData: FormData): Promise<ActionState> {
   let id = "";
   try {
+    await requireTerms();
     id = await openSaving(await accountIndex(), {
       name: String(formData.get("name") ?? ""),
       amount: String(formData.get("amount") ?? ""),
@@ -132,6 +149,7 @@ export async function createStream(_prev: ActionState, formData: FormData): Prom
   }
   let id = "";
   try {
+    await requireTerms();
     id = await openStream(await accountIndex(), {
       name: String(formData.get("name") ?? ""),
       amount: String(formData.get("amount") ?? ""),
@@ -150,6 +168,7 @@ export async function createStream(_prev: ActionState, formData: FormData): Prom
 export async function createLock(_prev: ActionState, formData: FormData): Promise<ActionState> {
   let id = "";
   try {
+    await requireTerms();
     id = await openLock(await accountIndex(), {
       name: String(formData.get("name") ?? ""),
       amount: String(formData.get("amount") ?? ""),
@@ -264,6 +283,7 @@ export async function removeDraft(_prev: ActionState, formData: FormData): Promi
 export async function startDraft(_prev: ActionState, formData: FormData): Promise<ActionState> {
   let chainId = "";
   try {
+    await requireTerms();
     chainId = await launchDraft(String(formData.get("id") ?? ""));
   } catch (error) {
     return spoken(error);
@@ -274,6 +294,7 @@ export async function startDraft(_prev: ActionState, formData: FormData): Promis
 
 export async function moveTurn(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
+    await requireTerms();
     const dir = formData.get("dir") === "up" ? -1 : 1;
     await shiftPayout(await accountIndex(), BigInt(String(formData.get("id"))), Number(formData.get("from")), dir);
   } catch (error) {
@@ -285,6 +306,7 @@ export async function moveTurn(_prev: ActionState, formData: FormData): Promise<
 
 export async function useMyPhone(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
+    await requireTerms();
     const who = String(formData.get("address") ?? "") as Address;
     const phone = isAddress(who) ? await phoneFor(who) : "";
     await linkPhone(await accountIndex(), BigInt(String(formData.get("id"))), phone);
@@ -352,6 +374,7 @@ export async function keepPassword(_prev: ActionState, formData: FormData): Prom
 
 async function run(work: () => Promise<void>): Promise<ActionState> {
   try {
+    await requireTerms();
     await work();
   } catch (error) {
     return { error: explain(error) };

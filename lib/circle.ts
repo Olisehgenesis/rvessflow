@@ -391,8 +391,8 @@ function view(data: World, draft: Draft, who: Viewer): DraftView {
     contribution: draft.contribution,
     cycles: draft.cycles,
     summary: plan
-      ? `${draft.contribution} fUSDCx each cycle, ${draft.cycles} cycles of ${spanLabel(plan.cycle)}.`
-      : `${draft.contribution} fUSDCx each cycle.`,
+      ? `${draft.contribution} USDCx each cycle, ${draft.cycles} cycles of ${spanLabel(plan.cycle)}.`
+      : `${draft.contribution} USDCx each cycle.`,
     open: draft.open,
     mine,
     member: draft.members.some((item) => same(item, who.address)),

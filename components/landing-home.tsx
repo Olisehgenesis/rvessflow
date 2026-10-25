@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Dialog } from "radix-ui";
 import { ArrowRight, ChevronRight, Menu, X } from "lucide-react";
 import { IconMark } from "@/components/icons";
+import { InstallButton } from "@/components/install-app";
 import { LoginGate } from "@/components/login-gate";
 import { ProductGlyph, type MarkName } from "@/components/landing-icons";
 import { PhoneStage } from "@/components/landing-phone";
@@ -74,9 +75,9 @@ const links = [
 ];
 
 const stats = [
-  { value: "12K+", label: "Active users" },
-  { value: "$1.8M+", label: "Total value streamed" },
-  { value: "98%", label: "On-time group cycles" },
+  { value: "Base", label: "The network this beta uses" },
+  { value: "USDCx", label: "The stable token on chain" },
+  { value: "Yours", label: "A vault signs with your key" },
 ];
 
 function LimeButton({
@@ -121,6 +122,7 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
           <a href="#top" className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.03em]">
             <IconMark className="size-8" />
             RvessFlow
+            <span className="rounded-full bg-[#D6F34A] px-2 py-0.5 text-[11px] font-semibold tracking-normal">Beta</span>
           </a>
           <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 text-sm text-[#3d4450] lg:flex" aria-label="Page">
             {links.map((link) => (
@@ -137,6 +139,7 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
             >
               Log in
             </button>
+            <InstallButton />
             <LimeButton onClick={() => openAuth("start")} className="h-10 px-4 text-sm">
               Get started
             </LimeButton>
@@ -168,6 +171,7 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
               <button type="button" onClick={() => openAuth("login")} className="flex h-12 items-center text-left text-base font-medium">
                 Log in
               </button>
+              <InstallButton className="py-2" />
             </nav>
           </div>
         ) : null}
@@ -182,12 +186,15 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
               in motion.
             </h1>
             <p className="mt-5 max-w-[28rem] text-[15px] leading-relaxed text-[#5C6572] sm:text-base">
-              Save for your goals, stream payments, lock your funds, and grow together. All in one simple app.
+              Save for your goals, stream payments, lock your funds, and grow together. This beta runs on Base.
             </p>
-            <LimeButton onClick={() => openAuth("start")} className="mt-7 h-12 w-full px-5 text-[15px] sm:w-auto sm:px-6">
-              Get started
-              <ArrowRight className="size-4" />
-            </LimeButton>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <LimeButton onClick={() => openAuth("start")} className="h-12 w-full px-5 text-[15px] sm:w-auto sm:px-6">
+                Get started
+                <ArrowRight className="size-4" />
+              </LimeButton>
+              <InstallButton className="sm:hidden" />
+            </div>
           </div>
           <PhoneStage quote={quote} placed={placed} hold={hold} />
         </section>
@@ -272,8 +279,8 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
           </div>
           <div className="hidden items-center rounded-[1.4rem] border border-[#EFECE6] bg-white px-8 py-6 shadow-[0_1px_0_rgba(20,20,20,0.03)] lg:flex">
             <div className="min-w-[14rem] pr-8">
-              <p className="text-sm font-semibold">Trusted by growing savers</p>
-              <p className="mt-1 text-sm text-[#5C6572]">Real people. Real goals. Real progress.</p>
+              <p className="text-sm font-semibold">Beta on Base</p>
+              <p className="mt-1 text-sm text-[#5C6572]">Your vault. Your signature. No second chain hiding behind this screen.</p>
             </div>
             <ul className="grid flex-1 grid-cols-3">
               {stats.map((stat, index) => (

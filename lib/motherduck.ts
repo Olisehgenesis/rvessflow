@@ -5,7 +5,7 @@ import { sql, type SQL } from "drizzle-orm";
 import pg from "pg";
 
 const host = process.env.MOTHERDUCK_HOST || "pg.us-east-1-aws.motherduck.com";
-const database = process.env.MOTHERDUCK_DB || "rvessflow";
+const database = process.env.MOTHERDUCK_DB || "beta";
 
 const globalPool = globalThis as unknown as { rvessMotherDuck?: pg.Pool; rvessMotherDuckDb?: NodePgDatabase };
 

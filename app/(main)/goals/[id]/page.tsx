@@ -95,7 +95,7 @@ async function GoalBody({
         </Facts>
       </div>
       <div className="mt-4">
-        {saving ? <Notice>This is a hold. The fUSDCx stays in your vault and no stream is open. You can add more, or move some back to idle.</Notice> : <Notice>This is a real Superfluid stream. If nobody pauses or settles it, the one-hour cushion is the time left to close it before liquidation.</Notice>}
+        {saving ? <Notice>This is a hold. The USDCx stays in your vault and no stream is open. You can add more, or move some back to idle.</Notice> : <Notice>This is a real Superfluid stream. If nobody pauses or settles it, the one-hour cushion is the time left to close it before liquidation.</Notice>}
       </div>
       {flow.settled ? null : (
         <div className="mt-5 space-y-5">

@@ -20,6 +20,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <p className="flex items-center gap-2 text-sm font-medium">
           <IconMark className="size-8" />
           RvessFlow
+          <span className="rounded-full bg-[#D6F34A] px-2 py-0.5 text-[11px] font-semibold tracking-normal text-[#141414]">Beta</span>
         </p>
         <p className="mt-4 max-w-sm text-lg">A hold stays still. A stream moves every second.</p>
       </aside>
