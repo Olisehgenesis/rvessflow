@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import Loading from "../loading";
-import { GoalLink, KindChoices } from "@/components/product";
+import { GoalLink } from "@/components/product";
 import { Page } from "@/components/ui-bits";
 import { loadQuote } from "@/lib/rates";
 import { loadPortfolio } from "@/lib/protocol";
@@ -18,19 +18,26 @@ export default function GoalsPage() {
 async function GoalsBody() {
   const who = await viewer();
   const [data, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
+  const open = data.flows.filter((flow) => !flow.settled).length;
   return (
     <Page
-      title="Goals"
+      title="Your goals"
       action={
-        <Link href="/goals/new" className="text-sm font-medium text-foreground">
+        <Link href="/goals/new" className="inline-flex h-9 items-center rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground">
           Create goal
         </Link>
       }
     >
+      <p className="mb-3 text-sm text-muted-foreground">{open === 0 ? "No active goals" : `${open} active goal${open === 1 ? "" : "s"}`}</p>
       {data.flows.length === 0 ? (
-        <KindChoices lead="No goals yet. Pick a kind." />
+        <div className="rounded-2xl border border-border bg-card px-4 py-6">
+          <p className="text-sm text-muted-foreground">A saving holds money still. A flow or expense streams it until the end date.</p>
+          <Link href="/goals/new" className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground">
+            Create goal
+          </Link>
+        </div>
       ) : (
-        <ul className="divide-y divide-border">
+        <ul className="space-y-3">
           {data.flows.map((flow) => (
             <li key={flow.id}>
               <GoalLink flow={flow} readAt={data.readAt} quote={quote} />

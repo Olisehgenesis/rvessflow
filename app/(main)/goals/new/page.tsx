@@ -23,8 +23,8 @@ async function NewGoalBody({ searchParams }: { searchParams: Promise<{ kind?: st
   const params = await searchParams;
   const initial = params.kind === "flow" || params.kind === "expense" ? params.kind : "saving";
   return (
-    <Page title="Create goal" back="/home">
-      <p className="mb-4 text-sm text-muted-foreground">{data.me.name} has {labeled(data.wallet, quote)} in this wallet. Creating a goal spends that balance.</p>
+    <Page title="Create goal" back="/goals">
+      <p className="mb-4 text-sm text-muted-foreground">Wallet balance {labeled(data.wallet, quote)}. A goal spends from this wallet.</p>
       <Tabs defaultValue={initial}>
         <TabsList className="grid h-11 w-full grid-cols-3 rounded-full bg-muted p-1">
           <TabsTrigger value="saving" className="rounded-full">Saving</TabsTrigger>

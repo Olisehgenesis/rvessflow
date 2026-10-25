@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import Loading from "../loading";
-import { KindIntro, LockLink } from "@/components/product";
+import { LockLink } from "@/components/product";
 import { Page } from "@/components/ui-bits";
 import { loadQuote } from "@/lib/rates";
 import { loadPortfolio } from "@/lib/protocol";
@@ -18,27 +18,19 @@ export default function VaultsPage() {
 async function VaultsBody() {
   const who = await viewer();
   const [data, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
+  const penalty = `${(data.protocol.penaltyBps / 100).toFixed(2).replace(/\.00$/, "")}%`;
   return (
-    <Page
-      title="Locks"
-      action={
-        <Link href="/vaults/new" className="text-sm font-medium text-foreground">
-          Create lock
-        </Link>
-      }
-    >
-      <p className="mb-4 text-sm text-muted-foreground">
-        Principal stays in the lock contract until the date. Breaking early costs the penalty that was copied when the lock was created. The live default is {(data.protocol.penaltyBps / 100).toFixed(2).replace(/\.00$/, "")}%.
+    <Page title="Vaults">
+      <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+        Lock USDCx until a date. Leaving early costs {penalty} of the principal, copied onto the lock when it is created.
       </p>
       {data.locks.length === 0 ? (
-        <div>
-          <KindIntro kind="lock" />
-          <Link href="/vaults/new" className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground">
-            Lock USDCx
-          </Link>
+        <div className="rounded-2xl border border-border bg-card px-4 py-6">
+          <p className="font-medium">No locks yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">A lock keeps the principal in the lock contract until the unlock date.</p>
         </div>
       ) : (
-        <ul className="divide-y divide-border">
+        <ul className="space-y-3">
           {data.locks.map((lock) => (
             <li key={lock.id}>
               <LockLink lock={lock} quote={quote} />
@@ -46,6 +38,9 @@ async function VaultsBody() {
           ))}
         </ul>
       )}
+      <Link href="/vaults/new" className="mt-5 flex h-12 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
+        Create lock
+      </Link>
     </Page>
   );
 }

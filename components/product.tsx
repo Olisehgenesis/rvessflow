@@ -112,58 +112,89 @@ export function KindChoices({ lead }: { lead?: string }) {
   );
 }
 
-export function GoalLink({ flow, readAt, quote }: { flow: FlowRow; readAt: number; quote: Quote }) {
+export function goalFigures(flow: FlowRow) {
   const saving = flow.kind === "saving";
-  const live = !saving && flow.active && !flow.paused && !flow.settled && readAt < flow.end && BigInt(flow.remaining) > 0n;
   const whole = saving ? flow.goal : flow.reserved;
   const part = saving ? flow.saved : (BigInt(flow.reserved) - BigInt(flow.remaining)).toString();
-  const label = saving ? "Saving goal" : flow.kind === "expense" ? `Expense to ${flow.recipientName}` : "Flow goal";
-  const pace = flow.settled ? "Closed" : live ? "Streaming" : flow.paused ? "Paused" : flow.active ? (saving ? "Holding" : "Open") : "Waiting";
+  const label = saving ? "Saving" : flow.kind === "expense" ? "Expense" : "Flow";
+  return { saving, whole, part, label, progress: percent(part, whole) };
+}
+
+export function goalStatus(flow: FlowRow, readAt: number) {
+  const saving = flow.kind === "saving";
+  const live = !saving && flow.active && !flow.paused && !flow.settled && readAt < flow.end && BigInt(flow.remaining) > 0n;
+  if (flow.settled) return "Closed";
+  if (flow.paused) return "Paused";
+  if (live) return "Streaming";
+  if (flow.active) return saving ? "Holding" : "Open";
+  return "Waiting";
+}
+
+export function GoalLink({ flow, readAt, quote }: { flow: FlowRow; readAt: number; quote: Quote }) {
+  const { whole, part, label, progress } = goalFigures(flow);
+  const live = goalStatus(flow, readAt) === "Streaming";
+  const pace = goalStatus(flow, readAt);
   return (
-    <Link href={`/goals/${flow.id}`} className="flex gap-3 py-4">
-      <ProductMark kind={flow.kind} quiet={flow.settled} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate font-medium">{flow.name}</p>
-            <p className="text-xs text-muted-foreground">{label}</p>
+    <Link href={`/goals/${flow.id}`} className="block rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-start gap-3">
+        <ProductMark kind={flow.kind} size="sm" quiet={flow.settled} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate font-medium">{flow.name}</p>
+              <p className="text-xs text-muted-foreground">{label}</p>
+            </div>
+            <Status>{pace}</Status>
           </div>
-          <Status>{pace}</Status>
         </div>
-        <div className="mt-2 flex items-baseline justify-between gap-3">
-          <p className="font-display text-sm font-semibold tabular-nums">
-            {live ? <FlowingText readAt={readAt} base={part} perSecond={flow.rate} ceiling={flow.reserved} fine quote={quote} /> : show(part, quote)}
-            <span className="font-medium text-muted-foreground"> / {show(whole, quote)}</span>
-          </p>
-          <p className="shrink-0 text-xs text-muted-foreground">{when(flow.end || flow.earliestStart)}</p>
-        </div>
-        <Progress value={percent(part, whole)} indicatorClassName={meta[flow.kind].bar} className="mt-2 h-1.5" />
+      </div>
+      <div className="mt-3 flex items-baseline justify-between gap-3">
+        <p className="font-display text-sm font-semibold tabular-nums">
+          {quote.unit}{" "}
+          {live ? <FlowingText readAt={readAt} base={part} perSecond={flow.rate} ceiling={flow.reserved} fine quote={quote} /> : show(part, quote)}
+          <span className="font-medium text-muted-foreground"> / {show(whole, quote)}</span>
+        </p>
+        <p className="shrink-0 text-xs font-medium tabular-nums">{progress}%</p>
+      </div>
+      <Progress value={progress} indicatorClassName="bg-foreground" className="mt-2 h-1.5 bg-muted" />
+      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+        <span>Ends {when(flow.end || flow.earliestStart)}</span>
+        <span aria-hidden>›</span>
       </div>
     </Link>
   );
 }
 
 export function LockLink({ lock, quote }: { lock: LockRow; quote: Quote }) {
-  const whole = BigInt(lock.target) > 0n ? lock.target : lock.principal;
+  const penalty = `${(lock.penaltyBps / 100).toFixed(2).replace(/\.00$/, "")}%`;
   return (
-    <Link href={`/vaults/${lock.id}`} className="flex gap-3 py-4">
-      <ProductMark kind="lock" quiet={lock.settled} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate font-medium">{lock.name}</p>
-            <p className="text-xs text-muted-foreground">Lock</p>
+    <Link href={`/vaults/${lock.id}`} className="block rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <ProductMark kind="lock" size="sm" quiet={lock.settled} />
+          <div>
+            <p className="font-medium">{lock.name || "USDCx"}</p>
+            <p className="text-xs text-muted-foreground">USDCx</p>
           </div>
-          <Status>{lock.settled ? "Closed" : "Locked"}</Status>
         </div>
-        <div className="mt-2 flex items-baseline justify-between gap-3">
-          <p className="font-display text-sm font-semibold tabular-nums">
-            {show(lock.principal, quote)}
-            <span className="font-medium text-muted-foreground"> / {show(whole, quote)}</span>
-          </p>
-          <p className="shrink-0 text-xs text-muted-foreground">{when(lock.end)}</p>
+        <span aria-hidden className="text-muted-foreground">›</span>
+      </div>
+      <dl className="mt-4 space-y-2 text-sm">
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">Amount locked</dt>
+          <dd className="font-medium tabular-nums">{quote.unit} {show(lock.principal, quote)}</dd>
         </div>
-        <Progress value={percent(lock.principal, whole)} indicatorClassName={meta.lock.bar} className="mt-2 h-1.5" />
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">Unlock date</dt>
+          <dd className="font-medium">{when(lock.end)}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-muted-foreground">Penalty</dt>
+          <dd className="font-medium">{penalty} early unlock</dd>
+        </div>
+      </dl>
+      <div className="mt-3">
+        <Status>{lock.settled ? "Closed" : "Locked"}</Status>
       </div>
     </Link>
   );
@@ -185,7 +216,7 @@ export function GroupLink({
   quote: Quote;
 }) {
   return (
-    <Link href={`/groups/${id}`} className="flex gap-3 py-4">
+    <Link href={`/groups/${id}`} className="flex gap-3 rounded-2xl border border-border bg-card p-4">
       <ProductMark kind="group" quiet={status === "Finished" || status === "Cancelled"} />
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">

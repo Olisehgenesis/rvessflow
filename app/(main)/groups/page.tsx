@@ -78,7 +78,7 @@ async function GroupsBody() {
             </section>
           ) : null}
           {data.groups.length > 0 ? (
-            <ul className="divide-y divide-border">
+            <ul className="space-y-3">
               {data.groups.map((group) => (
                 <li key={group.id}>
                   <GroupLink

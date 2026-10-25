@@ -46,24 +46,29 @@ async function GoalBody({
   const part = saving ? flow.saved : (BigInt(flow.reserved) - BigInt(flow.remaining)).toString();
   const status = flow.settled ? "Closed" : flow.paused ? "Paused" : saving && flow.active ? "Holding" : flow.active ? "Streaming" : "Waiting to start";
   return (
-    <Page title={fresh ? "Goal created" : flow.name} back="/goals">
-      <div className="mb-4">
-        <ProductMark kind={flow.kind} size="xl" quiet={flow.settled} />
-        <div className="mt-3">
-          <p className="font-medium">{saving ? "Saving goal" : flow.kind === "expense" ? "Expense" : "Flow goal"}</p>
+    <Page title={flow.name} back="/goals" action={<span className="rounded-full bg-foreground px-2.5 py-1 text-[11px] font-medium text-background">{status}</span>}>
+      <div className="mb-4 flex items-center gap-3">
+        <ProductMark kind={flow.kind} size="md" quiet={flow.settled} />
+        <div>
+          <p className="font-medium">{saving ? "Saving" : flow.kind === "expense" ? "Expense" : "Flow"}</p>
           <p className="text-sm text-muted-foreground">
             {fresh && saving
-              ? "The money is holding in your vault. You can add more any time. Nothing is streaming."
+              ? "The money is holding. Nothing is streaming."
               : fresh
-                ? "The stream is open. The number on Home moves every second."
-                : status}
+                ? "The stream is open."
+                : flow.kind === "expense"
+                  ? `To ${flow.recipientName}`
+                  : "USDCx"}
           </p>
         </div>
       </div>
-      <div className="mt-2 flex items-baseline gap-2">
-        {live ? <FlowingAmount readAt={data.readAt} base={part} perSecond={flow.rate} ceiling={whole} quote={quote} /> : <Amount value={part} quote={quote} />}
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          {live ? <FlowingAmount readAt={data.readAt} base={part} perSecond={flow.rate} ceiling={whole} quote={quote} /> : <Amount value={part} quote={quote} />}
+          <p className="text-sm text-muted-foreground">of {labeled(whole, quote)}</p>
+        </div>
+        <p className="text-sm font-medium tabular-nums">{percent(part, whole)}%</p>
       </div>
-      <p className="text-sm text-muted-foreground">of {labeled(whole, quote)}</p>
       {live ? (
         <p className="text-sm text-muted-foreground">{show((BigInt(flow.rate) * 86400n).toString(), quote)} every 24 hours.</p>
       ) : null}

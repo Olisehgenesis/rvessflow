@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 
 const MAX_SECONDS = 30 * 365 * 86400;
 
@@ -73,12 +74,15 @@ export function DateField({
   min: Date;
   max: Date;
 }) {
+  const [open, setOpen] = useState(false);
   const [shown, setShown] = useState(() => new Date(value.getFullYear(), value.getMonth(), 1));
   const today = startOfDay(new Date());
   const cells = monthCells(shown.getFullYear(), shown.getMonth());
   const title = `${LONG_MONTHS[shown.getMonth()]} ${shown.getFullYear()}`;
   const earliest = new Date(min.getFullYear(), min.getMonth(), 1);
   const latest = new Date(max.getFullYear(), max.getMonth(), 1);
+  const isToday = sameDay(value, today);
+  const summary = isToday ? `Today · ${formatDay(value)}` : formatDay(value);
 
   function shift(by: number) {
     const next = new Date(shown.getFullYear(), shown.getMonth() + by, 1);
@@ -87,57 +91,81 @@ export function DateField({
   }
 
   return (
-    <fieldset className="m-0 min-w-0 space-y-2 border-0 p-0">
-      <legend className="text-sm font-medium">{label}</legend>
-      {hint ? <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p> : null}
-      <div className="rounded-2xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between gap-3">
-          <p className="font-display text-lg font-semibold tracking-tight">{formatDay(value)}</p>
-          <div className="flex gap-1">
-            <button type="button" className="grid size-8 place-items-center rounded-full text-foreground" aria-label="Previous month" onClick={() => shift(-1)}>
-              ‹
-            </button>
-            <button type="button" className="grid size-8 place-items-center rounded-full text-foreground" aria-label="Next month" onClick={() => shift(1)}>
-              ›
-            </button>
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        onClick={() => {
+          setShown(new Date(value.getFullYear(), value.getMonth(), 1));
+          setOpen(true);
+        }}
+        className="flex w-full items-center justify-between rounded-2xl border border-border bg-card px-4 py-3 text-left"
+      >
+        <span>
+          <span className="block text-xs text-muted-foreground">{label}</span>
+          <span className="mt-0.5 block text-sm font-medium tabular-nums">{summary}</span>
+        </span>
+        <span aria-hidden className="text-muted-foreground">›</span>
+      </button>
+      {hint ? <p className="px-1 text-xs leading-relaxed text-muted-foreground">{hint}</p> : null}
+      {open && typeof document !== "undefined"
+        ? createPortal(
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={label}
+            className="w-full max-w-lg rounded-t-3xl bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg"
+            onClick={(event) => event.stopPropagation()}
+          >
+          <div className="mb-3 flex items-start justify-between">
+            <div>
+              <p className="text-base font-medium">{label}</p>
+              <p className="text-sm text-muted-foreground">{summary}</p>
+            </div>
+            <button type="button" className="grid size-9 place-items-center text-lg" aria-label="Close" onClick={() => setOpen(false)}>×</button>
           </div>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">{title}</p>
-        <div className="mt-3 grid grid-cols-7 gap-y-1 text-center text-[11px] text-muted-foreground">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-            <span key={day}>{day}</span>
-          ))}
-        </div>
-        <div className="mt-1 grid grid-cols-7 gap-y-1">
-          {cells.map((day) => {
-            const outside = day.getMonth() !== shown.getMonth();
-            const disabled = startOfDay(day) < startOfDay(min) || startOfDay(day) > startOfDay(max);
-            const selected = sameDay(day, value);
-            const isToday = sameDay(day, today);
-            return (
-              <button
-                key={day.toISOString()}
-                type="button"
-                disabled={disabled}
-                aria-pressed={selected}
-                aria-label={formatDay(day)}
-                onClick={() => onChange(startOfDay(day))}
-                className={`mx-auto grid size-9 place-items-center rounded-full text-sm tabular-nums ${
-                  selected
-                    ? "bg-primary font-semibold text-primary-foreground"
-                    : isToday
-                      ? "ring-1 ring-foreground"
-                      : outside
-                        ? "text-muted-foreground/40"
-                        : "text-foreground"
-                } disabled:opacity-30`}
-              >
-                {day.getDate()}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </fieldset>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">{title}</p>
+            <div className="flex gap-1">
+              <button type="button" className="grid size-9 place-items-center rounded-full" aria-label="Previous month" onClick={() => shift(-1)}>‹</button>
+              <button type="button" className="grid size-9 place-items-center rounded-full" aria-label="Next month" onClick={() => shift(1)}>›</button>
+            </div>
+          </div>
+          <div className="grid grid-cols-7 text-center text-[11px] text-muted-foreground">
+            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+              <span key={day}>{day}</span>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-y-1 pb-2">
+            {cells.map((day) => {
+              const outside = day.getMonth() !== shown.getMonth();
+              const disabled = startOfDay(day) < startOfDay(min) || startOfDay(day) > startOfDay(max);
+              const selected = sameDay(day, value);
+              const todayCell = sameDay(day, today);
+              return (
+                <button
+                  key={day.toISOString()}
+                  type="button"
+                  disabled={disabled}
+                  aria-pressed={selected}
+                  aria-label={formatDay(day)}
+                  onClick={() => {
+                    onChange(startOfDay(day));
+                    setOpen(false);
+                  }}
+                  className={`mx-auto grid size-9 place-items-center rounded-full text-sm tabular-nums ${
+                    selected ? "bg-primary font-semibold text-primary-foreground" : todayCell ? "ring-1 ring-foreground" : outside ? "text-muted-foreground/40" : "text-foreground"
+                  } disabled:opacity-30`}
+                >
+                  {day.getDate()}
+                </button>
+              );
+            })}
+          </div>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+    </div>
   );
 }

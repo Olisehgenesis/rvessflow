@@ -4,15 +4,15 @@ import type { Quote } from "@/lib/quote";
 
 export function Page({ title, back, children, action }: { title: string; back?: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <main className="px-5 pb-8 pt-5">
-      <header className="mb-5 flex items-center gap-3">
+    <main className="px-4 pb-8 pt-4">
+      <header className={`mb-5 flex items-center gap-2 ${back ? "" : "justify-between"}`}>
         {back ? (
-          <Link href={back} className="grid size-9 place-items-center rounded-full border border-border bg-card text-lg text-foreground" aria-label="Back">
-            ←
+          <Link href={back} className="grid size-9 shrink-0 place-items-center text-xl text-foreground" aria-label="Back">
+            ‹
           </Link>
         ) : null}
-        <h1 className="flex-1 font-display text-xl font-semibold tracking-tight">{title}</h1>
-        {action}
+        <h1 className={`font-display text-lg font-semibold tracking-tight ${back ? "flex-1 text-center" : ""}`}>{title}</h1>
+        {action ? <div className="shrink-0">{action}</div> : back ? <span className="size-9 shrink-0" /> : null}
       </header>
       {children}
     </main>

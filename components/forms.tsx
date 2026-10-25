@@ -21,7 +21,7 @@ import {
   type ActionState,
 } from "@/lib/actions";
 import type { Person } from "@/lib/protocol";
-import { DateField, addDays, dateProblem, formatDay, secondsUntilEnd, startOfDay, streamWindow } from "@/components/date-field";
+import { DateField, addDays, dateProblem, secondsUntilEnd, startOfDay, streamWindow } from "@/components/date-field";
 
 const field = "h-12 rounded-2xl border-border bg-white px-4 text-base shadow-none";
 const FLOW_MIN = 60;
@@ -69,11 +69,10 @@ export function SavingForm() {
   return (
     <form action={action} className="space-y-4">
       <Field label="Name" name="name" placeholder="Emergency fund" />
-      <Field label="Set aside now" name="amount" placeholder="300" inputMode="decimal" />
-      <Field label="Target" name="target" placeholder="1000" inputMode="decimal" hint="The target can be larger than this deposit. Nothing is streamed." />
+      <Field label="Amount" name="amount" placeholder="300,000" inputMode="decimal" />
+      <Field label="Target" name="target" placeholder="1,000,000" inputMode="decimal" hint="The target can be larger than this deposit." />
       <DateField
         label="Ends"
-        hint={`Today is ${formatDay(today)}. The money holds until the selected day.`}
         value={end}
         onChange={setEnd}
         min={today}
@@ -105,6 +104,7 @@ export function StreamForm({ kind, people, me }: { kind: "flow" | "expense"; peo
         <label className="block space-y-1.5">
           <Label>Send to</Label>
           <select name="recipient" className={`${field} w-full`} defaultValue={others[0]?.address}>
+            {others.length === 0 ? <option value="">No other account yet</option> : null}
             {others.map((person) => (
               <option key={person.address} value={person.address}>
                 {person.name}
@@ -113,18 +113,15 @@ export function StreamForm({ kind, people, me }: { kind: "flow" | "expense"; peo
           </select>
         </label>
       ) : (
-        <p className="text-sm text-muted-foreground">This streams the amount back to you. The goal is the amount that will actually move, after the per-second rate is rounded.</p>
+        <p className="text-sm text-muted-foreground">This streams the amount back to you.</p>
       )}
-      <DateField label="Starts" hint={window.startAt === 0 ? "Starts today." : `Starts ${formatDay(start)}.`} value={start} onChange={setStart} min={today} max={latest} />
-      <DateField label="Ends" hint="The stream runs until the end of this day." value={end} onChange={setEnd} min={start} max={latest} />
+      <DateField label="Starts" value={start} onChange={setStart} min={today} max={latest} />
+      <DateField label="Ends" value={end} onChange={setEnd} min={start} max={latest} />
       <input type="hidden" name="startAt" value={problem ? "" : window.startAt} />
       <input type="hidden" name="duration" value={problem ? "" : window.duration} />
       {problem ? <p className="text-sm text-destructive">{problem}</p> : null}
-      <p className="text-sm text-muted-foreground">
-        A stream also sets aside the Superfluid deposit and a one-hour cushion. The wallet deposit covers that. Pausing or settling still needs someone to call the contract.
-      </p>
       <ErrorNote error={state?.error} />
-      <Submit pending={pending || Boolean(problem)}>{kind === "expense" ? "Start expense" : "Start flow"}</Submit>
+      <Submit pending={pending || Boolean(problem)}>Create goal</Submit>
     </form>
   );
 }
@@ -140,11 +137,10 @@ export function LockForm({ penalty, yieldBudget }: { penalty: number; yieldBudge
   return (
     <form action={action} className="space-y-4">
       <Field label="Name" name="name" placeholder="Vacation" />
-      <Field label="Lock amount" name="amount" placeholder="1000" inputMode="decimal" />
-      <Field label="Target" name="target" placeholder="1000" inputMode="decimal" hint="You can top up later. The end date stays." />
+      <Field label="Amount" name="amount" placeholder="500,000" inputMode="decimal" />
+      <Field label="Target" name="target" placeholder="500,000" inputMode="decimal" hint="You can top up later. The end date stays." />
       <DateField
-        label="Unlocks"
-        hint={`Today is ${formatDay(today)}. The principal stays locked until that day.`}
+        label="Unlock date"
         value={end}
         onChange={setEnd}
         min={today}
@@ -162,9 +158,11 @@ export function LockForm({ penalty, yieldBudget }: { penalty: number; yieldBudge
         <Switch checked={earn} onCheckedChange={setEarn} />
         <input type="hidden" name="yield" value={earn ? "on" : "off"} />
       </div>
-      <p className="text-sm text-muted-foreground">Leaving early costs {(penalty / 100).toFixed(2).replace(/\.00$/, "")}% of the principal. That rate is copied onto the lock and does not change later.</p>
+      <p className="rounded-2xl bg-muted px-4 py-3 text-sm leading-relaxed">
+        Leaving early costs {(penalty / 100).toFixed(2).replace(/\.00$/, "")}% of the principal. That rate is copied onto the lock.
+      </p>
       <ErrorNote error={state?.error} />
-      <Submit pending={pending || Boolean(problem)}>Lock now</Submit>
+      <Submit pending={pending || Boolean(problem)}>Create lock</Submit>
     </form>
   );
 }
@@ -192,7 +190,7 @@ export function AmountAction({
 }
 
 export function AddFunds(props: { id: string }) {
-  return <AmountAction {...props} action={doAddFunds} label="Add funds" />;
+  return <AmountAction {...props} action={doAddFunds} label="Add to goal" />;
 }
 export function ReleaseFunds(props: { id: string }) {
   return <AmountAction {...props} action={doRelease} label="Move back to idle" />;
@@ -218,7 +216,7 @@ export function NamedAction({ id, fn, action, label, tone = "primary" }: { id: s
 export function VaultButtons({ id, paused, canSettle }: { id: string; paused: boolean; canSettle: boolean }) {
   return (
     <div className="space-y-2">
-      {paused ? <NamedAction id={id} fn="resume" action={doVault} label="Resume" /> : <NamedAction id={id} fn="pause" action={doVault} label="Pause" />}
+      {paused ? <NamedAction id={id} fn="resume" action={doVault} label="Resume goal" /> : <NamedAction id={id} fn="pause" action={doVault} label="Pause goal" tone="quiet" />}
       {canSettle ? <NamedAction id={id} fn="settle" action={doVault} label="Settle and free the slot" /> : null}
       <NamedAction id={id} fn="cancel" action={doVault} label="Close and return funds" tone="quiet" />
     </div>

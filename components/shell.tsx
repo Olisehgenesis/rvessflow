@@ -24,8 +24,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </p>
         <p className="mt-4 max-w-sm text-lg">A hold stays still. A stream moves every second.</p>
       </aside>
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-background lg:border-l lg:border-border">
-        <div className="flex-1">{children}</div>
+      <div className="relative mx-auto flex h-dvh w-full max-w-lg flex-col bg-background lg:h-dvh lg:border-l lg:border-border">
+        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
         <Suspense fallback={<div className="sticky bottom-0 h-14 border-t border-border bg-card" />}>
           <BottomNav />
         </Suspense>
@@ -37,7 +37,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 function BottomNav() {
   const pathname = usePathname();
   return (
-    <nav className="sticky bottom-0 z-20 border-t border-border bg-card px-2 pt-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))]">
+    <nav className="z-20 shrink-0 border-t border-border bg-card px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       <ul className="grid grid-cols-5">
         {items.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -46,7 +46,7 @@ function BottomNav() {
             <li key={item.href}>
               <Link
                 href={item.href}
-                className={`flex flex-col items-center gap-0.5 py-1.5 text-[11px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${active ? "font-semibold text-foreground" : "text-muted-foreground"}`}
+                className={`flex min-h-11 flex-col items-center justify-center gap-0.5 py-1 text-[11px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${active ? "font-semibold text-foreground" : "text-muted-foreground"}`}
               >
                 <Icon className="size-5" />
                 <span className={active ? "font-semibold" : ""}>{item.label}</span>
