@@ -394,7 +394,10 @@ export function ReviewDeposit({ pay, usd, preview }: { pay: PayAsset; usd: strin
         <Detail label="Amount (in)" value={preview.amountIn} hint={`≈ $${preview.amountInUsd}`} />
         <Detail label="Estimated received" value={`$${preview.receiveUsd}`} hint={`${preview.wrappedUsdc} USDC wrapped`} />
         <Detail label="Protocol fee" value={`$${preview.protocolFeeUsd} (${preview.protocolFeePct})`} />
-        <Detail label="Network fee" value={preview.networkFeeKnown ? `$${preview.networkFeeUsd} (est.)` : "Unavailable"} />
+        <Detail
+          label="Network fee"
+          value={preview.networkFeeKnown ? (preview.networkFeeSubCent ? "< $0.01 (est.)" : `$${preview.networkFeeUsd} (est.)`) : "Unavailable"}
+        />
         <Detail label="Total fees" value={preview.totalFeeKnown ? `$${preview.totalFeeUsd}` : "Unavailable"} />
         <Detail label="Exchange rate" value={preview.rate} />
         <Detail label="Slippage tolerance" value={preview.slippage} />
