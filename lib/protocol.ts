@@ -17,21 +17,38 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { base } from "viem/chains";
+import { base, baseSepolia } from "viem/chains";
 import { money, shortAddress } from "@/lib/display";
 
-export const chain = base;
-export const rpcUrl = process.env.BASE_RPC_URL || "https://mainnet.base.org";
-export const explorer = "https://basescan.org";
+const testnet = process.env.RVESS_NETWORK === "sepolia";
 
-export const addresses = {
-  allowlist: "0x34e748f13c294ED3b8Cdd1dd65C45b58981dBe8b" as Address,
-  factory: "0xc21B7Bd68F8235b7DB2827334d2039fD8B3C118d" as Address,
-  locks: "0x68B0667E098A62b3e3F437DBeb0aEdB746cD4c41" as Address,
-  groups: "0x13008059FAd0348Fb8848A0737F9E826C82199fa" as Address,
-  fusdcx: "0xD04383398dD2426297da660F9CCA3d439AF9ce1b" as Address,
-  cfa: "0xcfA132E353cB4E398080B9700609bb008eceB125" as Address,
-};
+export const chain = testnet ? baseSepolia : base;
+export const rpcUrl = testnet
+  ? process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org"
+  : process.env.BASE_RPC_URL || "https://mainnet.base.org";
+export const explorer = testnet ? "https://sepolia.basescan.org" : "https://basescan.org";
+export const networkName = testnet ? "Base Sepolia" : "Base";
+export const stableLabel = testnet ? "fUSDCx" : "USDCx";
+
+export const addresses = testnet
+  ? {
+      allowlist: "0xed115A3Ac77036fD7f4ec4B597d655B486d7AB6D" as Address,
+      factory: "0x18E484ca13A7e63511343EB474C13e04C0929354" as Address,
+      locks: "0x99F4f175e117a16D554AEAbee4a2a5b754c2540E" as Address,
+      groups: "0x70f5CF80052E8a8E0e5e252d33cd15F059956E3D" as Address,
+      fusdcx: "0x1650581F573eAd727B92073B5Ef8B4f5B94D1648" as Address,
+      ethx: "0x143ea239159155B408e71CDbE836e8CFD6766732" as Address,
+      cfa: "0xcfA132E353cB4E398080B9700609bb008eceB125" as Address,
+    }
+  : {
+      allowlist: "0x34e748f13c294ED3b8Cdd1dd65C45b58981dBe8b" as Address,
+      factory: "0xc21B7Bd68F8235b7DB2827334d2039fD8B3C118d" as Address,
+      locks: "0x68B0667E098A62b3e3F437DBeb0aEdB746cD4c41" as Address,
+      groups: "0x13008059FAd0348Fb8848A0737F9E826C82199fa" as Address,
+      fusdcx: "0xD04383398dD2426297da660F9CCA3d439AF9ce1b" as Address,
+      ethx: "0x46fd5cfB4c12D87acD3a13e92BAa53240C661D93" as Address,
+      cfa: "0xcfA132E353cB4E398080B9700609bb008eceB125" as Address,
+    };
 
 export const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
 

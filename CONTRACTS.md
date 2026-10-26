@@ -14,7 +14,7 @@ Support managers are a separate list on the allowlist. The owner adds and remove
 
 Each person gets one `FlowVault`, and each flow gets one `FlowConduit`. Both are beacon proxies. The factory owner calls `scheduleVaultUpgrade` or `scheduleConduitUpgrade`, waits two days, then `upgradeVaults` or `upgradeConduits`. A new vault implementation must be constructed with the same Superfluid host and CFA forwarder.
 
-`contractVersion` returns `3` on the allowlist, `2` on the factory, `3` on the lock vault, and `4` on the group. The Base Sepolia proxies are still on the previous versions until the owner schedules this upgrade and waits two days.
+`contractVersion` returns `3` on the allowlist, `2` on the factory, `3` on the lock vault, and `4` on the group. The 26 October 2026 Base Sepolia deployment owned by the 2-of-3 Safe returns those versions. The older Sepolia proxies are still on allowlist 2 and group 3.
 
 ## TokenAllowlist
 
@@ -145,7 +145,53 @@ Source for every address above, including the OpenZeppelin proxies and beacons, 
 
 ### Base Sepolia
 
-The app reads the Base mainnet contracts above. This Sepolia set is unchanged. Its owner is `0xB1819b7287B8e709A526D942f5c3e1ae7389054D`. The mainnet deployment did not change these proxies.
+Deployed 26 October 2026. Localhost reads this set when `RVESS_NETWORK=sepolia`. Production still reads Base mainnet. The owner is a 2-of-3 Safe. Jamie, Alex, and Taylor are the signers. Any two of them can act. One is not enough. fUSDCx and ETHx are allowlisted. No keeper was set. `contractVersion` is 3 on the allowlist, 2 on the factory, 3 on the lock vault, and 4 on the group. Gas was paid by `0xB1819b7287B8e709A526D942f5c3e1ae7389054D`.
+
+| | Address |
+| --- | --- |
+| Jamie | `0x7190De5bf1dEDEad830ba81F64e70801Dc575797` |
+| Alex | `0x8351f673C77CB49Fe25d4bB6F2198c01167C9b51` |
+| Taylor | `0xfccEAFCe6A372ed3181E041f07A33fe1503c7176` |
+| Owner | `0xA9741381a7bd12Ed9c6354D685438ecD66d8eD56` |
+| Allowlist implementation | `0x30dA2123603773721a21569bf2A9a23d91BB29EF` |
+| Allowlist | `0xed115A3Ac77036fD7f4ec4B597d655B486d7AB6D` |
+| Conduit implementation | `0x34977B0f54d2fdF26cC9342475A68e8519526583` |
+| Vault implementation | `0x67C5183E0850AE5697d0Fa47AAf18F43F8D52c1A` |
+| Factory implementation | `0xb716271BA253f7daF2Eac60370AAf9D778c8Db39` |
+| Factory | `0x18E484ca13A7e63511343EB474C13e04C0929354` |
+| Lock vault implementation | `0xA964cd3d54FaA1081e787FC76a3C2c0666706565` |
+| Lock vault | `0x99F4f175e117a16D554AEAbee4a2a5b754c2540E` |
+| Group implementation | `0xBe4C482A15C9abcD6d07F927A1E65778f9e2f0EB` |
+| Group | `0x70f5CF80052E8a8E0e5e252d33cd15F059956E3D` |
+
+An earlier deploy the same day is owned by the single testnet wallet `0xB1819b7287B8e709A526D942f5c3e1ae7389054D`. Localhost does not read it.
+
+| | Address |
+| --- | --- |
+| Owner | `0xB1819b7287B8e709A526D942f5c3e1ae7389054D` |
+| Allowlist implementation | `0x83f92BbF36B3571d6D277833f6a270aCdDB87422` |
+| Allowlist | `0x2321F908B9A7d57529f1AcB9C47d307D91508bfa` |
+| Conduit implementation | `0xd3a0fe447Ca47ce7be6d9a534b70E5FdD4433c2e` |
+| Vault implementation | `0x00F9F4D841D0Df171Da35FE0fC8554dbE72d798C` |
+| Factory implementation | `0xBBd32A69ad5C11aeAD09b702F4F191f1458abF09` |
+| Factory | `0xC316c9fF147d5eb859e328f113b74805a3eC128a` |
+| Lock vault implementation | `0x0B2918a44C58302e94A53f0c46676a891DE7D898` |
+| Lock vault | `0xb75Ba3e52afA970AE6D396e3d3dcD9d64575e44A` |
+| Group implementation | `0xE6f1E77c63c97da7a7492d0086C708fE92a8C53C` |
+| Group | `0xDE28D909dc07eF47c1e75c6252828bF490685589` |
+
+The constructors also created these contracts. The live beacons are the ones owned by the factory proxy. The yield payer used by the lock vault is the second one.
+
+| | Address |
+| --- | --- |
+| Vault code extension | `0x6dA02741f9F1128AD9e4f3899B2E3Bf1E6C52a4d` |
+| Group extension | `0xa87E0B959B00570c392e35a2e02C8218d8B81631` |
+| Yield payer, lock implementation | `0x9749E82B22e35f521E2e7f59bB08F1494A8406E8` |
+| Yield payer, lock vault | `0xC3254D598AC2C7776ed7cc2e9Ff4Be9b290Be28d` |
+| Vault beacon | `0x096a9a24eFeE2B07664b90b383C881Fd67D3653b` |
+| Conduit beacon | `0x8ebE77Eb0BD47D67237Cf3D9a31c0B5F0961Ba4e` |
+
+An earlier Sepolia deployment is still on chain and was not upgraded. Its owner is the same wallet. Allowlist version 2, factory 2, lock vault 3, group 3.
 
 | | Address |
 | --- | --- |

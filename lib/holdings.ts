@@ -5,7 +5,7 @@ import { baseMarket } from "@/lib/base-market";
 import { maxUsdInput } from "@/lib/deposit-math";
 import { formatAmount, formatUsd8, type PayAsset } from "@/lib/pay-math";
 import { loadPrices } from "@/lib/prices";
-import { erc20, publicClient, type Portfolio } from "@/lib/protocol";
+import { addresses, erc20, publicClient, type Portfolio } from "@/lib/protocol";
 import type { Quote } from "@/lib/quote";
 
 export type HoldingRow = {
@@ -57,19 +57,25 @@ function money(usd8: bigint): string {
   return formatUsd8(usd8);
 }
 
+async function tokenBalance(token: Address, owner: Address): Promise<bigint> {
+  const code = await publicClient.getCode({ address: token });
+  if (!code || code === "0x") return 0n;
+  return publicClient.readContract({ address: token, abi: erc20, functionName: "balanceOf", args: [owner] });
+}
+
 export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: Quote): Promise<HoldingsView> {
   const [prices, usdc, usdt, eth, ethx] = await Promise.all([
     loadPrices(),
-    publicClient.readContract({ address: baseMarket.usdc, abi: erc20, functionName: "balanceOf", args: [owner] }),
-    publicClient.readContract({ address: baseMarket.usdt, abi: erc20, functionName: "balanceOf", args: [owner] }),
+    tokenBalance(baseMarket.usdc, owner),
+    tokenBalance(baseMarket.usdt, owner),
     publicClient.getBalance({ address: owner }),
-    publicClient.readContract({ address: baseMarket.ethx, abi: erc20, functionName: "balanceOf", args: [owner] }),
+    tokenBalance(addresses.ethx, owner),
   ]);
   const usdSuper =
     BigInt(portfolio.wallet) + BigInt(portfolio.idle) + BigInt(portfolio.held) + BigInt(portfolio.streaming) + BigInt(portfolio.locked);
   let wrappedEth = ethx;
   for (const lock of portfolio.locks) {
-    if (!lock.settled && lock.token.toLowerCase() === baseMarket.ethx.toLowerCase()) wrappedEth += BigInt(lock.principal);
+    if (!lock.settled && lock.token.toLowerCase() === addresses.ethx.toLowerCase()) wrappedEth += BigInt(lock.principal);
   }
   const priced = [
     { key: "usdc", label: "USDC", amount: formatAmount(usdc, 6, 2), value: valueOf(usdc, 6, prices.usdcUsd8) },
@@ -122,8 +128,8 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
 export async function loadPayChoices(owner: Address): Promise<PayChoice[]> {
   const [prices, usdc, usdt, eth] = await Promise.all([
     loadPrices(),
-    publicClient.readContract({ address: baseMarket.usdc, abi: erc20, functionName: "balanceOf", args: [owner] }),
-    publicClient.readContract({ address: baseMarket.usdt, abi: erc20, functionName: "balanceOf", args: [owner] }),
+    tokenBalance(baseMarket.usdc, owner),
+    tokenBalance(baseMarket.usdt, owner),
     publicClient.getBalance({ address: owner }),
   ]);
   return [

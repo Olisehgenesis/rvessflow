@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { ProfileForm } from "@/components/circle";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { InstallButton } from "@/components/install-app";
 import { CurrencyPick } from "@/components/currency-pick";
 import { AccountSwitch } from "@/components/forms";
@@ -10,7 +11,7 @@ import { contactIfReady } from "@/lib/circle";
 import { labeled, money, shortAddress } from "@/lib/display";
 import { loadQuote } from "@/lib/rates";
 import { signOut } from "@/lib/actions";
-import { addresses, explorer, loadPortfolio } from "@/lib/protocol";
+import { addresses, explorer, loadPortfolio, networkName, stableLabel } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
 export default function SettingsPage() {
@@ -43,7 +44,12 @@ async function SettingsBody() {
         <CurrencyPick code={quote.code} />
       </div>
       {quote.note ? <p className="mb-4 text-sm text-muted-foreground">{quote.note}</p> : null}
-      <p className="mb-3 text-sm text-muted-foreground">Signed in as {data.me.name}. {signedIn}</p>
+      <div className="mb-4 flex items-center gap-3">
+        <ProfileAvatar seed={who.address} className="size-12" />
+        <p className="text-sm text-muted-foreground">
+          Signed in as {data.me.name}. {signedIn}
+        </p>
+      </div>
       {directory.down ? (
         <p className="mb-4 text-sm text-muted-foreground">The member directory is unavailable, so the profile cannot load.</p>
       ) : (
@@ -72,12 +78,12 @@ async function SettingsBody() {
       )}
       <div className="mt-6">
       <Facts>
-        <Fact label="Network" value="Base" />
+        <Fact label="Network" value={networkName} />
         <Fact label="Account" value={shortAddress(data.me.address)} />
         <Fact label="Gas" value={`${Number(data.eth).toFixed(4)} ETH`} />
         <Fact label="Savings on chain" value={`${money(data.total)} USD`} />
         <Fact label="Vault" value={data.vault ? shortAddress(data.vault) : "Not created yet"} />
-        <Fact label="USD token" value={data.protocol.tokenAllowed ? "Allowlisted (USDCx)" : "Not allowlisted"} />
+        <Fact label="USD token" value={data.protocol.tokenAllowed ? `Allowlisted (${stableLabel})` : "Not allowlisted"} />
         <Fact label="New positions" value={data.protocol.paused ? "Paused" : "Open"} />
         <Fact label="Lock penalty" value={`${(data.protocol.penaltyBps / 100).toFixed(2).replace(/\.00$/, "")}%`} />
         <Fact label="Yield budget" value={labeled(data.protocol.yieldBudget, quote)} />

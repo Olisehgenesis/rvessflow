@@ -34,14 +34,16 @@ abstract contract DeployRvess is Script {
             host = SuperfluidAddresses.BASE_SEPOLIA_HOST;
         }
         TokenAllowlist allow = TokenAllowlist(
-            _proxy(address(new TokenAllowlist(deployer)), abi.encodeCall(TokenAllowlist.initialize, (deployer)))
+            _proxy(address(new TokenAllowlist(deployer)), abi.encodeWithSignature("initialize(address)", deployer))
         );
         FlowConduit conduit = new FlowConduit(cfa);
         FlowVault implementation = new FlowVault(host, cfa, address(conduit));
         VaultFactory factory = VaultFactory(
             _proxy(
                 address(new VaultFactory(deployer, address(allow), address(implementation))),
-                abi.encodeCall(VaultFactory.initialize, (deployer, address(allow), address(implementation)))
+                abi.encodeWithSignature(
+                    "initialize(address,address,address)", deployer, address(allow), address(implementation)
+                )
             )
         );
         LockVault locks = LockVault(

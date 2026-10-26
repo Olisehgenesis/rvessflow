@@ -2,7 +2,7 @@ import "server-only";
 
 import { parseAbi, type Address } from "viem";
 import { baseMarket } from "@/lib/base-market";
-import { publicClient } from "@/lib/protocol";
+import { chain, publicClient } from "@/lib/protocol";
 
 const feedAbi = parseAbi([
   "function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
@@ -49,6 +49,17 @@ async function ethFallback(): Promise<bigint> {
 export async function loadPrices(): Promise<Prices> {
   if (cache && Date.now() - cache.at < ttlMs) return cache.prices;
   const now = Math.floor(Date.now() / 1000);
+  if (chain.id === 84532) {
+    let ethUsd8 = 0n;
+    try {
+      ethUsd8 = await ethFallback();
+    } catch {
+      ethUsd8 = 0n;
+    }
+    const prices: Prices = { ethUsd8, usdcUsd8: 100_000_000n, usdtUsd8: 100_000_000n, updatedAt: now };
+    cache = { at: Date.now(), prices };
+    return prices;
+  }
   const fresh = (updatedAt: number) => updatedAt > 0 && now - updatedAt < maxAgeSeconds;
   try {
     const [eth, usdc, usdt] = await Promise.all([

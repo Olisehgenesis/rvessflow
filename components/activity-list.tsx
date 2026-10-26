@@ -26,7 +26,15 @@ export function ActivityList({ items, quote }: { items: ActivityItem[]; quote: Q
       {items.map((item) => (
         <li key={item.id}>
           <Link href={item.href} className="flex items-center gap-3 px-4 py-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-muted text-foreground">
+            <span
+              className={`grid size-10 shrink-0 place-items-center rounded-full ${
+                item.title === "Locked" || item.title === "Unlocked" || item.title === "Unlocked early"
+                  ? "bg-[#E7F6D8] text-[#3C9A34]"
+                  : item.direction === "out"
+                    ? "bg-[#EDE7FF] text-[#7A5CDB]"
+                    : "bg-[#E7F6D8] text-[#3C9A34]"
+              }`}
+            >
               {item.title === "Locked" || item.title === "Unlocked" || item.title === "Unlocked early" ? (
                 <IconLock className="size-4" />
               ) : item.direction === "out" ? (

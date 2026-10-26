@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { IconChevron, IconInfo } from "@/components/icons";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { PayWith, ReceiveWith, type PayChoice } from "@/components/pay-with";
 import { useSignedAction } from "@/components/sign-action";
 import { Button } from "@/components/ui/button";
@@ -51,11 +52,14 @@ export function AccountSwitch({ people, current }: { people: Person[]; current: 
           <input type="hidden" name="index" value={index} />
           <button
             type="submit"
-            className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left ${on ? "border-foreground bg-muted" : "border-border bg-card"}`}
+            className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left ${on ? "border-foreground bg-muted" : "border-border bg-card"}`}
           >
-            <span>
-              <span className="block font-medium">{person.name}</span>
-              <span className="block text-xs text-muted-foreground">{person.address}</span>
+            <span className="flex min-w-0 items-center gap-3">
+              <ProfileAvatar seed={person.address} className="size-10" />
+              <span className="min-w-0">
+                <span className="block font-medium">{person.name}</span>
+                <span className="block truncate text-xs text-muted-foreground">{person.address}</span>
+              </span>
             </span>
             {on ? <span className="text-xs font-semibold text-foreground">Using</span> : null}
           </button>
