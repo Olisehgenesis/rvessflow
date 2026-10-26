@@ -108,6 +108,7 @@ async function HomeReady({
         streaming={holdings.streaming}
         locked={holdings.locked}
         idleUsd={holdings.idleUsd}
+        network={networkName}
         showWithdraw={funded}
       />
       {portfolio.vault ? null : (
