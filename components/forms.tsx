@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { IconChevron, IconInfo } from "@/components/icons";
 import { ProfileAvatar } from "@/components/profile-avatar";
+import { TokenIcon } from "@/components/token-icon";
 import { PayWith, ReceiveWith, type PayChoice } from "@/components/pay-with";
 import { useSignedAction } from "@/components/sign-action";
 import { Button } from "@/components/ui/button";
@@ -202,11 +203,7 @@ export function LockForm({ penalty, quote, choices }: { penalty: number; quote: 
 }
 
 export function TokenMark({ symbol }: { symbol: string }) {
-  return (
-    <span className="grid size-10 place-items-center rounded-full border border-border bg-card text-sm font-semibold">
-      {symbol === "ETHx" ? "Ξ" : "$"}
-    </span>
-  );
+  return <TokenIcon symbol={symbol} className="size-10" />;
 }
 
 export function AddMoneyForm({ choices }: { choices: PayChoice[] }) {
@@ -215,7 +212,7 @@ export function AddMoneyForm({ choices }: { choices: PayChoice[] }) {
     <form action={action} className="space-y-4">
       <PayWith choices={choices} mode="vault" full />
       <ErrorNote error={state?.error} />
-      <Submit pending={pending}>Add money</Submit>
+      <Submit pending={pending}>Top up</Submit>
     </form>
   );
 }

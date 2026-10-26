@@ -1,27 +1,19 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconDown, IconHome, IconLock, IconMark, IconMore, IconPeople, IconPlay, IconSeed } from "@/components/icons";
+import { CreateMenu } from "@/components/create-menu";
+import { IconMark } from "@/components/icons";
 
 const left = [
-  { href: "/home", label: "Home", icon: IconHome },
-  { href: "/goals", label: "Goals", icon: IconSeed },
+  { href: "/home", label: "Home", src: "/nav/home.png" },
+  { href: "/goals", label: "Goals", src: "/nav/goals.png" },
 ];
 
 const right = [
-  { href: "/groups", label: "Groups", icon: IconPeople },
-  { href: "/settings", label: "More", icon: IconMore },
-];
-
-const creates = [
-  { href: "/home/add", label: "Add money", body: "USDC, USDT, ETH, card, or mobile money.", icon: IconDown },
-  { href: "/goals/new", label: "Create a goal", body: "Save toward something.", icon: IconSeed },
-  { href: "/goals/new?kind=flow", label: "Start a stream", body: "Send or receive on a schedule.", icon: IconPlay },
-  { href: "/vaults/new", label: "Create a lock", body: "Keep funds until a date.", icon: IconLock },
-  { href: "/groups/new", label: "Start a group", body: "Save with other people.", icon: IconPeople },
-  { href: "/vaults", label: "Your vaults", body: "Locks already on Base.", icon: IconLock },
+  { href: "/groups", label: "Groups", src: "/nav/groups.png" },
+  { href: "/settings", label: "More", src: "/nav/more.png" },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -31,7 +23,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <p className="flex items-center gap-2 text-sm font-medium">
           <IconMark className="size-8" />
           RvessFlow
-          <span className="rounded-full bg-[#D6F34A] px-2 py-0.5 text-[11px] font-semibold tracking-normal text-[#141414]">Beta</span>
+          <span className="rounded-full bg-[#D4F06B] px-2 py-0.5 text-[11px] font-semibold tracking-normal text-[#141B2D]">Beta</span>
         </p>
         <p className="mt-4 max-w-sm text-lg">A hold stays still. A stream moves every second.</p>
       </aside>
@@ -51,72 +43,42 @@ function hidesNav(pathname: string) {
 
 function BottomNav() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
   if (hidesNav(pathname)) return null;
   return (
-    <>
-      {open ? <button type="button" aria-label="Close create menu" className="fixed inset-0 z-20 cursor-default" onClick={() => setOpen(false)} /> : null}
-    <nav className="relative z-30 shrink-0 border-t border-border bg-card px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      {open ? (
-        <div className="absolute right-3 bottom-full left-3 mb-3 overflow-hidden rounded-2xl border border-border bg-white shadow-[0_16px_40px_-24px_rgba(0,0,0,0.45)]">
-          {creates.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-3 border-b border-border px-3.5 py-3 last:border-b-0"
-              >
-                <span className="grid size-9 place-items-center rounded-full bg-[#F4F8EE] text-[#141414]">
-                  <Icon className="size-4" />
-                </span>
-                <span>
-                  <span className="block text-sm font-semibold">{item.label}</span>
-                  <span className="block text-xs text-muted-foreground">{item.body}</span>
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      ) : null}
+    <nav className="z-20 shrink-0 bg-card px-2 pt-1 pb-[max(0.45rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(20,27,45,0.05)]">
       <ul className="grid grid-cols-5 items-end">
         {left.map((item) => (
-          <NavItem key={item.href} item={item} pathname={pathname} />
+          <NavTab key={item.href} item={item} pathname={pathname} />
         ))}
         <li className="flex justify-center">
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-label={open ? "Close create menu" : "Create"}
-            onClick={() => setOpen((value) => !value)}
-            className="-mt-6 grid size-12 place-items-center rounded-full bg-[#D6F34A] text-[#141414] shadow-[0_8px_20px_-10px_rgba(20,20,20,0.55)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
-          >
-            <span className={`text-2xl leading-none font-medium ${open ? "rotate-45" : ""}`}>+</span>
-          </button>
+          <CreateMenu />
         </li>
         {right.map((item) => (
-          <NavItem key={item.href} item={item} pathname={pathname} />
+          <NavTab key={item.href} item={item} pathname={pathname} />
         ))}
       </ul>
     </nav>
-    </>
   );
 }
 
-function NavItem({ item, pathname }: { item: { href: string; label: string; icon: typeof IconHome }; pathname: string }) {
-  const active = pathname === item.href || (item.href !== "/settings" && pathname.startsWith(`${item.href}/`)) || (item.href === "/settings" && pathname.startsWith("/settings"));
-  const Icon = item.icon;
+function NavTab({
+  item,
+  pathname,
+}: {
+  item: { href: string; label: string; src: string };
+  pathname: string;
+}) {
+  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
   return (
     <li>
       <Link
         href={item.href}
-        className={`flex min-h-11 flex-col items-center justify-center gap-0.5 py-1 text-[11px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${active ? "font-semibold text-foreground" : "text-muted-foreground"}`}
+        className={`flex min-h-12 flex-col items-center justify-end gap-1 pb-1 text-[11px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${active ? "font-semibold text-foreground" : "text-muted-foreground"}`}
       >
-        <span className={active ? "grid size-8 place-items-center rounded-full bg-[#D6F34A]" : "grid size-8 place-items-center"}>
-          <Icon className="size-5" />
+        <span className={`grid h-8 place-items-center rounded-full px-3 ${active ? "bg-[#D4F06B]" : ""}`}>
+          <img src={item.src} alt="" className="size-7 object-contain" />
         </span>
-        <span>{item.label}</span>
+        {item.label}
       </Link>
     </li>
   );

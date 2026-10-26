@@ -20,7 +20,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { base, baseSepolia } from "viem/chains";
 import { money, shortAddress } from "@/lib/display";
 
-const testnet = process.env.RVESS_NETWORK === "sepolia";
+const testnet = (process.env.RVESS_NETWORK || process.env.NEXT_PUBLIC_RVESS_NETWORK) === "sepolia";
 
 export const chain = testnet ? baseSepolia : base;
 export const rpcUrl = testnet

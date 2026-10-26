@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node scripts/run.mjs dev",
+    "build": "node scripts/run.mjs build",
+    "start": "node scripts/run.mjs start",
     "lint": "eslint app components lib test",
-    "test": "node --experimental-strip-types --import ./test/register.mjs --test test/pay.test.ts test/deposit.test.ts test/onramp.test.ts"
+    "test": "node --experimental-strip-types --import ./test/register.mjs --test test/pay.test.ts test/deposit.test.ts test/onramp.test.ts test/home.test.ts"
   },
   "dependencies": {
     "@dicebear/core": "^9.4.2",

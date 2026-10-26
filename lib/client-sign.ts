@@ -1,14 +1,17 @@
 "use client";
 
 import { createPublicClient, http, type Address, type Hash, type Hex } from "viem";
-import { base } from "viem/chains";
+import { base, baseSepolia } from "viem/chains";
 import { walletProvider } from "@/lib/auth-client";
 import type { PreparedCall, SignPayload } from "@/lib/intent";
 import { readPasskeys } from "@/lib/passkey-vault";
 
-const rpc = process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+const testnet = process.env.NEXT_PUBLIC_RVESS_NETWORK === "sepolia";
+const rpc = testnet
+  ? process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://sepolia.base.org"
+  : process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
 
-const client = createPublicClient({ chain: base, transport: http(rpc) });
+const client = createPublicClient({ chain: testnet ? baseSepolia : base, transport: http(rpc) });
 
 async function wait(hash: Hash) {
   const receipt = await client.waitForTransactionReceipt({ hash, timeout: 120_000 });

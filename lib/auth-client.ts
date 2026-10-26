@@ -4,7 +4,10 @@ import { isAddress } from "viem";
 import { openSession } from "@/lib/actions";
 import { savePasskey, type SavedPasskey } from "@/lib/passkey-vault";
 
-const rpc = "https://mainnet.base.org";
+const testnet = process.env.NEXT_PUBLIC_RVESS_NETWORK === "sepolia";
+const rpc = testnet
+  ? process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://sepolia.base.org"
+  : process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
 
 export const walletConnectProjectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "fb48461bfb6043c40729e05706109f1a";
@@ -15,11 +18,12 @@ let providerPromise: Promise<EthereumProvider> | null = null;
 
 export function walletProvider() {
   providerPromise ??= (async () => {
-    const { base } = await import("viem/chains");
+    const { base, baseSepolia } = await import("viem/chains");
+    const chain = testnet ? baseSepolia : base;
     const { default: EthereumProvider } = await import("@walletconnect/ethereum-provider");
     return EthereumProvider.init({
       projectId: walletConnectProjectId,
-      chains: [base.id],
+      chains: [chain.id],
       showQrModal: true,
       metadata: {
         name: "RvessFlow",
@@ -27,7 +31,7 @@ export function walletProvider() {
         url: window.location.origin,
         icons: [`${window.location.origin}/icon-512.png`],
       },
-      rpcMap: { [base.id]: rpc },
+      rpcMap: { [chain.id]: rpc },
     });
   })();
   return providerPromise;
@@ -35,7 +39,7 @@ export function walletProvider() {
 
 export async function createPasskeyWallet(label: string): Promise<{ address: string; label: string }> {
   const name = label.trim().slice(0, 32) || "Passkey";
-  const [{ createPublicClient, http }, { base }, accountAbstraction, { toKernelSmartAccount }] = await Promise.all([
+  const [{ createPublicClient, http }, chains, accountAbstraction, { toKernelSmartAccount }] = await Promise.all([
     import("viem"),
     import("viem/chains"),
     import("viem/account-abstraction"),
@@ -50,7 +54,7 @@ export async function createPasskeyWallet(label: string): Promise<{ address: str
     rpId: window.location.hostname,
   });
   const account = await toKernelSmartAccount({
-    client: createPublicClient({ chain: base, transport: http(rpc) }),
+    client: createPublicClient({ chain: testnet ? chains.baseSepolia : chains.base, transport: http(rpc) }),
     owners: [owner],
     version: "0.3.1",
     entryPoint: { address: accountAbstraction.entryPoint07Address, version: "0.7" },

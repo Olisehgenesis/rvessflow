@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toggleConceal, useConceal } from "@/components/balance-card";
+import { TokenIcon } from "@/components/token-icon";
 import { CopyButton } from "@/components/copy-button";
 import { IconBack, IconCheck, IconChevron, IconClock, IconClose, IconExternal, IconEye, IconEyeOff, IconInfo, IconSearch } from "@/components/icons";
 import { addMoney, continueIntent, previewDeposit } from "@/lib/actions";
@@ -16,11 +17,7 @@ import type { PayAsset } from "@/lib/pay-math";
 const primary = "flex h-12 w-full items-center justify-center rounded-full bg-primary text-base font-medium text-primary-foreground disabled:opacity-50";
 const secondary = "flex h-12 w-full items-center justify-center rounded-full border border-border bg-card text-base font-medium";
 
-const marks: Record<PayAsset, { bg: string; glyph: string }> = {
-  usdc: { bg: "#2775CA", glyph: "$" },
-  usdt: { bg: "#26A17B", glyph: "₮" },
-  eth: { bg: "#627EEA", glyph: "◆" },
-};
+const symbols: Record<PayAsset, string> = { usdc: "USDC", usdt: "USDT", eth: "ETH" };
 
 export function FlowHeader({ title, back, close }: { title: string; back?: string; close?: string }) {
   return (
@@ -45,12 +42,7 @@ export function FlowHeader({ title, back, close }: { title: string; back?: strin
 }
 
 function TokenMark({ pay }: { pay: PayAsset }) {
-  const mark = marks[pay];
-  return (
-    <span className="grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold text-white" style={{ background: mark.bg }}>
-      {mark.glyph}
-    </span>
-  );
+  return <TokenIcon symbol={symbols[pay]} className="size-10" />;
 }
 
 function TokenRow({
@@ -157,7 +149,7 @@ export function CryptoDeposit({
 
   return (
     <main className="px-4 pt-4 pb-8">
-      <FlowHeader title="Add money" back="/home/add" />
+      <FlowHeader title="Top up" back="/home/add" />
       <section className="rounded-3xl border border-border bg-card p-4">
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">Wallet balance</p>

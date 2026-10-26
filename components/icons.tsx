@@ -33,6 +33,28 @@ export function IconBolt(props: IconProps) {
   );
 }
 
+export function IconPhone(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="8" y="3.2" width="8" height="17.6" rx="2" />
+      <path d="M11 17.2h2" />
+    </svg>
+  );
+}
+
+export function IconBank(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 10 12 4.5 20 10" />
+      <path d="M6.5 10.2V17" />
+      <path d="M10.2 10.2V17" />
+      <path d="M13.8 10.2V17" />
+      <path d="M17.5 10.2V17" />
+      <path d="M4.5 17.5h15" />
+    </svg>
+  );
+}
+
 export function IconSend(props: IconProps) {
   return (
     <svg {...base(props)}>
@@ -219,6 +241,35 @@ export function IconExternal(props: IconProps) {
       <path d="M14 5h5v5" />
       <path d="M19 5 10.5 13.5" />
       <path d="M17 13.5V18a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4.5" />
+    </svg>
+  );
+}
+
+export function IconBell(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6.2 16.5h11.6" />
+      <path d="M7.2 16.2V11a4.8 4.8 0 0 1 9.6 0v5.2" />
+      <path d="M10 16.6a2 2 0 0 0 4 0" />
+    </svg>
+  );
+}
+
+export function IconPlus(props: IconProps) {
+  return (
+    <svg {...base(props)} strokeWidth={2.2}>
+      <path d="M12 5.2v13.6" />
+      <path d="M5.2 12h13.6" />
+    </svg>
+  );
+}
+
+export function IconTarget(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="7" />
+      <circle cx="12" cy="12" r="3" />
+      <circle cx="12" cy="12" r="0.9" fill="currentColor" stroke="none" />
     </svg>
   );
 }
