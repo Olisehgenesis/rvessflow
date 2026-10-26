@@ -89,14 +89,19 @@ export function HomeBalance({
           </Link>
         </div>
       </div>
-      <p className="mt-2 flex items-center gap-2 pr-24 font-display text-4xl font-semibold tracking-tight tabular-nums">
-        {usd(totalUsd)}
-        <IconSun className="size-5 shrink-0 text-[#E2A93B]" />
-      </p>
-      <p className="mt-1 text-sm font-medium text-[#3C4A2E] tabular-nums">≈ {usdc(totalUsdc)} USDC</p>
-      {totalLocal && localUnit ? (
-        <p className="mt-0.5 text-sm text-[#3C4A2E] tabular-nums">{conceal ? hidden : `${localUnit} ${totalLocal}`}</p>
-      ) : null}
+      <div className="mt-2 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 font-display text-4xl font-semibold tracking-tight tabular-nums">
+            {usd(totalUsd)}
+            <IconSun className="size-5 shrink-0 text-[#E2A93B]" />
+          </p>
+          <p className="mt-1 text-sm font-medium text-[#3C4A2E] tabular-nums">≈ {usdc(totalUsdc)} USDC</p>
+          {totalLocal && localUnit ? (
+            <p className="mt-0.5 text-sm text-[#3C4A2E] tabular-nums">{conceal ? hidden : `${localUnit} ${totalLocal}`}</p>
+          ) : null}
+        </div>
+        <img src="/home/wallet.webp" alt="" className="mt-1 w-24 shrink-0" />
+      </div>
       <dl className="relative z-10 mt-4 grid grid-cols-3">
         {columns.map((column, index) => (
           <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#172114]/15 px-2"}>
@@ -106,7 +111,6 @@ export function HomeBalance({
           </div>
         ))}
       </dl>
-      <img src="/home/wallet.webp" alt="" className="pointer-events-none absolute top-10 -right-1 w-28" />
     </section>
   );
 }

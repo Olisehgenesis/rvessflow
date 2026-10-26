@@ -161,8 +161,8 @@ function WelcomeHome() {
   return (
     <>
       <div className="relative">
-        <img src="/home/robot.webp" alt="" className="pointer-events-none absolute -top-2 right-0 w-36" />
-        <h1 className="max-w-[13rem] font-display text-[2rem] font-semibold leading-[1.05] tracking-tight">
+        <img src="/home/robot.webp" alt="" className="pointer-events-none absolute -top-1 right-0 w-28" />
+        <h1 className="max-w-[12.5rem] font-display text-[2rem] font-semibold leading-[1.05] tracking-tight">
           Welcome to RvessFlow
         </h1>
         <p className="mt-3 max-w-[16rem] text-sm leading-relaxed text-muted-foreground">
@@ -202,12 +202,14 @@ function WelcomeHome() {
           </Link>
         </div>
       </section>
-      <section className="relative mt-4 overflow-hidden rounded-3xl bg-[#E7E0FF] px-4 py-5">
-        <p className="max-w-[16rem] font-display text-lg font-medium leading-snug tracking-tight">“ Small steps today, bigger dreams tomorrow.</p>
-        <svg viewBox="0 0 88 28" className="mt-3 h-6 w-20 text-[#7DDE55]" aria-hidden>
-          <path d="M2 16c10-10 16 10 26 0s16 10 26 0 16 10 26 0" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-        </svg>
-        <img src="/home/cube.webp" alt="" className="pointer-events-none absolute right-2 bottom-1 w-16" />
+      <section className="mt-4 rounded-3xl bg-[#E7E0FF] px-4 py-5">
+        <p className="font-display text-lg font-medium leading-snug tracking-tight">“ Small steps today, bigger dreams tomorrow.</p>
+        <div className="mt-3 flex items-end justify-between">
+          <svg viewBox="0 0 88 28" className="h-6 w-20 text-[#7DDE55]" aria-hidden>
+            <path d="M2 16c10-10 16 10 26 0s16 10 26 0 16 10 26 0" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+          <img src="/home/cube.webp" alt="" className="w-12" />
+        </div>
       </section>
     </>
   );
