@@ -144,16 +144,25 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
               Get started
             </LimeButton>
           </div>
-          <button
-            type="button"
-            className="grid size-11 place-items-center rounded-full hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414] lg:hidden"
-            aria-expanded={menuOpen}
-            aria-controls="mobile-nav"
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-            <span className="sr-only">{menuOpen ? "Close menu" : "Open menu"}</span>
-          </button>
+          <div className="flex items-center lg:hidden">
+            <button
+              type="button"
+              onClick={() => openAuth("login")}
+              className="h-10 rounded-full px-3 text-sm font-medium text-[#141414] hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
+            >
+              Log in
+            </button>
+            <button
+              type="button"
+              className="grid size-11 place-items-center rounded-full hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+              <span className="sr-only">{menuOpen ? "Close menu" : "Open menu"}</span>
+            </button>
+          </div>
         </div>
         {menuOpen ? (
           <div id="mobile-nav" className="border-t border-[#E7E4DC] px-5 py-3 lg:hidden">
@@ -296,7 +305,7 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
 
       <Dialog.Root open={authOpen} onOpenChange={setAuthOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/55 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-[#141414]/40 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
           <Dialog.Content className="fixed top-1/2 left-1/2 z-50 max-h-[min(92dvh,820px)] w-[min(100%-1.25rem,27.5rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.7rem] bg-white shadow-[0_28px_80px_-28px_rgba(0,0,0,0.55)] outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
             <LoginGate intent={intent} />
           </Dialog.Content>

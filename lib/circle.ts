@@ -443,6 +443,38 @@ const blankContact: Contact = {
   kinContact: "",
 };
 
+export type EmailHint =
+  | { status: "invalid" }
+  | { status: "down" }
+  | { status: "none" }
+  | { status: "passkey"; address: Address }
+  | { status: "wallet" };
+
+/** Looks up a Settings email without opening a session or returning an address the browser does not already hold. */
+export async function hintForEmail(raw: string, known: string[]): Promise<EmailHint> {
+  const email = raw.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 80) return { status: "invalid" };
+  const local = known
+    .filter((item) => isAddress(item))
+    .slice(0, 8)
+    .map((item) => getAddress(item).toLowerCase());
+  try {
+    const found = await rows<{ address: string }>(
+      sql`SELECT address FROM app.profiles WHERE lower(email) = ${email}
+          UNION ALL
+          SELECT address FROM demo.profiles WHERE lower(email) = ${email}
+          LIMIT 2`,
+    );
+    const hit = found.map((row) => row.address).find((address) => isAddress(address));
+    if (!hit) return { status: "none" };
+    const normalized = getAddress(hit);
+    if (local.includes(normalized.toLowerCase())) return { status: "passkey", address: normalized };
+    return { status: "wallet" };
+  } catch {
+    return { status: "down" };
+  }
+}
+
 export async function contactIfReady(address: Address): Promise<{ contact: Contact; down: boolean }> {
   try {
     return { contact: await contactOf(address), down: false };

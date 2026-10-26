@@ -41,6 +41,7 @@ import {
   deleteDraft,
   dropPhone,
   groupCreateIntent,
+  hintForEmail,
   launchDraft,
   moveDraftMember,
   openDraft,
@@ -256,6 +257,10 @@ export async function enterApp(formData: FormData) {
   await rememberTerms();
   await rememberTester(0);
   redirect("/home");
+}
+
+export async function lookUpEmail(email: string, known: string[]) {
+  return hintForEmail(email, Array.isArray(known) ? known : []);
 }
 
 export async function openSession(address: string, method: "passkey" | "wallet", label: string) {
