@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Address } from "viem";
 import { baseMarket } from "@/lib/base-market";
+import { maxUsdInput } from "@/lib/deposit-math";
 import { formatAmount, formatUsd8, type PayAsset } from "@/lib/pay-math";
 import { loadPrices } from "@/lib/prices";
 import { erc20, publicClient, type Portfolio } from "@/lib/protocol";
@@ -20,6 +21,7 @@ export type PayChoice = {
   label: string;
   balance: string;
   usd: string;
+  maxUsd: string;
 };
 
 export type HoldingsView = {
@@ -110,9 +112,9 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
     locked: money(valueOf(lockedSuper, 18, prices.usdcUsd8)),
     idleUsd: money(idleValue),
     choices: [
-      { pay: "usdc", label: "USDC", balance: formatAmount(usdc, 6, 2), usd: money(valueOf(usdc, 6, prices.usdcUsd8)) },
-      { pay: "usdt", label: "USDT", balance: formatAmount(usdt, 6, 2), usd: money(valueOf(usdt, 6, prices.usdtUsd8)) },
-      { pay: "eth", label: "ETH", balance: formatAmount(eth, 18, 6), usd: money(valueOf(eth, 18, prices.ethUsd8)) },
+      { pay: "usdc", label: "USDC", balance: formatAmount(usdc, 6, 2), usd: money(valueOf(usdc, 6, prices.usdcUsd8)), maxUsd: maxUsdInput(valueOf(usdc, 6, prices.usdcUsd8)) },
+      { pay: "usdt", label: "USDT", balance: formatAmount(usdt, 6, 2), usd: money(valueOf(usdt, 6, prices.usdtUsd8)), maxUsd: maxUsdInput(valueOf(usdt, 6, prices.usdtUsd8)) },
+      { pay: "eth", label: "ETH", balance: formatAmount(eth, 18, 6), usd: money(valueOf(eth, 18, prices.ethUsd8)), maxUsd: maxUsdInput(valueOf(eth, 18, prices.ethUsd8)) },
     ],
   };
 }
@@ -125,8 +127,8 @@ export async function loadPayChoices(owner: Address): Promise<PayChoice[]> {
     publicClient.getBalance({ address: owner }),
   ]);
   return [
-    { pay: "usdc", label: "USDC", balance: formatAmount(usdc, 6, 2), usd: money(valueOf(usdc, 6, prices.usdcUsd8)) },
-    { pay: "usdt", label: "USDT", balance: formatAmount(usdt, 6, 2), usd: money(valueOf(usdt, 6, prices.usdtUsd8)) },
-    { pay: "eth", label: "ETH", balance: formatAmount(eth, 18, 6), usd: money(valueOf(eth, 18, prices.ethUsd8)) },
+    { pay: "usdc", label: "USDC", balance: formatAmount(usdc, 6, 2), usd: money(valueOf(usdc, 6, prices.usdcUsd8)), maxUsd: maxUsdInput(valueOf(usdc, 6, prices.usdcUsd8)) },
+    { pay: "usdt", label: "USDT", balance: formatAmount(usdt, 6, 2), usd: money(valueOf(usdt, 6, prices.usdtUsd8)), maxUsd: maxUsdInput(valueOf(usdt, 6, prices.usdtUsd8)) },
+    { pay: "eth", label: "ETH", balance: formatAmount(eth, 18, 6), usd: money(valueOf(eth, 18, prices.ethUsd8)), maxUsd: maxUsdInput(valueOf(eth, 18, prices.ethUsd8)) },
   ];
 }

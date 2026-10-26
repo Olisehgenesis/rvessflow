@@ -34,8 +34,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function hidesNav(pathname: string) {
+  return /^\/home\/add\/(token|review|status|receive|mobile|card)/.test(pathname);
+}
+
 function BottomNav() {
   const pathname = usePathname();
+  if (hidesNav(pathname)) return null;
   return (
     <nav className="z-20 shrink-0 border-t border-border bg-card px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       <ul className="grid grid-cols-5">

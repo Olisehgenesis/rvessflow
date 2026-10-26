@@ -277,7 +277,7 @@ async function planDeposit(owner: Address, intent: Extract<Intent, { kind: "depo
       functionName: "unallocated",
       args: [addresses.fusdcx],
     });
-    if (intent.seen && idle > BigInt(intent.seen)) return done(intent, { href: "/home" });
+    if (intent.seen && idle > BigInt(intent.seen)) return done(intent, { href: "/home/add/status?done=1" });
     if (intent.submitted) return pending(intent);
     const calls = await fundingCalls(owner, vault, pay, net, "vault");
     return { calls, intent: { ...intent, seen: idle.toString(), submitted: true }, done: false };
@@ -286,7 +286,7 @@ async function planDeposit(owner: Address, intent: Extract<Intent, { kind: "depo
   const token = getAddress(intent.token);
   const amount = parseAmount(intent.amount);
   const balance = await balanceOf(owner, token);
-  if (intent.seen && balance <= BigInt(intent.seen) - amount) return done(intent, { href: "/home" });
+  if (intent.seen && balance <= BigInt(intent.seen) - amount) return done(intent, { href: "/home/add/status?done=1" });
   const vault = await vaultOf(owner);
   const next = { ...intent, seen: intent.seen ?? balance.toString() };
   if (vault === zeroAddress) return { calls: [encode(addresses.factory, factoryAbi, "createVault")], intent: next, done: false };
