@@ -101,9 +101,6 @@ function AmountShare({
         required
         onChange={(event) => onUsd(event.target.value)}
       />
-      <p className="text-xs text-muted-foreground">
-        {open ? `${share}% of the $${cap.toFixed(2)} in the selected token. You can type another amount.` : "This token has no balance to take a share of."}
-      </p>
     </div>
   );
 }

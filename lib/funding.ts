@@ -61,7 +61,8 @@ async function quoteOutput(pay: "usdt" | "eth", usdcOut: bigint): Promise<{ amou
         args: [{ tokenIn, tokenOut: baseMarket.usdc, amount: usdcOut, fee, sqrtPriceLimitX96: 0n }],
       });
       const raw = await publicClient.call({ to: baseMarket.quoterV2, data });
-      const decoded = decodeFunctionResult({ abi: quoterAbi, functionName: "quoteExactOutputSingle", data: raw.data ?? "0x" });
+      if (!raw.data || raw.data === "0x") continue;
+      const decoded = decodeFunctionResult({ abi: quoterAbi, functionName: "quoteExactOutputSingle", data: raw.data });
       if (decoded[0] > 0n) return { amountIn: decoded[0], feeTier: fee, gasEstimate: decoded[3] };
     } catch (error) {
       last = error instanceof Error ? error.message : last;
@@ -82,7 +83,8 @@ async function quoteInput(receive: "usdt" | "eth", usdcIn: bigint): Promise<{ am
         args: [{ tokenIn: baseMarket.usdc, tokenOut, amountIn: usdcIn, fee, sqrtPriceLimitX96: 0n }],
       });
       const raw = await publicClient.call({ to: baseMarket.quoterV2, data });
-      const decoded = decodeFunctionResult({ abi: quoterAbi, functionName: "quoteExactInputSingle", data: raw.data ?? "0x" });
+      if (!raw.data || raw.data === "0x") continue;
+      const decoded = decodeFunctionResult({ abi: quoterAbi, functionName: "quoteExactInputSingle", data: raw.data });
       if (decoded[0] > 0n) return { amountOut: decoded[0], feeTier: fee };
     } catch (error) {
       last = error instanceof Error ? error.message : last;
@@ -261,6 +263,10 @@ export async function previewLines(input: {
     ];
   }
   const mode = input.mode === "wallet" ? "wallet" : "vault";
+  if (input.pay !== "usdc") {
+    const code = await publicClient.getCode({ address: baseMarket.quoterV2 });
+    if (!code || code === "0x") return [];
+  }
   const quote = await quoteFund(input.pay, needed - covered, mode);
   const lines = fundingLines(quote, heading);
   if (pulledFee > 0n) {

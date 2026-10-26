@@ -6,12 +6,13 @@ import { redirect } from "next/navigation";
 import { getAddress, isAddress, type Address } from "viem";
 import { assetKind } from "@/lib/assets";
 import type { DepositPreview } from "@/lib/deposit-math";
-import { asTokenAmount } from "@/lib/display";
+import { asTokenAmount, shortAddress } from "@/lib/display";
 import { idleSuper, previewLines, previewWithdraw, walletSuper } from "@/lib/funding";
 import type { Intent, SignPayload } from "@/lib/intent";
 import { inferFrequency } from "@/lib/intent";
 import { goalNotes, patchGoalNote, recordActivity, saveGoalNote, type ActivityRecord } from "@/lib/notes";
 import { parseUsd, readPay, readReceive, type PayAsset } from "@/lib/pay-math";
+import { activityUnits, isSendAsset, parseSendAmount, type SendAsset } from "@/lib/send-math";
 import { planIntent } from "@/lib/plan";
 import {
   addToGoal,
@@ -41,6 +42,7 @@ import {
   deleteDraft,
   dropPhone,
   groupCreateIntent,
+  findAccount,
   hintForEmail,
   launchDraft,
   moveDraftMember,
@@ -178,6 +180,10 @@ function activityFrom(owner: string, intent: Intent, id?: string): ActivityRecor
     const amount = intent.receive ? pricedWei(intent.amount) : intent.amount;
     return amount ? { ...base, title: "Moved to wallet", detail: intent.receive ? intent.receive.toUpperCase() : "Vault", direction: "out", amount, href: "/home" } : null;
   }
+  if (intent.kind === "send" && isSendAsset(intent.asset)) {
+    const units = activityUnits(intent.asset, parseSendAmount(intent.asset, intent.amount));
+    return { ...base, title: "Sent", detail: intent.label, direction: "out", amount: units.amount, asset: units.asset, href: "/home" };
+  }
   if (intent.kind === "goal" && intent.fn === "topup") {
     const amount = activityAmount(intent.amount, Boolean(intent.pay));
     return amount ? { ...base, title: "Saved to goal", detail: "Top up", direction: "in", amount, href: `/goals/${intent.id}` } : null;
@@ -261,6 +267,19 @@ export async function enterApp(formData: FormData) {
 
 export async function lookUpEmail(email: string, known: string[]) {
   return hintForEmail(email, Array.isArray(known) ? known : []);
+}
+
+export type LookupState = { error?: string; name?: string; address?: string; query?: string } | null;
+
+export async function lookupAccount(_prev: LookupState, formData: FormData): Promise<LookupState> {
+  const query = String(formData.get("who") ?? "").trim();
+  try {
+    await requireTerms();
+    const found = await findAccount(query);
+    return { name: found.name, address: found.address, query };
+  } catch (error) {
+    return { error: error instanceof Error && error.message.length < 180 && !error.message.includes("\n") ? error.message : explain(error), query };
+  }
 }
 
 export async function openSession(address: string, method: "passkey" | "wallet", label: string) {
@@ -854,6 +873,41 @@ export async function saveGoalDetails(_prev: ActionState, formData: FormData): P
   return null;
 }
 
+function sendAssetField(value: string): SendAsset {
+  if (!isSendAsset(value)) throw new Error("Pick a token.");
+  return value;
+}
+
+export async function sendFunds(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await requireTerms();
+    const who = await viewer();
+    const asset = sendAssetField(String(formData.get("asset") ?? ""));
+    const amount = String(formData.get("amount") ?? "");
+    parseSendAmount(asset, amount);
+    const contact = String(formData.get("who") ?? "").trim();
+    let to: Address;
+    let label: string;
+    if (contact) {
+      const found = await findAccount(contact);
+      to = found.address;
+      label = found.name.slice(0, 64);
+    } else {
+      const raw = String(formData.get("to") ?? "").trim();
+      if (!isAddress(raw)) return { error: "Enter a wallet address." };
+      to = getAddress(raw);
+      if (to.toLowerCase() === who.address.toLowerCase()) return { error: "That address is this account." };
+      label = shortAddress(to);
+    }
+    const intent = refIntent({ kind: "send" as const, asset, amount: amount.replace(/,/g, "").trim(), to, label, ref: "" });
+    if (who.method === "tester") return await finishTester(intent);
+    return await handoff(intent);
+  } catch (error) {
+    rethrowRedirect(error);
+    return spoken(error);
+  }
+}
+
 export async function withdrawUsd(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     await requireTerms();
@@ -904,7 +958,9 @@ export async function previewPay(input: {
     });
     return { lines };
   } catch (error) {
-    return { lines: [], error: error instanceof Error ? error.message : "The quote failed." };
+    const message = error instanceof Error ? error.message : "The quote failed.";
+    if (message.includes("Cannot decode zero data") || message.includes("viem@")) return { lines: [] };
+    return { lines: [], error: message };
   }
 }
 
