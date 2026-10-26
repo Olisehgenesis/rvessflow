@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAddress, isAddress, type Address } from "viem";
 import { assetKind } from "@/lib/assets";
+import type { DepositPreview } from "@/lib/deposit-math";
 import { asTokenAmount } from "@/lib/display";
 import { idleSuper, previewLines, previewWithdraw, walletSuper } from "@/lib/funding";
 import type { Intent, SignPayload } from "@/lib/intent";
@@ -860,6 +861,16 @@ export async function withdrawUsd(_prev: ActionState, formData: FormData): Promi
   } catch (error) {
     rethrowRedirect(error);
     return { error: explain(error) };
+  }
+}
+
+export async function previewDeposit(input: { pay: string; usd: string }): Promise<{ preview?: DepositPreview; error?: string }> {
+  try {
+    const who = await viewer();
+    const { depositPreview } = await import("@/lib/funding");
+    return { preview: await depositPreview(who.address, readPay(input.pay), input.usd) };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The quote failed." };
   }
 }
 

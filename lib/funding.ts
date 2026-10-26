@@ -2,6 +2,7 @@ import "server-only";
 
 import { decodeFunctionResult, encodeFunctionData, parseAbi, zeroAddress, type Address } from "viem";
 import { baseMarket, poolFees, SLIPPAGE_BPS, SUPER_UNIT } from "@/lib/base-market";
+import { buildDepositPreview, depositGasUnits, networkFeeUsd8, type DepositPreview } from "@/lib/deposit-math";
 import type { PreparedCall } from "@/lib/intent";
 import { buildFundCalls, buildWithdrawCalls, quoteDeadline } from "@/lib/pay-build";
 import {
@@ -37,6 +38,8 @@ export type FundQuote = {
   amountIn: bigint;
   amountInMax: bigint;
   feeTier: number;
+  /** QuoterV2 gas for the swap. Zero when the deposit does not swap. */
+  gasEstimate: bigint;
   prices: Prices;
 };
 
@@ -47,7 +50,7 @@ async function allowance(owner: Address, token: Address, spender: Address) {
   return publicClient.readContract({ address: token, abi: erc20, functionName: "allowance", args: [owner, spender] });
 }
 
-async function quoteOutput(pay: "usdt" | "eth", usdcOut: bigint): Promise<{ amountIn: bigint; feeTier: number }> {
+async function quoteOutput(pay: "usdt" | "eth", usdcOut: bigint): Promise<{ amountIn: bigint; feeTier: number; gasEstimate: bigint }> {
   const tokenIn = pay === "eth" ? baseMarket.weth : baseMarket.usdt;
   let last = "Uniswap has no price for that swap right now.";
   for (const fee of poolFees[pay]) {
@@ -59,7 +62,7 @@ async function quoteOutput(pay: "usdt" | "eth", usdcOut: bigint): Promise<{ amou
       });
       const raw = await publicClient.call({ to: baseMarket.quoterV2, data });
       const decoded = decodeFunctionResult({ abi: quoterAbi, functionName: "quoteExactOutputSingle", data: raw.data ?? "0x" });
-      if (decoded[0] > 0n) return { amountIn: decoded[0], feeTier: fee };
+      if (decoded[0] > 0n) return { amountIn: decoded[0], feeTier: fee, gasEstimate: decoded[3] };
     } catch (error) {
       last = error instanceof Error ? error.message : last;
     }
@@ -111,6 +114,7 @@ export async function quoteFund(pay: PayAsset, needed: bigint, mode: "vault" | "
       amountIn: sized.underlying,
       amountInMax: sized.underlying,
       feeTier: 0,
+      gasEstimate: 0n,
       prices,
     };
   }
@@ -124,6 +128,7 @@ export async function quoteFund(pay: PayAsset, needed: bigint, mode: "vault" | "
     amountIn: quoted.amountIn,
     amountInMax: slippageCeiling(quoted.amountIn),
     feeTier: quoted.feeTier,
+    gasEstimate: quoted.gasEstimate,
     prices,
   };
 }
@@ -305,4 +310,57 @@ export async function previewWithdraw(usd: string, receive: ReceiveAsset): Promi
 export async function superForWithdraw(usd: string): Promise<bigint> {
   const net = await superForUsd(usd);
   return (net / SUPER_UNIT) * SUPER_UNIT;
+}
+
+/** Live deposit review: Chainlink prices, a Uniswap quote, and a gas-price network-fee estimate. */
+export async function depositPreview(owner: Address, pay: PayAsset, usd: string): Promise<DepositPreview> {
+  const micros = parseUsd(usd);
+  if (micros <= 0n) throw new Error("Enter the amount in USD.");
+  const quote = await quoteFund(pay, await superForUsd(usd), "vault");
+  const vault = await publicClient.readContract({
+    address: addresses.factory,
+    abi: factoryAbi,
+    functionName: "vaultOf",
+    args: [owner],
+  });
+  let approveWrap = vault === zeroAddress;
+  let approveRouter = false;
+  let resetRouter = false;
+  try {
+    if (vault !== zeroAddress) {
+      approveWrap = (await allowance(owner, baseMarket.usdc, vault)) < quote.underlying;
+    }
+    if (pay === "usdt") {
+      const routerAllowance = await allowance(owner, baseMarket.usdt, baseMarket.swapRouter02);
+      approveRouter = routerAllowance < quote.amountInMax;
+      resetRouter = routerAllowance > 0n && routerAllowance < quote.amountInMax;
+    }
+  } catch {
+    approveWrap = true;
+    approveRouter = pay === "usdt";
+  }
+  let network: bigint | null = null;
+  try {
+    const fees = await publicClient.estimateFeesPerGas();
+    const maxFee = fees.maxFeePerGas ?? 0n;
+    if (maxFee > 0n) {
+      const gas = depositGasUnits(pay, quote.gasEstimate, { approveWrap, approveRouter, resetRouter });
+      network = networkFeeUsd8(gas, maxFee, quote.prices.ethUsd8);
+    }
+  } catch {
+    network = null;
+  }
+  const tokenUsd8 = pay === "eth" ? quote.prices.ethUsd8 : pay === "usdt" ? quote.prices.usdtUsd8 : quote.prices.usdcUsd8;
+  return buildDepositPreview({
+    pay,
+    typedUsdMicros: micros,
+    credit: quote.credit,
+    fee: quote.fee,
+    underlying: quote.underlying,
+    amountIn: quote.amountIn,
+    amountInMax: quote.amountInMax,
+    usdcUsd8: quote.prices.usdcUsd8,
+    tokenUsd8,
+    networkFeeUsd8: network,
+  });
 }

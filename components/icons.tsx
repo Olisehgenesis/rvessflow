@@ -169,6 +169,60 @@ export function IconBack(props: IconProps) {
   );
 }
 
+export function IconSearch(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4 4" />
+    </svg>
+  );
+}
+
+export function IconClose(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M7 7l10 10" />
+      <path d="M17 7 7 17" />
+    </svg>
+  );
+}
+
+export function IconCheck(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m5.5 12.5 4.2 4.2 8.8-9.4" />
+    </svg>
+  );
+}
+
+export function IconClock(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v4.5l3 2" />
+    </svg>
+  );
+}
+
+export function IconCopy(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="8" y="8" width="11" height="11" rx="2" />
+      <path d="M6 15.5H5.5A2 2 0 0 1 3.5 13.5v-8A2 2 0 0 1 5.5 3.5h8A2 2 0 0 1 15.5 5.5V6" />
+    </svg>
+  );
+}
+
+export function IconExternal(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M14 5h5v5" />
+      <path d="M19 5 10.5 13.5" />
+      <path d="M17 13.5V18a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4.5" />
+    </svg>
+  );
+}
+
 export function IconMark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 256 256" fill="none" aria-hidden>

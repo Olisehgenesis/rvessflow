@@ -39,6 +39,14 @@ export type BalanceRow = {
   local?: string;
 };
 
+export function useConceal() {
+  return useSyncExternalStore(subscribeConceal, readConceal, () => false);
+}
+
+export function toggleConceal() {
+  writeConceal(!readConceal());
+}
+
 export function BalanceCard({
   totalUsd,
   totalLocal,
@@ -56,7 +64,7 @@ export function BalanceCard({
   streaming: string;
   locked: string;
 }) {
-  const conceal = useSyncExternalStore(subscribeConceal, readConceal, () => false);
+  const conceal = useConceal();
   const usd = (value: string) => (conceal ? hidden : `$${value}`);
   const local = (value?: string) => (conceal || !value || !localUnit ? "" : `${localUnit} ${value}`);
   return (

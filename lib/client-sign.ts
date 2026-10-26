@@ -20,24 +20,29 @@ function txValue(value: string | undefined): Hex | undefined {
   return `0x${BigInt(value).toString(16)}`;
 }
 
-async function sendWallet(calls: PreparedCall[], from: Address) {
+async function sendWallet(calls: PreparedCall[], from: Address, onHash?: (hash: Hash) => void) {
   const provider = await walletProvider();
   if (!provider.connected) await provider.connect();
   const account = provider.accounts[0];
   if (!account || account.toLowerCase() !== from.toLowerCase()) {
     throw new Error("Reconnect the wallet for this account.");
   }
-  for (const call of calls) {
+  let last: Hash | undefined;
+  for (let index = 0; index < calls.length; index += 1) {
+    const call = calls[index];
     const value = txValue(call.value);
     const hash = (await provider.request({
       method: "eth_sendTransaction",
       params: [{ from, to: call.to, data: call.data, ...(value ? { value } : {}) }],
     })) as Hash;
+    last = hash;
+    if (index === calls.length - 1) onHash?.(hash);
     await wait(hash);
   }
+  return last;
 }
 
-async function sendPasskey(calls: PreparedCall[], from: Address) {
+async function sendPasskey(calls: PreparedCall[], from: Address, onHash?: (hash: Hash) => void) {
   const bundler = process.env.NEXT_PUBLIC_BUNDLER_URL;
   if (!bundler) {
     throw new Error("Passkey payments need a bundler. Set NEXT_PUBLIC_BUNDLER_URL to a Base bundler that accepts user operations.");
@@ -78,14 +83,24 @@ async function sendPasskey(calls: PreparedCall[], from: Address) {
       value: BigInt(call.value || "0"),
     })),
   });
+  onHash?.(hash);
   await wait(hash);
+  return hash;
 }
 
-export async function sendCalls(sign: Pick<SignPayload, "calls" | "method" | "address">) {
-  if (!sign.calls.length) return;
-  if (sign.method === "passkey") {
-    await sendPasskey(sign.calls, sign.address);
-    return;
+export async function depositReceipt(hash: Hash): Promise<{ status: "pending" | "success" | "reverted"; timestamp?: number }> {
+  try {
+    const receipt = await client.getTransactionReceipt({ hash });
+    if (receipt.status !== "success") return { status: "reverted" };
+    const block = await client.getBlock({ blockNumber: receipt.blockNumber });
+    return { status: "success", timestamp: Number(block.timestamp) };
+  } catch {
+    return { status: "pending" };
   }
-  await sendWallet(sign.calls, sign.address);
+}
+
+export async function sendCalls(sign: Pick<SignPayload, "calls" | "method" | "address">, options?: { onHash?: (hash: Hash) => void }) {
+  if (!sign.calls.length) return;
+  if (sign.method === "passkey") return sendPasskey(sign.calls, sign.address, options?.onHash);
+  return sendWallet(sign.calls, sign.address, options?.onHash);
 }

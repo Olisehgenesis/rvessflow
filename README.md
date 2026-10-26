@@ -81,7 +81,30 @@ Signing depends on how you entered:
 
 A saving goal cannot be paused on chain (`pause` reverts for that kind). Pausing one in the app only stops further top-ups. The hold stays in the vault until you resume. Flow and expense pauses still call the contract.
 
-People see USD. The vault still accounts in USDCx, the Super Token wrapper of Circle USDC on Base. Add money, a new goal, a new lock, and a group payment let you pay with USDC, USDT, or ETH. The amount is typed in USD. USDC is wrapped with the vault’s `depositUnderlying` (goals and add money) or `USDCx.upgrade` (locks and groups, which pull the Super Token from the wallet). USDT and ETH are swapped to USDC on Uniswap SwapRouter02, then wrapped. The quote shows the tokens spent, the pool rate, a 0.50% slippage cap, a 20 minute deadline, and the 0.30% protocol fee. Withdrawals come out as USDC (`withdrawUnderlying`) unless you pick USDT or ETH. A passkey signs the approve, swap, wrap, and deposit as one user operation. A connected wallet signs the same calls one transaction at a time. There is no paymaster, so the passkey account needs ETH for gas. New locks are USD only. An ETHx balance still shows if the wallet already holds it. Market addresses live in `lib/base-market.ts`.
+People see USD. The vault still accounts in USDCx, the Super Token wrapper of Circle USDC on Base. Add money, a new goal, a new lock, and a group payment let you pay with USDC, USDT, or ETH. The amount is typed in USD. USDC is wrapped with the vault’s `depositUnderlying` (goals and add money) or `USDCx.upgrade` (locks and groups, which pull the Super Token from the wallet). USDT and ETH are swapped to USDC on Uniswap SwapRouter02, then wrapped. The quote shows the tokens spent, the pool rate, a 0.50% slippage cap, a 20 minute deadline, and the 0.30% protocol fee. The deposit review also shows a network-fee estimate (gas units times the current base fee times the Chainlink ETH/USD price) and the price impact of the pool against the Chainlink mid. A move of 1% or less is inside the safe range. Withdrawals come out as USDC (`withdrawUnderlying`) unless you pick USDT or ETH. A passkey signs the approve, swap, wrap, and deposit as one user operation. A connected wallet signs the same calls one transaction at a time. There is no paymaster, so the passkey account needs ETH for gas. New locks are USD only. An ETHx balance still shows if the wallet already holds it. Market addresses live in `lib/base-market.ts`.
+
+Add money starts with a method picker:
+
+- **Convert crypto** is the four-screen deposit: amount, token, review, then a live status stepper. The hash links to Basescan. Success is shown when the receipt confirms. No fake hash is shown before that.
+- **Receive from a wallet** shows the signed-in Base address and a QR code. Send only USDC, USDT, or ETH on Base. That transfer lands in the wallet; convert crypto to move it into the vault.
+- **Mobile money** (Uganda, MTN MoMo or Airtel Money) uses Kotani Pay’s onramp (`POST /api/v3/onramp`, chain `BASE`, token `USDC`). The UI stays up without a key and says it is not configured.
+- **Card** opens Transak or Coinbase Onramp, both aimed at the user’s Base address and USDC. Transak uses the Create Widget URL API (`POST /api/v2/auth/session`) from the server. Coinbase uses a CDP ES256 JWT to `POST /onramp/v1/token`, then `https://pay.coinbase.com/buy/select-asset`. Missing keys show a not-configured state. Nothing here moves funds until a provider accepts a real request.
+
+Optional server environment variables (see `.env.example`). Leave them empty to keep the not-configured state:
+
+| Variable | Purpose |
+| --- | --- |
+| `KOTANI_API_KEY` | Kotani Pay bearer token for Uganda mobile money |
+| `KOTANI_API_BASE` | Defaults to `https://sandbox-api.kotanipay.com`. Production URL comes from Kotani support |
+| `KOTANI_CALLBACK_URL` | Optional webhook for the onramp’s terminal status |
+| `TRANSAK_API_KEY` or `NEXT_PUBLIC_TRANSAK_API_KEY` | Transak widget API key |
+| `TRANSAK_ACCESS_TOKEN` | Server-only access token for the widget session API |
+| `TRANSAK_REFERRER_DOMAIN` | Domain Transak has approved. Defaults to the request host |
+| `TRANSAK_ENV` | `staging` uses the staging gateway. Anything else is production |
+| `COINBASE_CDP_API_KEY_NAME` | CDP secret API key id (`kid` / `sub` of the session JWT) |
+| `COINBASE_CDP_API_KEY_SECRET` | CDP EC private key PEM. Newlines may be written as `\n` |
+| `COINBASE_PROJECT_ID` | Optional partner reference on the Coinbase Pay URL |
+| `COINBASE_ONRAMP_REDIRECT_URL` | Optional URL after Coinbase Pay |
 
 | Contract | Address |
 | --- | --- |
@@ -100,7 +123,7 @@ People see USD. The vault still accounts in USDCx, the Super Token wrapper of Ci
 
 Prices come from those Chainlink feeds, cached for 60 seconds. A feed older than a day falls back to $1 for the stablecoins and to CoinGecko for ETH. Quotes for a swap come from QuoterV2, trying the deepest fee tier first (WETH/USDC 0.05%, USDT/USDC 0.01%).
 
-`npm test` checks the USD-to-token sizing, the slippage ceiling and floor, and the swap/wrap calldata.
+`npm test` checks the USD-to-token sizing, the slippage ceiling and floor, the swap/wrap calldata, the deposit price impact and network-fee estimate, and the onramp request builders.
 
 ```shell
 npm run dev
