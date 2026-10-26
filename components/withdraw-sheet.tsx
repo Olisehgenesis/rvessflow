@@ -69,7 +69,6 @@ export function WithdrawSheet({ idleUsd = "0.00" }: { idleUsd?: string }) {
 
 export function topUpMethods(network: string) {
   return [
-    { href: "/home/add/crypto", title: "Convert crypto", body: `USDC, USDT, or ETH already on ${network}.`, src: "/marks/crypto.png" },
     { href: "/home/add/receive", title: "Receive", body: "Show your address and a QR code.", src: "/marks/receive.png" },
     { href: "/home/add/mobile", title: "Mobile money", body: "MTN MoMo or Airtel Money in Uganda.", src: "/marks/phone.png" },
     { href: "/home/add/card", title: "Card", body: `Transak or Coinbase. USDC arrives on ${network}.`, src: "/marks/card.png" },
