@@ -138,7 +138,7 @@ export function GoalLink({ flow, readAt, quote, appPaused = false }: { flow: Flo
   const pace = goalStatus(flow, readAt, appPaused);
   const live = pace === "Active" && flow.kind !== "saving" && flow.active && !flow.paused;
   return (
-    <Link href={`/goals/${flow.id}`} className="block rounded-2xl border border-border bg-card p-4">
+    <Link href={`/goals/${flow.id}`} className="block rounded-3xl border border-border/70 bg-card p-4 shadow-[0_10px_28px_rgba(20,27,45,0.06)]">
       <div className="flex items-start gap-3">
         <ProductMark kind={flow.kind} size="sm" quiet={flow.settled} />
         <div className="min-w-0 flex-1">
@@ -178,7 +178,7 @@ export function LockLink({ lock, quote }: { lock: LockRow; quote: Quote }) {
   const penalty = `${(lock.penaltyBps / 100).toFixed(2).replace(/\.00$/, "")}%`;
   const amount = asset.symbol === "ETHx" ? `${show(lock.principal, { ...quote, code: "fusdcx", unit: "ETH", perToken: 1, digits: 4 })} ETH` : `${quote.unit} ${show(lock.principal, quote)}`;
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
+    <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-[0_10px_28px_rgba(20,27,45,0.06)]">
       <Link href={`/vaults/${lock.id}`} className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <TokenMark symbol={symbol} />
@@ -230,7 +230,7 @@ export function GroupLink({
   quote: Quote;
 }) {
   return (
-    <Link href={`/groups/${id}`} className="flex gap-3 rounded-2xl border border-border bg-card p-4">
+    <Link href={`/groups/${id}`} className="flex gap-3 rounded-3xl border border-border/70 bg-card p-4 shadow-[0_10px_28px_rgba(20,27,45,0.06)]">
       <ProductMark kind="group" quiet={status === "Finished" || status === "Cancelled"} />
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">

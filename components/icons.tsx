@@ -223,6 +223,59 @@ export function IconExternal(props: IconProps) {
   );
 }
 
+export function IconBell(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6.2 16.5h11.6" />
+      <path d="M7.2 16.2V11a4.8 4.8 0 0 1 9.6 0v5.2" />
+      <path d="M10 16.6a2 2 0 0 0 4 0" />
+    </svg>
+  );
+}
+
+export function IconPlus(props: IconProps) {
+  return (
+    <svg {...base(props)} strokeWidth={2.2}>
+      <path d="M12 5.2v13.6" />
+      <path d="M5.2 12h13.6" />
+    </svg>
+  );
+}
+
+export function IconTarget(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="7" />
+      <circle cx="12" cy="12" r="3" />
+      <circle cx="12" cy="12" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function IconSun(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="3.1" fill="currentColor" stroke="none" />
+      <path d="M12 3.1v2.1" />
+      <path d="M12 18.8v2.1" />
+      <path d="M3.1 12h2.1" />
+      <path d="M18.8 12h2.1" />
+      <path d="m5.8 5.8 1.5 1.5" />
+      <path d="m16.7 16.7 1.5 1.5" />
+      <path d="m18.2 5.8-1.5 1.5" />
+      <path d="m7.3 16.7-1.5 1.5" />
+    </svg>
+  );
+}
+
+export function IconMoon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M15.5 4.8A7 7 0 1 0 19.2 15 5.4 5.4 0 0 1 15.5 4.8Z" />
+    </svg>
+  );
+}
+
 export function IconMark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 256 256" fill="none" aria-hidden>

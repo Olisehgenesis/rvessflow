@@ -3,6 +3,7 @@ import "server-only";
 import type { Address } from "viem";
 import { baseMarket } from "@/lib/base-market";
 import { maxUsdInput } from "@/lib/deposit-math";
+import { balanceColumns, usdcEquivalent } from "@/lib/home-math";
 import { formatAmount, formatUsd8, type PayAsset } from "@/lib/pay-math";
 import { loadPrices } from "@/lib/prices";
 import { erc20, publicClient, type Portfolio } from "@/lib/protocol";
@@ -11,6 +12,7 @@ import type { Quote } from "@/lib/quote";
 export type HoldingRow = {
   key: string;
   label: string;
+  network: string;
   amount: string;
   usd: string;
   local?: string;
@@ -27,11 +29,15 @@ export type PayChoice = {
 export type HoldingsView = {
   rows: HoldingRow[];
   totalUsd: string;
+  totalUsdc: string;
   totalLocal?: string;
   localUnit?: string;
   available: string;
   streaming: string;
   locked: string;
+  availableUsdc: string;
+  streamingUsdc: string;
+  lockedUsdc: string;
   idleUsd: string;
   choices: PayChoice[];
 };
@@ -67,49 +73,53 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
   ]);
   const usdSuper =
     BigInt(portfolio.wallet) + BigInt(portfolio.idle) + BigInt(portfolio.held) + BigInt(portfolio.streaming) + BigInt(portfolio.locked);
-  let wrappedEth = ethx;
+  let ethxLocked = 0n;
   for (const lock of portfolio.locks) {
-    if (!lock.settled && lock.token.toLowerCase() === baseMarket.ethx.toLowerCase()) wrappedEth += BigInt(lock.principal);
+    if (!lock.settled && lock.token.toLowerCase() === baseMarket.ethx.toLowerCase()) ethxLocked += BigInt(lock.principal);
   }
+  const wrappedEth = ethx + ethxLocked;
   const priced = [
     { key: "usdc", label: "USDC", amount: formatAmount(usdc, 6, 2), value: valueOf(usdc, 6, prices.usdcUsd8) },
     { key: "usdt", label: "USDT", amount: formatAmount(usdt, 6, 2), value: valueOf(usdt, 6, prices.usdtUsd8) },
     { key: "eth", label: "ETH", amount: formatAmount(eth, 18, 6), value: valueOf(eth, 18, prices.ethUsd8) },
     {
-      key: "usd",
-      label: "USD",
+      key: "usdcx",
+      label: "USDCx",
       amount: formatAmount(usdSuper / 10n ** 12n, 6, 2),
       value: valueOf(usdSuper, 18, prices.usdcUsd8),
     },
-  ];
-  if (wrappedEth > 0n) {
-    priced.push({
+    {
       key: "ethx",
       label: "ETHx",
       amount: formatAmount(wrappedEth, 18, 6),
       value: valueOf(wrappedEth, 18, prices.ethUsd8),
-    });
-  }
+    },
+  ];
   const total = priced.reduce((sum, row) => sum + row.value, 0n);
-  const availableSuper = BigInt(portfolio.wallet) + BigInt(portfolio.idle) + BigInt(portfolio.held);
-  const streamingSuper = BigInt(portfolio.streaming);
-  const lockedSuper = BigInt(portfolio.locked);
+  const streamingUsd8 = valueOf(BigInt(portfolio.streaming), 18, prices.usdcUsd8);
+  const lockedUsd8 = valueOf(BigInt(portfolio.locked), 18, prices.usdcUsd8) + valueOf(ethxLocked, 18, prices.ethUsd8);
+  const columns = balanceColumns(total, streamingUsd8, lockedUsd8);
   const idleValue = valueOf(BigInt(portfolio.idle), 18, prices.usdcUsd8);
   const localUnit = quote.code === "usd" || quote.code === "fusdcx" ? undefined : quote.unit;
   return {
     rows: priced.map((row) => ({
       key: row.key,
       label: row.label,
+      network: "Base",
       amount: row.amount,
       usd: money(row.value),
       local: localText(row.value, quote, prices.usdcUsd8),
     })),
     totalUsd: money(total),
+    totalUsdc: usdcEquivalent(total, prices.usdcUsd8),
     totalLocal: localText(total, quote, prices.usdcUsd8),
     localUnit,
-    available: money(valueOf(availableSuper, 18, prices.usdcUsd8)),
-    streaming: money(valueOf(streamingSuper, 18, prices.usdcUsd8)),
-    locked: money(valueOf(lockedSuper, 18, prices.usdcUsd8)),
+    available: money(columns.available),
+    streaming: money(columns.streaming),
+    locked: money(columns.locked),
+    availableUsdc: usdcEquivalent(columns.available, prices.usdcUsd8),
+    streamingUsdc: usdcEquivalent(columns.streaming, prices.usdcUsd8),
+    lockedUsdc: usdcEquivalent(columns.locked, prices.usdcUsd8),
     idleUsd: money(idleValue),
     choices: [
       { pay: "usdc", label: "USDC", balance: formatAmount(usdc, 6, 2), usd: money(valueOf(usdc, 6, prices.usdcUsd8)), maxUsd: maxUsdInput(valueOf(usdc, 6, prices.usdcUsd8)) },
