@@ -11,6 +11,8 @@ export type PayChoice = {
   label: string;
   balance: string;
   usd: string;
+  /** Spendable dollar value of this token, floored to a USD input. */
+  maxUsd?: string;
 };
 
 type Line = { label: string; value: string };
@@ -44,6 +46,66 @@ function richest(choices: PayChoice[]): PayAsset {
   }, undefined);
   if (ranked && moneyOf(ranked.usd) > 0) return ranked.pay;
   return choices[0]?.pay ?? "usdc";
+}
+
+function capOf(choice: PayChoice | undefined) {
+  return moneyOf(choice?.maxUsd || choice?.usd || "0");
+}
+
+function shareOf(usd: string, cap: number) {
+  if (!(cap > 0)) return 0;
+  const share = Math.round((moneyOf(usd) / cap) * 100);
+  return Math.min(100, Math.max(0, share));
+}
+
+function dollars(cap: number, share: number) {
+  if (!(cap > 0) || share <= 0) return "";
+  return ((cap * share) / 100).toFixed(2);
+}
+
+function AmountShare({
+  cap,
+  usd,
+  onUsd,
+}: {
+  cap: number;
+  usd: string;
+  onUsd: (value: string) => void;
+}) {
+  const share = shareOf(usd, cap);
+  const open = cap > 0;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium">Amount in USD</span>
+        <span className="text-sm font-semibold tabular-nums">{open ? `${share}%` : "0%"}</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={open ? share : 0}
+        disabled={!open}
+        aria-label="Share of the selected token"
+        onChange={(event) => onUsd(dollars(cap, Number(event.target.value)))}
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[#E7EDE0] accent-[#141414] disabled:cursor-not-allowed disabled:opacity-40"
+      />
+      <input
+        name="amount"
+        aria-label="Amount in USD"
+        value={usd}
+        inputMode="decimal"
+        placeholder={open ? dollars(cap, 100) : "0.00"}
+        className={inputClass}
+        required
+        onChange={(event) => onUsd(event.target.value)}
+      />
+      <p className="text-xs text-muted-foreground">
+        {open ? `${share}% of the $${cap.toFixed(2)} in the selected token. You can type another amount.` : "This token has no balance to take a share of."}
+      </p>
+    </div>
+  );
 }
 
 function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value: PayAsset; onChange: (pay: PayAsset) => void }) {
@@ -121,6 +183,7 @@ export function PayWith({
 }) {
   const [pay, setPay] = useState<PayAsset>(() => richest(choices));
   const [usd, setUsd] = useState("");
+  const [share, setShare] = useState(0);
   const [lines, setLines] = useState<Line[]>([]);
   const [error, setError] = useState("");
   const ticket = useRef(0);
@@ -147,30 +210,31 @@ export function PayWith({
     return () => clearTimeout(handle);
   }, [pay, usd, duration, fixedSuper, mode, protocolOnTop, full]);
 
+  const picked = choices.find((choice) => choice.pay === pay);
+  const cap = capOf(picked);
+
+  function writeUsd(next: string) {
+    setUsd(next);
+    setShare(shareOf(next, cap));
+    onAmount?.(next);
+  }
+
+  function choose(next: PayAsset) {
+    const nextCap = capOf(choices.find((choice) => choice.pay === next));
+    const amount = dollars(nextCap, share);
+    setPay(next);
+    setUsd(amount);
+    onAmount?.(amount);
+  }
+
   return (
     <div className="space-y-3">
       <input type="hidden" name="pay" value={pay} />
       <div className="space-y-1.5">
         <p className="text-sm font-medium">Pay with</p>
-        <TokenSelect choices={choices} value={pay} onChange={setPay} />
+        <TokenSelect choices={choices} value={pay} onChange={choose} />
       </div>
-      {fixedSuper ? null : (
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Amount in USD</span>
-          <input
-            name="amount"
-            value={usd}
-            inputMode="decimal"
-            placeholder="100.00"
-            className={inputClass}
-            required
-            onChange={(event) => {
-              setUsd(event.target.value);
-              onAmount?.(event.target.value);
-            }}
-          />
-        </label>
-      )}
+      {fixedSuper ? null : <AmountShare cap={cap} usd={usd} onUsd={writeUsd} />}
       <QuoteList lines={lines} error={error} />
     </div>
   );
