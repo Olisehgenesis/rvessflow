@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { IconCheck, IconChevron } from "@/components/icons";
+import { TokenIcon } from "@/components/token-icon";
 import { previewPay, previewReceive } from "@/lib/actions";
 import type { PayAsset, ReceiveAsset } from "@/lib/pay-math";
 
@@ -30,30 +32,73 @@ function QuoteList({ lines, error }: { lines: Line[]; error: string }) {
   );
 }
 
-function ChoiceButton({
-  selected,
-  label,
-  balance,
-  usd,
-  onClick,
-}: {
-  selected: boolean;
-  label: string;
-  balance: string;
-  usd: string;
-  onClick: () => void;
-}) {
+function moneyOf(value: string) {
+  const amount = Number(value.replace(/,/g, ""));
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function richest(choices: PayChoice[]): PayAsset {
+  const ranked = choices.reduce<PayChoice | undefined>((best, choice) => {
+    if (!best || moneyOf(choice.usd) > moneyOf(best.usd)) return choice;
+    return best;
+  }, undefined);
+  if (ranked && moneyOf(ranked.usd) > 0) return ranked.pay;
+  return choices[0]?.pay ?? "usdc";
+}
+
+function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value: PayAsset; onChange: (pay: PayAsset) => void }) {
+  const [open, setOpen] = useState(false);
+  const picked = choices.find((choice) => choice.pay === value) ?? choices[0];
+  if (!picked) return <p className="text-sm text-muted-foreground">No token is available in this wallet.</p>;
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={`rounded-2xl border px-2 py-2 text-left ${selected ? "border-foreground bg-white" : "border-border bg-card"}`}
-    >
-      <span className="block text-sm font-medium">{label}</span>
-      <span className="block text-xs text-muted-foreground tabular-nums">{balance}</span>
-      <span className="block text-xs tabular-nums">${usd}</span>
-    </button>
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-14 w-full items-center gap-3 rounded-2xl border border-border bg-white px-3 text-left"
+      >
+        <TokenIcon symbol={picked.label} className="size-8" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">{picked.label}</span>
+          <span className="block text-xs text-muted-foreground tabular-nums">
+            {picked.balance} available
+          </span>
+        </span>
+        <span className="text-sm font-medium tabular-nums">${picked.usd}</span>
+        <IconChevron className={`size-4 shrink-0 text-muted-foreground transition-transform ${open ? "-rotate-90" : "rotate-90"}`} />
+      </button>
+      {open ? (
+        <ul role="listbox" aria-label="Pay with" className="mt-2 overflow-hidden rounded-2xl border border-border bg-white">
+          {choices.map((choice) => {
+            const selected = choice.pay === picked.pay;
+            return (
+              <li key={choice.pay}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => {
+                    onChange(choice.pay);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-3 px-3 py-2.5 text-left ${selected ? "bg-[#F4F8E8]" : ""}`}
+                >
+                  <TokenIcon symbol={choice.label} className="size-8" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold">{choice.label}</span>
+                    <span className="block text-xs text-muted-foreground tabular-nums">{choice.balance} available</span>
+                  </span>
+                  <span className="text-sm font-medium tabular-nums">${choice.usd}</span>
+                  {selected ? <IconCheck className="size-4 text-[#141414]" /> : <span className="size-4" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -74,7 +119,7 @@ export function PayWith({
   full?: boolean;
   onAmount?: (usd: string) => void;
 }) {
-  const [pay, setPay] = useState<PayAsset>("usdc");
+  const [pay, setPay] = useState<PayAsset>(() => richest(choices));
   const [usd, setUsd] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [error, setError] = useState("");
@@ -105,20 +150,9 @@ export function PayWith({
   return (
     <div className="space-y-3">
       <input type="hidden" name="pay" value={pay} />
-      <div>
-        <p className="mb-1.5 text-sm font-medium">Pay with</p>
-        <div className="grid grid-cols-3 gap-2">
-          {choices.map((choice) => (
-            <ChoiceButton
-              key={choice.pay}
-              selected={pay === choice.pay}
-              label={choice.label}
-              balance={choice.balance}
-              usd={choice.usd}
-              onClick={() => setPay(choice.pay)}
-            />
-          ))}
-        </div>
+      <div className="space-y-1.5">
+        <p className="text-sm font-medium">Pay with</p>
+        <TokenSelect choices={choices} value={pay} onChange={setPay} />
       </div>
       {fixedSuper ? null : (
         <label className="block space-y-1.5">
