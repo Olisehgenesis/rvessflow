@@ -80,7 +80,7 @@ function othersOf(people: Person[], me: string) {
 function SendToFields({ people, me }: { people: Person[]; me: string }) {
   const fieldId = useId();
   const others = othersOf(people, me);
-  const [id, setId] = useState(others[0]?.address ?? "");
+  const [id, setId] = useState<string>(others[0]?.address ?? "");
   const known = others.find((person) => person.address.toLowerCase() === id.trim().toLowerCase());
   const bad = id.trim() !== "" && !isAddress(id.trim());
   return (
@@ -420,13 +420,4 @@ export function GroupPay({
   );
 }
 
-function Field({ label, hint, ...props }: React.ComponentProps<typeof Input> & { label: string; hint?: string }) {
-  return (
-    <label className="block space-y-1.5">
-      <Label>{label}</Label>
-      <Input {...props} className={field} />
-      {hint ? <span className="block text-xs leading-relaxed text-muted-foreground">{hint}</span> : null}
-    </label>
-  );
-}
 

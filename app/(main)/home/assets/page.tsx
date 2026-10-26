@@ -28,8 +28,8 @@ async function AssetsBody() {
         <Link href="/home/add/receive" className="flex h-11 items-center justify-center rounded-full border border-border bg-card text-sm font-medium">
           Receive
         </Link>
-        <Link href="/vaults" className="flex h-11 items-center justify-center rounded-full border border-border bg-card text-sm font-medium">
-          Vaults
+        <Link href="/goals#locks" className="flex h-11 items-center justify-center rounded-full border border-border bg-card text-sm font-medium">
+          Locks
         </Link>
       </div>
       <Link href="/home/add" className="mt-2 flex h-12 items-center justify-center rounded-full bg-[#D4F06B] text-sm font-semibold text-[#141414]">

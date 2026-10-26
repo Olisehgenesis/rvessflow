@@ -19,7 +19,7 @@ import {
   type PayAsset,
   type ReceiveAsset,
 } from "@/lib/pay-math";
-import { loadPrices, type Prices } from "@/lib/prices";
+import { loadPrices, requirePrice, type Prices } from "@/lib/prices";
 import { addresses, erc20, factoryAbi, publicClient, stableLabel, streamNeed, vaultAbi } from "@/lib/protocol";
 
 const quoterAbi = parseAbi([
@@ -95,7 +95,7 @@ async function quoteInput(receive: "usdt" | "eth", usdcIn: bigint): Promise<{ am
 
 export async function superForUsd(usd: string): Promise<bigint> {
   const prices = await loadPrices();
-  return netSuperForUsd(parseUsd(usd), prices.usdcUsd8);
+  return netSuperForUsd(parseUsd(usd), requirePrice(prices.usdcUsd8, "USDC"));
 }
 
 /** `needed` is the USDCx that must end up credited (vault) or sitting in the wallet (lock, group). */
@@ -225,17 +225,19 @@ function usd8OfSuper(superAmount: bigint, usdcUsd8: bigint): bigint {
 }
 
 function rateLine(quote: FundQuote): string {
-  if (quote.pay === "usdcx") return `1 ${stableLabel} = $${formatPrice8(quote.prices.usdcUsd8)}`;
-  if (quote.pay === "usdc" || quote.amountIn <= 0n) return `1 USDC = $${formatPrice8(quote.prices.usdcUsd8)}`;
-  const usd8 = (quote.underlying * quote.prices.usdcUsd8) / 1_000_000n;
+  const usdcUsd8 = requirePrice(quote.prices.usdcUsd8, "USDC");
+  if (quote.pay === "usdcx") return `1 ${stableLabel} = $${formatPrice8(usdcUsd8)}`;
+  if (quote.pay === "usdc" || quote.amountIn <= 0n) return `1 USDC = $${formatPrice8(usdcUsd8)}`;
+  const usd8 = (quote.underlying * usdcUsd8) / 1_000_000n;
   const perToken = (usd8 * 10n ** BigInt(scales[quote.pay])) / quote.amountIn;
   return `1 ${symbols[quote.pay]} = $${formatPrice8(perToken)}`;
 }
 
 export function fundingLines(quote: FundQuote, heading?: string): QuoteLine[] {
+  const usdcUsd8 = requirePrice(quote.prices.usdcUsd8, "USDC");
   const lines: QuoteLine[] = [];
   if (heading) lines.push({ label: "You add", value: heading });
-  lines.push({ label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(quote.fee, quote.prices.usdcUsd8))}` });
+  lines.push({ label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(quote.fee, usdcUsd8))}` });
   if (quote.pay !== "usdcx") lines.push({ label: "USDC wrapped", value: formatAmount(quote.underlying, 6, 2) });
   lines.push({
     label: quote.pay === "usdc" || quote.pay === "usdcx" ? "You spend" : "You spend at most",
@@ -271,15 +273,16 @@ export async function previewLines(input: {
   /** Lock and group pulls add the 0.30% fee on top of the face amount. */
   protocolOnTop?: boolean;
   coveredWei?: string;
-  /** Add money deposits the full amount even when the vault already holds some. */
+  /** Top up deposits the full amount even when the vault already holds some. */
   full?: boolean;
 }): Promise<QuoteLine[]> {
   const prices = await loadPrices();
+  const usdcUsd8 = requirePrice(prices.usdcUsd8, "USDC");
   let face = 0n;
   if (input.superWei) face = BigInt(input.superWei);
-  else if (input.usd) face = netSuperForUsd(parseUsd(input.usd), prices.usdcUsd8);
+  else if (input.usd) face = netSuperForUsd(parseUsd(input.usd), usdcUsd8);
   if (face <= 0n) throw new Error("Enter the amount in USD.");
-  const heading = `$${formatUsd8(usd8OfSuper(face, prices.usdcUsd8))}`;
+  const heading = `$${formatUsd8(usd8OfSuper(face, usdcUsd8))}`;
   let needed = face;
   if (input.mode === "stream") {
     const duration = Number(input.duration);
@@ -293,7 +296,7 @@ export async function previewLines(input: {
     return shownQuote([
       {
         label: "Protocol fee",
-        value: pulledFee > 0n ? `0.30% · $${formatUsd8(usd8OfSuper(pulledFee, prices.usdcUsd8))}` : "0.30% · $0.00",
+        value: pulledFee > 0n ? `0.30% · $${formatUsd8(usd8OfSuper(pulledFee, usdcUsd8))}` : "0.30% · $0.00",
       },
       { label: "You spend", value: "0" },
       { label: "Slippage", value: "No swap" },
@@ -302,13 +305,13 @@ export async function previewLines(input: {
   const mode = input.mode === "wallet" ? "wallet" : "vault";
   if (input.pay !== "usdc" && input.pay !== "usdcx") {
     const code = await publicClient.getCode({ address: baseMarket.quoterV2 });
-    if (!code || code === "0x") return [];
+    if (!code || code === "0x") throw new Error("Convert is not available on this network.");
   }
   const quote = await quoteFund(input.pay, needed - covered, mode);
   const lines = fundingLines(quote, heading);
   if (pulledFee > 0n) {
     const index = lines.findIndex((line) => line.label === "Protocol fee");
-    const feeLine = { label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(pulledFee, prices.usdcUsd8))}` };
+    const feeLine = { label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(pulledFee, usdcUsd8))}` };
     if (index >= 0) lines[index] = feeLine;
   }
   return shownQuote(lines);
@@ -322,15 +325,16 @@ function shownQuote(lines: QuoteLine[]): QuoteLine[] {
 
 export async function previewWithdraw(usd: string, receive: ReceiveAsset): Promise<QuoteLine[]> {
   const prices = await loadPrices();
+  const usdcUsd8 = requirePrice(prices.usdcUsd8, "USDC");
   const superAmount = await superForWithdraw(usd);
   if (superAmount <= 0n) throw new Error("Enter the amount in USD.");
   const underlying = superAmount / SUPER_UNIT;
-  const heading = `$${formatUsd8(usd8OfSuper(superAmount, prices.usdcUsd8))}`;
+  const heading = `$${formatUsd8(usd8OfSuper(superAmount, usdcUsd8))}`;
   if (receive === "usdc") {
     return [
       { label: "You withdraw", value: heading },
       { label: "You receive", value: `${formatAmount(underlying, 6, 2)} USDC` },
-      { label: "Rate", value: `1 USDC = $${formatPrice8(prices.usdcUsd8)}` },
+      { label: "Rate", value: `1 USDC = $${formatPrice8(usdcUsd8)}` },
       { label: "Slippage", value: "No swap" },
       { label: "Deadline", value: "None" },
     ];
@@ -339,7 +343,7 @@ export async function previewWithdraw(usd: string, receive: ReceiveAsset): Promi
   const min = slippageFloor(quoted.amountOut);
   const scale = receive === "eth" ? 18 : 6;
   const symbol = receive === "eth" ? "ETH" : "USDT";
-  const usd8 = (underlying * prices.usdcUsd8) / 1_000_000n;
+  const usd8 = (underlying * usdcUsd8) / 1_000_000n;
   const perToken = quoted.amountOut > 0n ? (usd8 * 10n ** BigInt(scale)) / quoted.amountOut : 0n;
   return [
     { label: "You withdraw", value: heading },
@@ -388,12 +392,15 @@ export async function depositPreview(owner: Address, pay: PayAsset, usd: string)
     const maxFee = fees.maxFeePerGas ?? 0n;
     if (maxFee > 0n) {
       const gas = depositGasUnits(pay, quote.gasEstimate, { approveWrap, approveRouter, resetRouter });
-      network = networkFeeUsd8(gas, maxFee, quote.prices.ethUsd8);
+      network = quote.prices.ethUsd8 == null ? null : networkFeeUsd8(gas, maxFee, quote.prices.ethUsd8);
     }
   } catch {
     network = null;
   }
-  const tokenUsd8 = pay === "eth" ? quote.prices.ethUsd8 : pay === "usdt" ? quote.prices.usdtUsd8 : quote.prices.usdcUsd8;
+  const tokenUsd8 = requirePrice(
+    pay === "eth" ? quote.prices.ethUsd8 : pay === "usdt" ? quote.prices.usdtUsd8 : quote.prices.usdcUsd8,
+    pay === "eth" ? "ETH" : pay === "usdt" ? "USDT" : "USDC",
+  );
   return buildDepositPreview({
     pay,
     typedUsdMicros: micros,
@@ -402,7 +409,7 @@ export async function depositPreview(owner: Address, pay: PayAsset, usd: string)
     underlying: quote.underlying,
     amountIn: quote.amountIn,
     amountInMax: quote.amountInMax,
-    usdcUsd8: quote.prices.usdcUsd8,
+    usdcUsd8: requirePrice(quote.prices.usdcUsd8, "USDC"),
     tokenUsd8,
     networkFeeUsd8: network,
   });

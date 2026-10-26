@@ -53,8 +53,8 @@ function CreateMenuBody() {
             </li>
           ))}
         </ul>
-        <Link href="/vaults" className="mt-2 flex h-11 items-center justify-center rounded-full text-sm font-medium text-[#3C4A2E]" onClick={() => setOpen(false)}>
-          Open vaults
+        <Link href="/goals#locks" className="mt-2 flex h-11 items-center justify-center rounded-full text-sm font-medium text-[#3C4A2E]" onClick={() => setOpen(false)}>
+          Open locks
         </Link>
       </SheetContent>
     </Sheet>

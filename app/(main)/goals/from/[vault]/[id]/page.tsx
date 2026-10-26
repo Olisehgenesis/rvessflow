@@ -31,7 +31,7 @@ async function IncomingBody({ params }: { params: Promise<{ vault: string; id: s
   const whole = flow.reserved;
   const part = (BigInt(flow.reserved) - BigInt(flow.remaining)).toString();
   const live = flow.active && !flow.paused && !flow.settled;
-  const readAt = Math.floor(Date.now() / 1000);
+  const readAt = item.readAt;
   const status = flow.settled ? "Closed" : flow.paused ? "Paused" : flow.active ? "Active" : "Waiting";
   return (
     <Page back="/goals">

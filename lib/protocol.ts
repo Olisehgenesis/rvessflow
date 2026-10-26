@@ -1,5 +1,6 @@
 import "server-only";
 
+import { connection } from "next/server";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { cache } from "react";
@@ -632,10 +633,11 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
   };
 });
 
-export type IncomingItem = { flow: FlowRow; vault: Address; from: string };
+export type IncomingItem = { flow: FlowRow; vault: Address; from: string; readAt: number };
 
 /** Goals that live in someone else's vault and pay this wallet. */
 export const loadIncoming = cache(async (me: Address): Promise<IncomingItem[]> => {
+  await connection();
   const others = people().filter((person) => person.address.toLowerCase() !== me.toLowerCase());
   if (others.length === 0) return [];
   const vaults = await publicClient.multicall({
@@ -647,7 +649,8 @@ export const loadIncoming = cache(async (me: Address): Promise<IncomingItem[]> =
     })),
     allowFailure: false,
   });
-  const now = BigInt(Math.floor(Date.now() / 1000));
+  const readAt = Math.floor(Date.now() / 1000);
+  const now = BigInt(readAt);
   const mine = me.toLowerCase();
   const items: IncomingItem[] = [];
   for (let i = 0; i < others.length; i++) {
@@ -676,7 +679,7 @@ export const loadIncoming = cache(async (me: Address): Promise<IncomingItem[]> =
     records.forEach((record, index) => {
       const flow = toFlowRow(ids[index], record, now);
       if (flow.settled || flow.recipient.toLowerCase() !== mine) return;
-      items.push({ flow, vault, from: others[i].name });
+      items.push({ flow, vault, from: others[i].name, readAt });
     });
   }
   return items;

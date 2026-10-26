@@ -51,42 +51,94 @@ function SlideSheet({
   );
 }
 
-export function WithdrawSheet({ savings, unit, conceal = false }: { savings: SavingBox[]; unit: string; conceal?: boolean }) {
+export type WalletSource = { label: string; amount: string; href: string };
+
+export function WithdrawSheet({
+  savings,
+  unit,
+  conceal = false,
+  idleUsd = "0.00",
+  wallet = [],
+}: {
+  savings: SavingBox[];
+  unit: string;
+  conceal?: boolean;
+  idleUsd?: string;
+  wallet?: WalletSource[];
+}) {
   return (
-    <SlideSheet label="Withdraw" className={withdrawButton} title="Withdraw" description="Choose a saving. Each one has its own withdraw.">
-      {(close) =>
-        savings.length === 0 ? (
-          <div className="px-1 pb-2">
-            <p className="text-sm leading-relaxed text-muted-foreground">No savings yet. Open a goal, then withdraw from that saving.</p>
-            <Link href="/goals/new" onClick={close} className="mt-4 flex h-12 items-center justify-center rounded-full bg-[#D4F06B] text-sm font-semibold text-[#141414]">
-              Create a saving
-            </Link>
-          </div>
-        ) : (
-          <ul className="max-h-[50vh] space-y-2 overflow-y-auto">
-            {savings.map((saving) => (
-              <li key={saving.id}>
-                <Link href={`/goals/${saving.id}`} onClick={close} className="block rounded-2xl border border-border bg-card p-3">
-                  <span className="flex items-center gap-3">
-                    <img src="/marks/saving.png" alt="" className="size-11 shrink-0 object-contain" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold">{saving.name}</span>
-                      <span className="block text-xs text-muted-foreground tabular-nums">
-                        {conceal ? "••••" : `${unit} ${saving.saved}`}
-                        <span> / {conceal ? "••••" : `${unit} ${saving.goal}`}</span>
+    <SlideSheet label="Withdraw" className={withdrawButton} title="Withdraw" description="Choose where the money is.">
+      {(close) => (
+        <div className="max-h-[60vh] space-y-5 overflow-y-auto px-1 pb-2">
+          <section>
+            <h3 className="text-sm font-semibold">In this wallet</h3>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              Sending to another address is not available. You can move a token into the vault, then withdraw the idle balance.
+            </p>
+            {wallet.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">No tokens in this wallet.</p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {wallet.map((item) => (
+                  <li key={item.href}>
+                    <Link href={item.href} onClick={close} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold">Move {item.label} into the vault</span>
+                        <span className="block text-xs text-muted-foreground tabular-nums">{conceal ? "••••" : item.amount}</span>
                       </span>
-                    </span>
-                    <IconChevron className="size-4 shrink-0 text-muted-foreground" />
-                  </span>
-                  <span className="mt-3 block h-1.5 overflow-hidden rounded-full bg-muted">
-                    <span className="block h-full rounded-full bg-foreground" style={{ width: `${saving.progress}%` }} />
-                  </span>
+                      <IconChevron className="size-4 shrink-0 text-muted-foreground" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section>
+            <h3 className="text-sm font-semibold">Idle in the vault</h3>
+            <Link href="/home/add/withdraw" onClick={close} className="mt-2 flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3">
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">Withdraw idle {unit}</span>
+                <span className="block text-xs text-muted-foreground tabular-nums">{conceal ? "••••" : idleUsd ? `${unit} ${idleUsd}` : "Amount unavailable"}</span>
+              </span>
+              <IconChevron className="size-4 shrink-0 text-muted-foreground" />
+            </Link>
+          </section>
+          <section>
+            <h3 className="text-sm font-semibold">Savings</h3>
+            {savings.length === 0 ? (
+              <div className="mt-2">
+                <p className="text-sm leading-relaxed text-muted-foreground">No savings yet. A saving can be withdrawn from its own page.</p>
+                <Link href="/goals/new" onClick={close} className="mt-3 inline-flex text-sm font-semibold">
+                  Create a saving
                 </Link>
-              </li>
-            ))}
-          </ul>
-        )
-      }
+              </div>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {savings.map((saving) => (
+                  <li key={saving.id}>
+                    <Link href={`/goals/${saving.id}`} onClick={close} className="block rounded-2xl border border-border bg-card p-3">
+                      <span className="flex items-center gap-3">
+                        <img src="/marks/saving.png" alt="" className="size-11 shrink-0 object-contain" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold">{saving.name}</span>
+                          <span className="block text-xs text-muted-foreground tabular-nums">
+                            {conceal ? "••••" : `${unit} ${saving.saved}`}
+                            <span> / {conceal ? "••••" : `${unit} ${saving.goal}`}</span>
+                          </span>
+                        </span>
+                        <IconChevron className="size-4 shrink-0 text-muted-foreground" />
+                      </span>
+                      <span className="mt-3 block h-1.5 overflow-hidden rounded-full bg-muted">
+                        <span className="block h-full rounded-full bg-foreground" style={{ width: `${saving.progress}%` }} />
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      )}
     </SlideSheet>
   );
 }
@@ -94,8 +146,9 @@ export function WithdrawSheet({ savings, unit, conceal = false }: { savings: Sav
 export function topUpMethods(network: string) {
   return [
     { href: "/home/add/receive", title: "Receive", body: "Show your address and a QR code.", src: "/marks/receive.png" },
-    { href: "/home/add/mobile", title: "Mobile money", body: "MTN MoMo or Airtel Money in Uganda.", src: "/marks/phone.png" },
+    { href: "/home/add/crypto", title: "Convert", body: "Move USDC, USDT, or ETH you already hold into the vault.", src: "/marks/crypto.png" },
     { href: "/home/add/card", title: "Card", body: `Transak or Coinbase. USDC arrives on ${network}.`, src: "/marks/card.png" },
+    { href: "/home/add/mobile", title: "Mobile money", body: "MTN MoMo or Airtel Money in Uganda.", src: "/marks/phone.png" },
   ];
 }
 

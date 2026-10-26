@@ -123,10 +123,35 @@ export function formatPrice8(value: bigint): string {
   return `${negative ? "-" : ""}${formatGrouped(whole)}.${frac}`;
 }
 
-export function formatUsd8(value: bigint): string {
+const USD_CENT = 1_000_000n;
+
+/** Half-up to cents. 0.015 USD becomes 2 cents, so rows and the total use the same step. */
+export function roundUsdCents(value: bigint): bigint {
   const negative = value < 0n;
-  const cents = (negative ? -value : value) / 1_000_000n;
-  const whole = cents / 100n;
-  const frac = (cents % 100n).toString().padStart(2, "0");
+  const abs = negative ? -value : value;
+  const cents = (abs + USD_CENT / 2n) / USD_CENT;
+  return negative ? -cents : cents;
+}
+
+export function formatCents(cents: bigint): string {
+  const negative = cents < 0n;
+  const abs = negative ? -cents : cents;
+  const whole = abs / 100n;
+  const frac = (abs % 100n).toString().padStart(2, "0");
   return `${negative ? "-" : ""}${formatGrouped(whole)}.${frac}`;
+}
+
+export function formatUsd8(value: bigint): string {
+  return formatCents(roundUsdCents(value));
+}
+
+/**
+ * A holding row. A positive amount that rounds to nothing is dust, written
+ * without a dollar sign so the caller can render "< $0.01".
+ */
+export function formatUsdRow(value: bigint): string {
+  if (value === 0n) return "0.00";
+  const cents = roundUsdCents(value);
+  if (cents === 0n) return "<0.01";
+  return formatCents(cents);
 }

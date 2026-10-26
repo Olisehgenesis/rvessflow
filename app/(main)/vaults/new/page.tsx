@@ -19,7 +19,7 @@ async function NewLockBody() {
   const who = await viewer();
   const [data, quote, choices] = await Promise.all([loadPortfolio(who), loadQuote(), loadPayChoices(who.address)]);
   return (
-    <Page title="Create lock" back="/vaults">
+    <Page title="Create lock" back="/goals#locks">
       <LockForm penalty={data.protocol.penaltyBps} quote={quote} choices={choices} />
     </Page>
   );

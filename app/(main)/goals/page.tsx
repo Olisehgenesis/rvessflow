@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import Loading from "../loading";
-import { GoalLink } from "@/components/product";
+import { GoalLink, LockLink } from "@/components/product";
 import { Page } from "@/components/ui-bits";
 import { goalNotes } from "@/lib/notes";
 import { loadQuote } from "@/lib/rates";
@@ -28,7 +28,7 @@ async function GoalsBody() {
   const open = own + incoming.filter((item) => !item.flow.paused).length;
   return (
     <Page
-      title="Your goals"
+      title="Plans"
       action={
         <Link href="/goals/new" className="inline-flex h-9 items-center rounded-full bg-primary px-3.5 text-sm font-medium text-primary-foreground">
           + Create goal
@@ -42,7 +42,7 @@ async function GoalsBody() {
             <li key={`${item.vault}-${item.flow.id}`}>
               <GoalLink
                 flow={item.flow}
-                readAt={data.readAt}
+                readAt={item.readAt}
                 quote={quote}
                 caption={`From ${item.from}`}
                 href={`/goals/from/${item.vault}/${item.flow.id}`}
@@ -52,12 +52,9 @@ async function GoalsBody() {
         </ul>
       ) : null}
       {data.flows.length === 0 && incoming.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card px-4 py-6">
-          <p className="text-sm text-muted-foreground">A saving holds money still. A flow or expense streams it until the end date.</p>
-          <Link href="/goals/new" className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground">
-            Create goal
-          </Link>
-        </div>
+        <p className="rounded-2xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
+          A saving holds money still. A flow or expense streams it until the end date.
+        </p>
       ) : data.flows.length > 0 ? (
         <ul className="space-y-3">
           {data.flows.map((flow) => (
@@ -67,6 +64,25 @@ async function GoalsBody() {
           ))}
         </ul>
       ) : null}
+      <section id="locks" className="mt-8">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <h2 className="text-base font-semibold">Locks</h2>
+          <Link href="/vaults/new" className="text-sm font-medium text-foreground">
+            Create lock
+          </Link>
+        </div>
+        {data.locks.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No locks yet. A lock holds tokens until a date.</p>
+        ) : (
+          <ul className="space-y-3">
+            {data.locks.map((lock) => (
+              <li key={lock.id}>
+                <LockLink lock={lock} quote={quote} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </Page>
   );
 }

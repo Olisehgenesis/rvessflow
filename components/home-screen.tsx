@@ -1,8 +1,9 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { BalanceError, BalanceSkeleton, HomeBalance } from "@/components/balance-card";
+import { Greeting } from "@/components/greeting";
 import { IconBell, IconChevron, IconMark } from "@/components/icons";
-import { GoalLink, ProductMark, type ProductKind } from "@/components/product";
+import { GoalLink } from "@/components/product";
 import { ActivityList } from "@/components/activity-list";
 import { PrivateLine, PrivateUsd } from "@/components/private-money";
 import { ProfileAvatar } from "@/components/profile-avatar";
@@ -27,6 +28,7 @@ export async function HomeScreen({
     <main className="px-4 pt-4 pb-8">
       {notice ? <p className="mb-4 rounded-2xl border border-border bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">{notice}</p> : null}
       <HomeHeader name={who.name} address={who.address} />
+      <Greeting name={who.name} />
       <Suspense fallback={<BalanceSkeleton />}>
         <HomeFigures who={who} />
       </Suspense>
@@ -56,7 +58,7 @@ export function HomeHeader({ name, address, alert = false }: { name: string; add
 
 async function HomeFigures({ who }: { who: { address: Address; name: string; index: number } }) {
   const loaded = await readHome(who);
-  if (!loaded.ok) return <BalanceError message={loaded.message} />;
+  if (!loaded.ok) return <BalanceError message={loaded.message} detail={loaded.detail} />;
   return <HomeReady who={who} portfolio={loaded.portfolio} holdings={loaded.holdings} quote={loaded.quote} />;
 }
 
@@ -67,8 +69,9 @@ async function readHome(who: { address: Address; name: string; index: number }) 
     const holdings = await loadHoldings(who.address, portfolio, quote);
     return { ok: true as const, portfolio, quote, holdings };
   } catch (error) {
-    const message = error instanceof Error ? error.message : `${networkName} did not return a balance.`;
-    return { ok: false as const, message };
+    console.error(error);
+    const detail = error instanceof Error ? error.message : "";
+    return { ok: false as const, message: `We could not read the balance on ${networkName}.`, detail };
   }
 }
 
@@ -125,6 +128,10 @@ async function HomeReady({
         unit={quote.unit}
         network={networkName}
         showWithdraw={funded}
+        idleUsd={holdings.idleUsd}
+        wallet={holdings.rows
+          .filter((row) => (row.key === "usdc" || row.key === "usdt" || row.key === "eth") && row.availability !== "unsupported" && hasTokenAmount(row.amount))
+          .map((row) => ({ label: row.label, amount: `${row.amount} ${row.label}`, href: `/home/add/crypto?pay=${row.key}` }))}
         quote={quote}
         usdcUsd8={holdings.usdcUsd8}
         availableUsd8={holdings.availableUsd8}
@@ -145,6 +152,15 @@ async function HomeReady({
             : undefined
         }
       />
+      {holdings.priceNotes.length > 0 ? (
+        <ul className="mt-3 space-y-1">
+          {holdings.priceNotes.map((note) => (
+            <li key={note} className="text-sm text-muted-foreground">
+              {note}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {portfolio.vault ? null : (
         <p className="mt-3 text-sm text-muted-foreground">
           No savings vault on {networkName} yet. Topping up or opening a goal creates one. You can receive on {networkName} before that.
@@ -180,7 +196,6 @@ async function HomeReady({
           <AssetList rows={held} localUnit={holdings.localUnit} />
         </section>
       ) : null}
-      <QuickActions />
       {activityError || activity.length > 0 ? (
         <section className="mt-6">
           <div className="mb-2 flex items-end justify-between">
@@ -202,32 +217,9 @@ async function HomeReady({
   );
 }
 
-const quickActions: { href: string; title: string; body: string; kind: ProductKind }[] = [
-  { href: "/goals/new", title: "Save", body: "Set goals and watch your money grow.", kind: "saving" },
-  { href: "/goals/new?kind=flow", title: "Stream", body: "Send and receive recurring payments.", kind: "flow" },
-  { href: "/vaults/new", title: "Lock", body: "Keep your funds safe until the right time.", kind: "lock" },
-  { href: "/groups/new", title: "Groups", body: "Save together with trusted people.", kind: "group" },
-];
-
-function QuickActions() {
-  return (
-    <ul className="mt-5 grid grid-cols-4 gap-2">
-      {quickActions.map((action) => (
-        <li key={action.title}>
-          <Link href={action.href} className="flex flex-col items-center px-0.5 text-center">
-            <ProductMark kind={action.kind} size="lg" />
-            <span className="mt-2 text-sm font-semibold">{action.title}</span>
-            <span className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{action.body}</span>
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function GettingStarted() {
   const steps = [
-    { href: "/home/add", title: "Fund your wallet", body: `Receive on ${networkName}, convert crypto you hold, or use a provider that is configured.` },
+    { href: "/home/add", title: "Top up your wallet", body: `Receive on ${networkName}, convert crypto you hold, or use a provider that is configured.` },
     { href: "/goals/new", title: "Create your first goal", body: "Optional. A goal is not required before you top up." },
   ];
   return (
@@ -253,16 +245,21 @@ function GettingStarted() {
 export function AssetList({ rows, localUnit }: { rows: HoldingRow[]; localUnit?: string }) {
   return (
     <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-      {rows.map((row) => (
-        <li key={row.key} id={row.key}>
-          <Link href={assetHref(row)} className="flex items-center gap-3 px-3.5 py-3">
+      {rows.map((row) => {
+        const className = "flex items-center gap-3 px-3.5 py-3";
+        const body = (
+          <>
             <TokenIcon symbol={row.label} />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold">{row.label}</span>
               <span className="block text-xs text-muted-foreground">{row.network}</span>
             </span>
             <span className="text-right">
-              {row.local && localUnit ? (
+              {row.availability === "unsupported" ? (
+                <span className="block text-sm text-muted-foreground">Not on this network</span>
+              ) : row.availability === "unpriced" ? (
+                <span className="block text-sm text-muted-foreground">Price unavailable</span>
+              ) : row.local && localUnit ? (
                 <span className="block text-sm font-semibold">
                   <PrivateLine value={`${localUnit} ${row.local}`} />
                 </span>
@@ -271,25 +268,37 @@ export function AssetList({ rows, localUnit }: { rows: HoldingRow[]; localUnit?:
                   <PrivateUsd value={row.usd} />
                 </span>
               )}
-              {row.local && localUnit ? (
+              {row.availability === "priced" && row.local && localUnit ? (
                 <span className="block text-xs text-muted-foreground">
                   <PrivateUsd value={row.usd} />
                 </span>
               ) : null}
               <span className="block text-[11px] text-muted-foreground">
-                <PrivateLine value={`${row.amount} ${row.label}`} />
+                <PrivateLine value={row.availability === "unsupported" ? row.amount : `${row.amount} ${row.label}`} />
               </span>
             </span>
-            <IconChevron className="size-4 shrink-0 text-muted-foreground" />
-          </Link>
-        </li>
-      ))}
+            {row.availability === "unsupported" ? null : <IconChevron className="size-4 shrink-0 text-muted-foreground" />}
+          </>
+        );
+        return (
+          <li key={row.key} id={row.key}>
+            {row.availability === "unsupported" ? (
+              <div className={className}>{body}</div>
+            ) : (
+              <Link href={assetHref(row)} className={className}>
+                {body}
+              </Link>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
 function assetHref(row: HoldingRow) {
+  if (row.availability === "unsupported") return "/home/assets";
   if (row.key === "usdc" || row.key === "usdt" || row.key === "eth") return `/home/add/crypto?pay=${row.key}`;
-  if (row.key === "ethx" || row.key === "usdcx") return "/vaults";
+  if (row.key === "ethx" || row.key === "usdcx") return "/goals#locks";
   return "/home/assets";
 }

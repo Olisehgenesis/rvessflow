@@ -777,7 +777,7 @@ export async function groupCreateIntent(draftId: string) {
 export async function launchDraft(id: string) {
   const who = await viewer();
   const data = await world();
-  const { bucket, draft } = owned(data, id, who);
+  const { draft } = owned(data, id, who);
   if (draft.members.length < 3) throw new Error("Add at least 3 people before the group can start.");
   const plan = cyclePlan(draft.cycle, Number(draft.days));
   if (!plan) throw new Error("That cycle length is outside what the contract allows. Use 1 to 366 days.");
