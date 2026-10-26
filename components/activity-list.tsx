@@ -22,7 +22,7 @@ const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export function ActivityList({ items, quote }: { items: ActivityItem[]; quote: Quote }) {
   if (items.length === 0) {
     return (
-      <p className="rounded-3xl border border-border/70 bg-card px-4 py-5 text-sm text-muted-foreground shadow-[0_10px_28px_rgba(20,27,45,0.05)]">
+      <p className="rounded-2xl border border-border bg-card px-4 py-5 text-sm text-muted-foreground">
         Nothing is moving yet. Save, stream, or lock to start.
       </p>
     );
@@ -33,7 +33,7 @@ export function ActivityList({ items, quote }: { items: ActivityItem[]; quote: Q
         const tone = activityTone(item.title);
         return (
           <li key={item.id}>
-            <Link href={item.href} className="flex items-center gap-3 rounded-3xl border border-border/70 bg-card px-3.5 py-3 shadow-[0_10px_28px_rgba(20,27,45,0.05)]">
+            <Link href={item.href} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3.5 py-3">
               <span className={`grid size-10 shrink-0 place-items-center rounded-full ${tone.well}`}>
                 <tone.Icon className="size-4" />
               </span>

@@ -2,7 +2,8 @@ import { Suspense } from "react";
 import Link from "next/link";
 import Loading from "../loading";
 import { ApplyLink } from "@/components/circle";
-import { GroupLink, ProductMark } from "@/components/product";
+import { HomeHeader } from "@/components/home-screen";
+import { GroupLink } from "@/components/product";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
 import { draftsIfReady } from "@/lib/circle";
@@ -24,25 +25,24 @@ async function GroupsBody() {
   const drafts = directory.drafts;
   return (
     <Page
-      title="Groups"
+      title="Your groups"
+      brand={<HomeHeader name={who.name} />}
       action={
-        <Link href="/groups/new" className="text-sm font-medium text-foreground">
-          New group
-        </Link>
+        drafts.length > 0 || data.groups.length > 0 ? (
+          <Link href="/groups/new" className="text-sm font-semibold">
+            New
+          </Link>
+        ) : null
       }
     >
       {directory.down ? <p className="mb-4 text-sm text-muted-foreground">The member directory is unavailable, so drafts cannot load. Groups already on Base still show here.</p> : null}
       {drafts.length === 0 && data.groups.length === 0 ? (
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <ProductMark kind="group" size="lg" />
-            <h2 className="text-lg font-semibold">A rotating pot</h2>
-          </div>
+        <div className="rounded-2xl border border-border bg-card px-4 py-5">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Create a group, add people by the email, phone, or password linked to their wallet, arrange the order, then start it. People can also apply to join.
+            A group is a rotating pot on Base. You create one, add people by the email or phone tied to their account, arrange the order, then start it. There is no public directory to browse. Someone can apply when an organizer shares a group that is open.
           </p>
-          <Link href="/groups/new" className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground">
-            Start a group
+          <Link href="/groups/new" className="mt-4 inline-flex h-11 items-center rounded-full bg-[#D4F06B] px-5 text-sm font-semibold text-[#141414]">
+            + Create a group
           </Link>
         </div>
       ) : (

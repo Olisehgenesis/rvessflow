@@ -105,7 +105,7 @@ Optional server environment variables (see `.env.example`). Leave them empty to 
 | `COINBASE_CDP_API_KEY_SECRET` | CDP EC private key PEM. Newlines may be written as `\n` |
 | `COINBASE_PROJECT_ID` | Optional partner reference on the Coinbase Pay URL |
 | `COINBASE_ONRAMP_REDIRECT_URL` | Optional URL after Coinbase Pay |
-| `RVESS_HOME_FIXTURE` | Set to `1` to open `/home/preview`. That page reads live balances for the documented first wallet in CONTRACTS.md and labels them as not the signed-in account. Leave it unset and the route is not found. The bundled test account currently has no balance, goals, or locks, so its home is the empty welcome. |
+| `RVESS_HOME_FIXTURE` | Set to `1` to open `/home/preview`. That page reads live balances for the documented first wallet in CONTRACTS.md and labels them as not the signed-in account. `?view=loading` and `?view=error` show those frames without inventing a balance. Leave it unset and the route is not found. The bundled test account currently has no balance, goals, or locks, so its home is an explicit $0.00 with Add money. |
 
 | Contract | Address |
 | --- | --- |

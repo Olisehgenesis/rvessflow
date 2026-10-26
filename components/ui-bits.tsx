@@ -3,9 +3,10 @@ import { IconBack } from "@/components/icons";
 import { money, show } from "@/lib/display";
 import type { Quote } from "@/lib/quote";
 
-export function Page({ title = "", back, children, action }: { title?: string; back?: string; children: React.ReactNode; action?: React.ReactNode }) {
+export function Page({ title = "", back, children, action, brand }: { title?: string; back?: string; children: React.ReactNode; action?: React.ReactNode; brand?: React.ReactNode }) {
   return (
     <main className="px-4 pb-8 pt-4">
+      {brand}
       <header className={`mb-5 flex items-center gap-2 ${back ? "" : "justify-between"}`}>
         {back ? (
           <Link href={back} className="grid size-9 shrink-0 place-items-center text-foreground" aria-label="Back">

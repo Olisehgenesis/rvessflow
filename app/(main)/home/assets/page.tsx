@@ -25,13 +25,16 @@ async function AssetsBody() {
       <p className="mb-4 text-sm text-muted-foreground">Balances priced on Base. USD stays first. A local currency, including UGX, shows under each amount when you pick one in More.</p>
       <AssetList rows={holdings.rows} localUnit={holdings.localUnit} />
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <Link href="/vaults" className="flex h-11 items-center justify-center rounded-full bg-card text-sm font-medium shadow-[0_8px_20px_rgba(20,27,45,0.05)]">
+        <Link href="/home/add/receive" className="flex h-11 items-center justify-center rounded-full border border-border bg-card text-sm font-medium">
+          Receive
+        </Link>
+        <Link href="/vaults" className="flex h-11 items-center justify-center rounded-full border border-border bg-card text-sm font-medium">
           Vaults
         </Link>
-        <Link href="/home/add" className="flex h-11 items-center justify-center rounded-full bg-[#141B2D] text-sm font-medium text-white">
-          Add money
-        </Link>
       </div>
+      <Link href="/home/add" className="mt-2 flex h-12 items-center justify-center rounded-full bg-[#D4F06B] text-sm font-semibold text-[#141414]">
+        Add money
+      </Link>
     </Page>
   );
 }

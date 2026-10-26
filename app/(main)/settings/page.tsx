@@ -5,6 +5,8 @@ import { InstallButton } from "@/components/install-app";
 import { CurrencyPick } from "@/components/currency-pick";
 import { AccountSwitch } from "@/components/forms";
 import Loading from "../loading";
+import { HomeHeader } from "@/components/home-screen";
+import { IconChevron } from "@/components/icons";
 import { Fact, Facts, Page } from "@/components/ui-bits";
 import { contactIfReady } from "@/lib/circle";
 import { labeled, money, shortAddress } from "@/lib/display";
@@ -34,17 +36,15 @@ async function SettingsBody() {
     ? new Date(data.protocol.upgradeReadyAt * 1000).toLocaleString()
     : "No upgrade is scheduled";
   return (
-    <Page title="Settings">
-      <nav className="mb-4 grid grid-cols-2 gap-2" aria-label="Wallet">
-        <Link href="/vaults" className="rounded-3xl border border-border/70 bg-card px-4 py-3 text-sm font-semibold shadow-[0_10px_28px_rgba(20,27,45,0.05)]">
-          Vaults
-          <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Locks</span>
-        </Link>
-        <Link href="/home/assets" className="rounded-3xl border border-border/70 bg-card px-4 py-3 text-sm font-semibold shadow-[0_10px_28px_rgba(20,27,45,0.05)]">
-          Assets
-          <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Balances on Base</span>
-        </Link>
+    <Page title="More" brand={<HomeHeader name={who.name} />}>
+      <nav className="mb-6 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card" aria-label="More">
+        <MoreLink href="/home/assets" title="Wallet" body="Balances, receive address, and vaults" />
+        <MoreLink href="#settings" title="Settings" body="Currency, profile, and sign-in" />
+        <MoreLink href="#help" title="Help" body="What this beta does and does not promise" />
+        <MoreLink href="#about" title="About" body="Network, account, and the live contracts" />
       </nav>
+      <p className="mb-6 text-sm text-muted-foreground">Gas is ETH on Base. A passkey account pays its own gas. There is no paymaster and no setting to pay fees in another token.</p>
+      <section id="settings" className="mb-4 scroll-mt-4">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">Currency</p>
@@ -64,14 +64,17 @@ async function SettingsBody() {
           Sign out
         </button>
       </form>
-      <p className="mb-3 text-sm">
-        <Link href="/terms" className="font-medium underline">
-          Terms
-        </Link>
-      </p>
-      <div className="mb-6">
+      <div className="mb-2">
         <InstallButton />
       </div>
+      </section>
+      <section id="help" className="mb-6 scroll-mt-4">
+        <h2 className="text-base font-semibold">Help</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">RvessFlow is a savings wallet on Base. Deposits, goals, locks, and groups use the contracts already deployed. They are unaudited. There is no separate support desk in this app.</p>
+        <Link href="/terms" className="mt-3 inline-flex text-sm font-medium underline">
+          Terms
+        </Link>
+      </section>
       {who.method === "tester" ? (
         <>
           <p className="mb-3 text-sm text-muted-foreground">These test accounts sign from this machine on Base mainnet. They need ETH for gas. Payments can start from USDC, USDT, or ETH.</p>
@@ -80,7 +83,8 @@ async function SettingsBody() {
       ) : (
         <p className="mb-3 text-sm text-muted-foreground">Payments from this account are signed here. A passkey needs a Base bundler URL. A connected wallet confirms each transaction itself. Test accounts stay available from the sign-in screen.</p>
       )}
-      <div className="mt-6">
+      <section id="about" className="scroll-mt-4">
+      <h2 className="mb-2 text-base font-semibold">About</h2>
       <Facts>
         <Fact label="Network" value="Base" />
         <Fact label="Account" value={shortAddress(data.me.address)} />
@@ -93,7 +97,7 @@ async function SettingsBody() {
         <Fact label="Yield budget" value={labeled(data.protocol.yieldBudget, quote)} />
         <Fact label="Upgrade" value={upgrade} />
       </Facts>
-      </div>
+      </section>
       <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
         Pause, penalty, yield, and upgrades belong to the protocol admin ({shortAddress(data.protocol.admin)}), not to {data.me.name}. This screen shows the live values and does not pretend you can change them.
       </p>
@@ -124,6 +128,18 @@ async function SettingsBody() {
         </li>
       </ul>
     </Page>
+  );
+}
+
+function MoreLink({ href, title, body }: { href: string; title: string; body: string }) {
+  return (
+    <Link href={href} className="flex items-center gap-3 px-4 py-3">
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold">{title}</span>
+        <span className="block text-xs text-muted-foreground">{body}</span>
+      </span>
+      <IconChevron className="size-4 text-muted-foreground" />
+    </Link>
   );
 }
 

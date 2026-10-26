@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import Loading from "../loading";
+import { HomeHeader } from "@/components/home-screen";
 import { GoalLink } from "@/components/product";
 import { Page } from "@/components/ui-bits";
 import { goalNotes } from "@/lib/notes";
@@ -23,18 +24,23 @@ async function GoalsBody() {
   return (
     <Page
       title="Your goals"
+      brand={<HomeHeader name={who.name} />}
       action={
-        <Link href="/goals/new" className="inline-flex h-9 items-center rounded-full bg-primary px-3.5 text-sm font-medium text-primary-foreground">
-          + Create goal
-        </Link>
+        data.flows.length > 0 ? (
+          <Link href="/goals/new" className="inline-flex h-9 items-center rounded-full bg-[#D4F06B] px-3.5 text-sm font-semibold text-[#141414]">
+            + Create goal
+          </Link>
+        ) : null
       }
     >
-      <p className="mb-3 text-sm text-muted-foreground">{open === 0 ? "No active goals" : `${open} active goal${open === 1 ? "" : "s"}`}</p>
+      <p className="mb-3 text-sm text-muted-foreground">
+        {open === 0 ? "No active goals. Adding money does not require one." : `${open} active goal${open === 1 ? "" : "s"}`}
+      </p>
       {data.flows.length === 0 ? (
-        <div className="rounded-3xl border border-border/70 bg-card px-4 py-6 shadow-[0_10px_28px_rgba(20,27,45,0.06)]">
-          <p className="text-sm text-muted-foreground">A saving holds money still. A flow or expense streams it until the end date.</p>
-          <Link href="/goals/new" className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground">
-            Create goal
+        <div className="rounded-2xl border border-border bg-card px-4 py-5">
+          <p className="text-sm leading-relaxed text-muted-foreground">A saving holds money still. A flow or an expense streams it until the end date.</p>
+          <Link href="/goals/new" className="mt-4 inline-flex h-11 items-center rounded-full bg-[#D4F06B] px-5 text-sm font-semibold text-[#141414]">
+            + Create goal
           </Link>
         </div>
       ) : (

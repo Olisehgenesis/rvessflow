@@ -22,8 +22,11 @@ export function hasTokenAmount(amount: string): boolean {
   return Number.isFinite(value) && value > 0;
 }
 
-/** Empty welcome home: no goals, no locks, and no token balance. */
-export function isWelcomeHome(input: { goals: number; locks: number; amounts: string[] }): boolean {
-  if (input.goals > 0 || input.locks > 0) return false;
+/**
+ * Short “get started” rows. A zero balance is not enough: someone with a goal,
+ * lock, or group has already started, even if the wallet reads $0.00.
+ */
+export function showGettingStarted(input: { goals: number; locks: number; groups: number; amounts: string[] }): boolean {
+  if (input.goals > 0 || input.locks > 0 || input.groups > 0) return false;
   return !input.amounts.some(hasTokenAmount);
 }

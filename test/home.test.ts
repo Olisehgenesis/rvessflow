@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { balanceColumns, hasTokenAmount, isWelcomeHome, usdcEquivalent } from "@/lib/home-math";
+import { balanceColumns, hasTokenAmount, showGettingStarted, usdcEquivalent } from "@/lib/home-math";
 
 describe("home balance columns", () => {
   it("splits a total into available, streaming, and locked that add back up", () => {
@@ -32,12 +32,13 @@ describe("home balance columns", () => {
   });
 });
 
-describe("welcome home", () => {
-  it("shows the welcome screen only when goals, locks, and balances are empty", () => {
-    assert.equal(isWelcomeHome({ goals: 0, locks: 0, amounts: ["0.00", "0.000000"] }), true);
-    assert.equal(isWelcomeHome({ goals: 0, locks: 0, amounts: ["0.19"] }), false);
-    assert.equal(isWelcomeHome({ goals: 1, locks: 0, amounts: ["0.00"] }), false);
-    assert.equal(isWelcomeHome({ goals: 0, locks: 2, amounts: [] }), false);
+describe("getting started", () => {
+  it("shows first steps only when the account has no positions and no balance", () => {
+    assert.equal(showGettingStarted({ goals: 0, locks: 0, groups: 0, amounts: ["0.00", "0.000000"] }), true);
+    assert.equal(showGettingStarted({ goals: 0, locks: 0, groups: 0, amounts: ["0.19"] }), false);
+    assert.equal(showGettingStarted({ goals: 1, locks: 0, groups: 0, amounts: ["0.00"] }), false);
+    assert.equal(showGettingStarted({ goals: 0, locks: 2, groups: 0, amounts: [] }), false);
+    assert.equal(showGettingStarted({ goals: 0, locks: 0, groups: 1, amounts: ["0.00"] }), false);
     assert.equal(hasTokenAmount("0.000307"), true);
   });
 });

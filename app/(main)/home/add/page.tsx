@@ -5,10 +5,10 @@ import { FlowHeader } from "@/components/deposit-flow";
 import { IconChevron } from "@/components/icons";
 
 const methods = [
-  { href: "/home/add/crypto", title: "Convert crypto", detail: "USDC, USDT, or ETH already on Base." },
-  { href: "/home/add/receive", title: "Receive from a wallet", detail: "Show your Base address and a QR code." },
-  { href: "/home/add/mobile", title: "Top up with mobile money", detail: "MTN MoMo or Airtel Money in Uganda." },
-  { href: "/home/add/card", title: "Buy with card", detail: "Transak or Coinbase. USDC arrives on Base." },
+  { href: "/home/add/receive", title: "Receive crypto", detail: "Your Base address and a QR code. USDC, USDT, or ETH on Base only." },
+  { href: "/home/add/crypto", title: "Convert crypto you hold", detail: "USDC, USDT, or ETH on Base, swapped if needed, then wrapped into the vault." },
+  { href: "/home/add/card", title: "Buy with card", detail: "Transak or Coinbase Onramp. If a key is missing, that provider says it is unavailable." },
+  { href: "/home/add/mobile", title: "Mobile money", detail: "Uganda MTN MoMo or Airtel Money through Kotani Pay. Unavailable until Kotani is configured." },
 ];
 
 export default function AddMoneyPage() {
@@ -16,7 +16,8 @@ export default function AddMoneyPage() {
     <Suspense fallback={<Loading />}>
       <main className="px-4 pt-4 pb-8">
         <FlowHeader title="Add money" back="/home" />
-        <p className="mb-4 text-sm text-muted-foreground">Choose how USD reaches your vault.</p>
+        <h2 className="text-lg font-semibold">Choose how to fund your wallet</h2>
+        <p className="mt-1 mb-4 text-sm text-muted-foreground">Every option opens a real flow on Base mainnet. A provider without keys stays on its screen and says what is missing.</p>
         <div className="space-y-2">
           {methods.map((method) => (
             <Link key={method.href} href={method.href} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-4">
@@ -28,7 +29,10 @@ export default function AddMoneyPage() {
             </Link>
           ))}
         </div>
-        <Link href="/home/add/withdraw" className="mt-6 block text-center text-sm font-medium text-muted-foreground">
+        <p className="mt-4 rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed text-muted-foreground">
+          These contracts are unaudited. Add only what you can afford to lose. Assets sent on a network other than Base can be lost.
+        </p>
+        <Link href="/home/add/withdraw" className="mt-4 block text-center text-sm font-medium text-muted-foreground">
           Withdraw instead
         </Link>
       </main>

@@ -2,7 +2,8 @@
 
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
-import { IconChevron, IconEye, IconEyeOff, IconSun } from "@/components/icons";
+import { IconChevron, IconEye, IconEyeOff } from "@/components/icons";
+import { RetryButton } from "@/components/retry-button";
 
 const hidden = "••••••";
 const storageKey = "rvess-hide-balance";
@@ -39,41 +40,63 @@ export function toggleConceal() {
   writeConceal(!readConceal());
 }
 
+const lime = "flex h-12 items-center justify-center rounded-full bg-[#D4F06B] text-sm font-semibold text-[#141414]";
+
+export function BalanceSkeleton() {
+  return (
+    <section aria-busy="true" aria-label="Loading balance" className="mt-5 rounded-3xl border border-border bg-[#E7F4C4] p-4">
+      <div className="h-3 w-24 animate-pulse rounded-full bg-[#141414]/10" />
+      <div className="mt-4 h-10 w-40 animate-pulse rounded-xl bg-[#141414]/10" />
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        <div className="h-8 animate-pulse rounded-lg bg-[#141414]/10" />
+        <div className="h-8 animate-pulse rounded-lg bg-[#141414]/10" />
+        <div className="h-8 animate-pulse rounded-lg bg-[#141414]/10" />
+      </div>
+    </section>
+  );
+}
+
+export function BalanceError({ message }: { message: string }) {
+  return (
+    <section className="mt-5 rounded-3xl border border-border bg-card p-4" role="alert">
+      <p className="text-sm font-semibold">Balance unavailable</p>
+      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{message}</p>
+      <p className="mt-2 text-sm text-muted-foreground">Nothing here is shown as $0.00 until Base answers.</p>
+      <RetryButton />
+    </section>
+  );
+}
+
 export function HomeBalance({
   totalUsd,
   totalUsdc,
   totalLocal,
   localUnit,
   available,
-  availableUsdc,
   streaming,
-  streamingUsdc,
   locked,
-  lockedUsdc,
+  showReceive,
 }: {
   totalUsd: string;
   totalUsdc: string;
   totalLocal?: string;
   localUnit?: string;
   available: string;
-  availableUsdc: string;
   streaming: string;
-  streamingUsdc: string;
   locked: string;
-  lockedUsdc: string;
+  showReceive: boolean;
 }) {
   const conceal = useConceal();
   const usd = (value: string) => (conceal ? hidden : `$${value}`);
-  const usdc = (value: string) => (conceal ? hidden : value);
   const columns = [
-    { label: "Available", usd: available, usdc: availableUsdc },
-    { label: "Streaming", usd: streaming, usdc: streamingUsdc },
-    { label: "Locked", usd: locked, usdc: lockedUsdc },
+    { label: "Available", usd: available },
+    { label: "Streaming", usd: streaming },
+    { label: "Locked", usd: locked },
   ];
   return (
-    <section className="relative mt-5 overflow-hidden rounded-3xl bg-[#D4F06B] p-4 text-[#172114] shadow-[0_12px_30px_rgba(20,27,45,0.06)]">
+    <section className="mt-5 rounded-3xl border border-[#D7E7B0] bg-[#E7F4C4] p-4 text-[#141414]">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">Total balance</p>
+        <p className="text-sm">Total balance</p>
         <div className="flex items-center">
           <button
             type="button"
@@ -89,28 +112,29 @@ export function HomeBalance({
           </Link>
         </div>
       </div>
-      <div className="mt-2 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 font-display text-4xl font-semibold tracking-tight tabular-nums">
-            {usd(totalUsd)}
-            <IconSun className="size-5 shrink-0 text-[#E2A93B]" />
-          </p>
-          <p className="mt-1 text-sm font-medium text-[#3C4A2E] tabular-nums">≈ {usdc(totalUsdc)} USDC</p>
-          {totalLocal && localUnit ? (
-            <p className="mt-0.5 text-sm text-[#3C4A2E] tabular-nums">{conceal ? hidden : `${localUnit} ${totalLocal}`}</p>
-          ) : null}
-        </div>
-        <img src="/home/wallet.webp" alt="" className="mt-1 w-24 shrink-0" />
-      </div>
-      <dl className="relative z-10 mt-4 grid grid-cols-3">
+      <p className="mt-2 font-display text-4xl font-semibold tracking-tight tabular-nums">{usd(totalUsd)}</p>
+      <p className="mt-1 text-sm text-[#3C4A2E] tabular-nums">≈ {conceal ? hidden : totalUsdc} USDC</p>
+      {totalLocal && localUnit ? (
+        <p className="mt-0.5 text-sm text-[#3C4A2E] tabular-nums">{conceal ? hidden : `${localUnit} ${totalLocal}`}</p>
+      ) : null}
+      <dl className="mt-4 grid grid-cols-3">
         {columns.map((column, index) => (
-          <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#172114]/15 px-2"}>
-            <dt className="text-xs">{column.label}</dt>
+          <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#141414]/10 px-3"}>
+            <dt className="text-xs text-[#3C4A2E]">{column.label}</dt>
             <dd className="mt-1 text-sm font-semibold tabular-nums">{usd(column.usd)}</dd>
-            <p className="text-[11px] text-[#3C4A2E] tabular-nums">≈ {usdc(column.usdc)} USDC</p>
           </div>
         ))}
       </dl>
+      <div className={`mt-4 grid gap-2 ${showReceive ? "grid-cols-2" : "grid-cols-1"}`}>
+        <Link href="/home/add" className={lime}>
+          Add money
+        </Link>
+        {showReceive ? (
+          <Link href="/home/add/receive" className="flex h-12 items-center justify-center rounded-full border border-[#141414]/15 bg-white/70 text-sm font-semibold">
+            Receive
+          </Link>
+        ) : null}
+      </div>
     </section>
   );
 }
