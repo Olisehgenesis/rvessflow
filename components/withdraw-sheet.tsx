@@ -7,10 +7,13 @@ import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTi
 
 const withdrawButton = "flex h-12 items-center justify-center rounded-full border border-[#141414]/15 bg-white/70 text-sm font-semibold";
 
-function hasIdle(value: string) {
-  const amount = Number(value.replace(/,/g, ""));
-  return Number.isFinite(amount) && amount > 0;
-}
+export type SavingBox = {
+  id: string;
+  name: string;
+  saved: string;
+  goal: string;
+  progress: number;
+};
 
 function SlideSheet({
   label,
@@ -48,21 +51,42 @@ function SlideSheet({
   );
 }
 
-export function WithdrawSheet({ idleUsd = "0.00" }: { idleUsd?: string }) {
-  const saved = hasIdle(idleUsd);
+export function WithdrawSheet({ savings, unit, conceal = false }: { savings: SavingBox[]; unit: string; conceal?: boolean }) {
   return (
-    <SlideSheet label="Withdraw" className={withdrawButton} title="Withdraw" description="Choose where the money goes.">
-      {(close) => (
-        <ul className="space-y-2">
-          {saved ? (
-            <Choice href="/home/add/withdraw" title="To your available balance" body={`Move $${idleUsd} of saved USD into this wallet.`} src="/marks/saving.png" onPick={close} />
-          ) : null}
-          <Choice title="To another address" body="Send USDC, USDT, or ETH on Base." src="/marks/address.png" />
-          <Choice title="To a friend" body="Someone already on this device." src="/marks/friend.png" />
-          <Choice title="To mobile money" body="Not available yet." src="/marks/phone.png" quiet />
-          <Choice title="To a bank account" body="Not available yet." src="/marks/bank.png" quiet />
-        </ul>
-      )}
+    <SlideSheet label="Withdraw" className={withdrawButton} title="Withdraw" description="Choose a saving. Each one has its own withdraw.">
+      {(close) =>
+        savings.length === 0 ? (
+          <div className="px-1 pb-2">
+            <p className="text-sm leading-relaxed text-muted-foreground">No savings yet. Open a goal, then withdraw from that saving.</p>
+            <Link href="/goals/new" onClick={close} className="mt-4 flex h-12 items-center justify-center rounded-full bg-[#D4F06B] text-sm font-semibold text-[#141414]">
+              Create a saving
+            </Link>
+          </div>
+        ) : (
+          <ul className="max-h-[50vh] space-y-2 overflow-y-auto">
+            {savings.map((saving) => (
+              <li key={saving.id}>
+                <Link href={`/goals/${saving.id}`} onClick={close} className="block rounded-2xl border border-border bg-card p-3">
+                  <span className="flex items-center gap-3">
+                    <img src="/marks/saving.png" alt="" className="size-11 shrink-0 object-contain" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{saving.name}</span>
+                      <span className="block text-xs text-muted-foreground tabular-nums">
+                        {conceal ? "••••" : `${unit} ${saving.saved}`}
+                        <span> / {conceal ? "••••" : `${unit} ${saving.goal}`}</span>
+                      </span>
+                    </span>
+                    <IconChevron className="size-4 shrink-0 text-muted-foreground" />
+                  </span>
+                  <span className="mt-3 block h-1.5 overflow-hidden rounded-full bg-muted">
+                    <span className="block h-full rounded-full bg-foreground" style={{ width: `${saving.progress}%` }} />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )
+      }
     </SlideSheet>
   );
 }

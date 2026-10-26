@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { IconChevron, IconEye, IconEyeOff } from "@/components/icons";
 import { RetryButton } from "@/components/retry-button";
-import { TopUpSheet, WithdrawSheet } from "@/components/withdraw-sheet";
+import { TopUpSheet, WithdrawSheet, type SavingBox } from "@/components/withdraw-sheet";
 
 const hidden = "••••••";
 const storageKey = "rvess-hide-balance";
@@ -77,7 +77,8 @@ export function HomeBalance({
   streaming,
   locked,
   showWithdraw,
-  idleUsd = "0.00",
+  savings = [],
+  unit = "USD",
   network = "Base",
 }: {
   totalUsd: string;
@@ -87,7 +88,8 @@ export function HomeBalance({
   streaming: string;
   locked: string;
   showWithdraw: boolean;
-  idleUsd?: string;
+  savings?: SavingBox[];
+  unit?: string;
   network?: string;
 }) {
   const conceal = useConceal();
@@ -130,7 +132,7 @@ export function HomeBalance({
       </dl>
       <div className={`mt-4 grid gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
         <TopUpSheet network={network} className={lime} />
-        {showWithdraw ? <WithdrawSheet idleUsd={idleUsd} /> : null}
+        {showWithdraw ? <WithdrawSheet savings={savings} unit={unit} conceal={conceal} /> : null}
       </div>
     </section>
   );

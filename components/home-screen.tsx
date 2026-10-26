@@ -7,6 +7,7 @@ import { ActivityList } from "@/components/activity-list";
 import { PrivateLine, PrivateUsd } from "@/components/private-money";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { TokenIcon } from "@/components/token-icon";
+import { percent, show } from "@/lib/display";
 import { hasTokenAmount, showGettingStarted } from "@/lib/home-math";
 import { loadActivity, type ActivityView } from "@/lib/activity";
 import { loadHoldings, type HoldingRow, type HoldingsView } from "@/lib/holdings";
@@ -107,7 +108,16 @@ async function HomeReady({
         available={holdings.available}
         streaming={holdings.streaming}
         locked={holdings.locked}
-        idleUsd={holdings.idleUsd}
+        savings={portfolio.flows
+          .filter((flow) => flow.kind === "saving" && !flow.settled)
+          .map((flow) => ({
+            id: flow.id,
+            name: flow.name,
+            saved: show(flow.saved, quote),
+            goal: show(flow.goal, quote),
+            progress: percent(flow.saved, flow.goal),
+          }))}
+        unit={quote.unit}
         network={networkName}
         showWithdraw={funded}
       />
