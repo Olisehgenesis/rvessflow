@@ -37,7 +37,22 @@ describe("deposit quote math", () => {
     assert.equal(preview.priceImpact, "0.00%");
     assert.equal(preview.priceImpactSafe, true);
     assert.equal(preview.networkFeeUsd, "0.40");
+    assert.equal(preview.networkFeeSubCent, false);
     assert.ok(preview.protocolFeeUsd !== "0.00");
+    const tiny = buildDepositPreview({
+      pay: "usdc",
+      typedUsdMicros: parseUsd("100"),
+      credit: sized.credit,
+      fee: sized.fee,
+      underlying: sized.underlying,
+      amountIn: sized.underlying,
+      amountInMax: sized.underlying,
+      usdcUsd8: 100_000_000n,
+      tokenUsd8: 100_000_000n,
+      networkFeeUsd8: 100_000n,
+    });
+    assert.equal(tiny.networkFeeUsd, "0.00");
+    assert.equal(tiny.networkFeeSubCent, true);
     assert.equal(preview.totalFeeKnown, true);
   });
 
@@ -79,6 +94,8 @@ describe("deposit quote math", () => {
     assert.equal(matchesToken("usdt", "stable", ""), true);
     assert.equal(matchesToken("eth", "stable", ""), false);
     assert.equal(matchesToken("usdc", "popular", "usd coin"), true);
+    assert.equal(matchesToken("eth", "all", "eth"), true);
+    assert.equal(matchesToken("usdt", "all", "eth"), false);
     assert.equal(matchesToken("usdt", "other", ""), false);
     assert.deepEqual(readDepositQuery("eth", "25.5"), { pay: "eth", usd: "25.5" });
     assert.deepEqual(readDepositQuery("dai", "10.123"), { pay: "usdc", usd: "" });

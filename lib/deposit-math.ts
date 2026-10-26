@@ -40,7 +40,9 @@ export function matchesToken(pay: PayAsset, filter: TokenFilter, query: string):
   const q = query.trim().toLowerCase();
   if (!q) return true;
   const meta = depositTokenMeta[pay];
-  return meta.symbol.toLowerCase().includes(q) || meta.name.toLowerCase().includes(q);
+  const symbol = meta.symbol.toLowerCase();
+  const name = meta.name.toLowerCase();
+  return symbol.startsWith(q) || name.startsWith(q) || name.split(/\s+/).some((word) => word.startsWith(q));
 }
 
 export function readDepositQuery(pay: string | undefined, usd: string | undefined): { pay: PayAsset; usd: string } {
@@ -128,6 +130,8 @@ export type DepositPreview = {
   deadline: string;
   networkFeeUsd: string;
   networkFeeKnown: boolean;
+  /** True when the estimate is above zero and below one cent. */
+  networkFeeSubCent: boolean;
   totalFeeUsd: string;
   totalFeeKnown: boolean;
   priceImpact: string;
@@ -166,6 +170,8 @@ export function buildDepositPreview(input: {
   else if (impactKnown && safe) priceImpactNote = `Price impact is ${impact} and within the safe range.`;
   else if (impactKnown) priceImpactNote = `Price impact is ${impact}, above the 1% safe range.`;
   const networkKnown = input.networkFeeUsd8 !== null;
+  const networkUsd8 = input.networkFeeUsd8 ?? 0n;
+  const networkFeeSubCent = networkKnown && networkUsd8 > 0n && networkUsd8 < 1_000_000n;
   const totalKnown = networkKnown;
   const total = networkKnown ? feeUsd8 + (input.networkFeeUsd8 ?? 0n) : 0n;
   const boughtUsd8 = (input.underlying * input.usdcUsd8) / 1_000_000n;
@@ -185,8 +191,9 @@ export function buildDepositPreview(input: {
     rate: `1 ${input.pay === "usdc" ? "USDC" : meta.symbol} = $${formatPrice8(perToken)}`,
     slippage: swapped ? `${(SLIPPAGE_BPS / 100).toFixed(1)}%` : "No swap",
     deadline: `${QUOTE_DEADLINE_SECONDS / 60} minutes`,
-    networkFeeUsd: networkKnown ? formatUsd8(input.networkFeeUsd8 ?? 0n) : "",
+    networkFeeUsd: networkKnown ? formatUsd8(networkUsd8) : "",
     networkFeeKnown: networkKnown,
+    networkFeeSubCent,
     totalFeeUsd: totalKnown ? formatUsd8(total) : "",
     totalFeeKnown: totalKnown,
     priceImpact: impact,
