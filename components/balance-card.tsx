@@ -61,13 +61,20 @@ export function BalanceSkeleton() {
   );
 }
 
-export function BalanceError({ message }: { message: string }) {
+export function BalanceError({ message, detail }: { message: string; detail?: string }) {
   return (
     <section className="mt-5 rounded-3xl border border-border bg-card p-4" role="alert">
       <p className="text-sm font-semibold">Balance unavailable</p>
       <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{message}</p>
-      <p className="mt-2 text-sm text-muted-foreground">Nothing here is shown as $0.00 until the network answers.</p>
-      <RetryButton />
+      <div className="mt-3">
+        <RetryButton />
+      </div>
+      {detail && process.env.NODE_ENV === "development" ? (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs text-muted-foreground">Technical detail</summary>
+          <p className="mt-2 break-all text-xs text-muted-foreground">{detail}</p>
+        </details>
+      ) : null}
     </section>
   );
 }
@@ -92,6 +99,8 @@ export function HomeBalance({
   locked,
   showWithdraw,
   savings = [],
+  wallet = [],
+  idleUsd = "0.00",
   unit = "USD",
   network = "Base",
   pulse,
@@ -109,6 +118,8 @@ export function HomeBalance({
   locked: string;
   showWithdraw: boolean;
   savings?: SavingBox[];
+  wallet?: { label: string; amount: string; href: string }[];
+  idleUsd?: string;
   unit?: string;
   network?: string;
   pulse?: BalancePulse;
@@ -148,6 +159,11 @@ export function HomeBalance({
   const figure = (prefix: string, value: string, live: boolean) => {
     const lead = prefix === "$" ? "$" : `${prefix} `;
     if (conceal) return hidden;
+    if (!value) return "Price unavailable";
+    if (value.startsWith("<")) {
+      const amount = value.slice(1);
+      return prefix === "$" ? `< $${amount}` : `< ${prefix} ${amount}`;
+    }
     return live ? (
       <>
         {lead}
@@ -203,7 +219,7 @@ export function HomeBalance({
       </dl>
       <div className={`mt-4 grid gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
         <TopUpSheet network={network} className={lime} />
-        {showWithdraw ? <WithdrawSheet savings={savings} unit={unit} conceal={conceal} /> : null}
+        {showWithdraw ? <WithdrawSheet savings={savings} unit={unit} conceal={conceal} idleUsd={idleUsd} wallet={wallet} /> : null}
       </div>
     </section>
   );

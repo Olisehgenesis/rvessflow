@@ -8,7 +8,7 @@ import { IconMark } from "@/components/icons";
 
 const left = [
   { href: "/home", label: "Home", src: "/nav/home.png" },
-  { href: "/goals", label: "Goals", src: "/nav/goals.png" },
+  { href: "/goals", label: "Plans", src: "/nav/goals.png" },
 ];
 
 const right = [

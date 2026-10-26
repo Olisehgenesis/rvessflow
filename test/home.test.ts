@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { balanceColumns, hasTokenAmount, showGettingStarted, usdcEquivalent } from "@/lib/home-math";
+import { formatUsd8, formatUsdRow, roundUsdCents } from "@/lib/pay-math";
 
 describe("home balance columns", () => {
   it("splits a total into available, streaming, and locked that add back up", () => {
@@ -29,6 +30,16 @@ describe("home balance columns", () => {
   it("converts a dollar value into USDC at the Chainlink price", () => {
     assert.equal(usdcEquivalent(10_000_000_000n, 99_980_000n), "100.02");
     assert.equal(usdcEquivalent(0n, 100_000_000n), "0.00");
+  });
+});
+
+describe("usd row rounding", () => {
+  it("rounds half-up and marks dust so rows can add up to the total", () => {
+    assert.equal(formatUsd8(1_500_000n), "0.02");
+    assert.equal(formatUsd8(1_499_999n), "0.01");
+    assert.equal(formatUsdRow(400_000n), "<0.01");
+    assert.equal(formatUsdRow(0n), "0.00");
+    assert.equal(roundUsdCents(18_000_000n) + roundUsdCents(1_700_000n), 20n);
   });
 });
 

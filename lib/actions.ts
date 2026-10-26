@@ -695,7 +695,7 @@ export async function doAddFunds(_prev: ActionState, formData: FormData): Promis
     const [data, notes] = await Promise.all([loadPortfolio(who), goalNotes(who.address)]);
     const flow = data.flows.find((item) => item.id === id);
     if (flow?.kind === "saving" && notes[id]?.paused) {
-      return { error: "This saving goal is paused. Resume it to add money." };
+      return { error: "This saving goal is paused. Resume it to top up." };
     }
     const intent = refIntent({ kind: "goal" as const, fn: "topup" as const, id, amount, pay, ref: "" });
     if (who.method === "tester") {
@@ -915,16 +915,25 @@ export async function previewPay(input: {
     });
     return { lines };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The quote failed.";
-    if (message.includes("Cannot decode zero data") || message.includes("viem@")) return { lines: [] };
-    return { lines: [], error: message };
+    console.error(error);
+    return { lines: [], error: quoteFailure(error) };
   }
+}
+
+function quoteFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : "The quote failed.";
+  if (message.includes("Cannot decode zero data") || message.includes("viem@") || message.includes("Raw Call")) {
+    return "The quote is not available. The pool did not return a price.";
+  }
+  const line = message.split("\n")[0] || "The quote failed.";
+  return line.length > 220 ? `${line.slice(0, 217)}…` : line;
 }
 
 export async function previewReceive(input: { usd: string; receive: string }): Promise<{ lines: { label: string; value: string }[]; error?: string }> {
   try {
     return { lines: await previewWithdraw(input.usd, readReceive(input.receive)) };
   } catch (error) {
-    return { lines: [], error: error instanceof Error ? error.message : "The quote failed." };
+    console.error(error);
+    return { lines: [], error: quoteFailure(error) };
   }
 }

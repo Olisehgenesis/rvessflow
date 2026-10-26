@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Dialog } from "radix-ui";
 import { Check, ChevronLeft, ChevronRight, Fingerprint, Lock, Mail, Shield, Wallet, X } from "lucide-react";
 import { IconMark } from "@/components/icons";
@@ -25,6 +25,18 @@ type Phase =
   | { name: "cancelled"; kind: Kind; attempt: Attempt }
   | { name: "failed"; kind: Kind; attempt: Attempt };
 
+function subscribePasskey() {
+  return () => {};
+}
+
+function passkeyNow() {
+  return typeof window.PublicKeyCredential !== "undefined";
+}
+
+function passkeyOnServer() {
+  return true;
+}
+
 function cancelled(error: unknown): boolean {
   if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "AbortError")) return true;
   const text = error instanceof Error ? `${error.name} ${error.message}` : "";
@@ -48,7 +60,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
   const [saved, setSaved] = useState<SavedPasskey[]>([]);
   const [checked, setChecked] = useState(false);
   const [onDevice, setOnDevice] = useState(false);
-  const [canPasskey, setCanPasskey] = useState(true);
+  const canPasskey = useSyncExternalStore(subscribePasskey, passkeyNow, passkeyOnServer);
   const [mode, setMode] = useState<Mode>(intent === "login" ? "signin" : "create");
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState("");
@@ -63,7 +75,6 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
   const [phase, setPhase] = useState<Phase>({ name: "choose" });
 
   useEffect(() => {
-    setCanPasskey(typeof window.PublicKeyCredential !== "undefined");
     let live = true;
     readPasskeys()
       .then((rows) => {

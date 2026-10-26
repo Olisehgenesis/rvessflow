@@ -1,5 +1,6 @@
 import "server-only";
 
+import { connection } from "next/server";
 import { parseAbi, type Address } from "viem";
 import { baseMarket } from "@/lib/base-market";
 import { chain, publicClient } from "@/lib/protocol";
@@ -10,14 +11,18 @@ const feedAbi = parseAbi([
 ]);
 
 export type Prices = {
-  ethUsd8: bigint;
-  usdcUsd8: bigint;
-  usdtUsd8: bigint;
+  /** Null when no feed and no fallback returned a positive price. Never a stand-in zero. */
+  ethUsd8: bigint | null;
+  usdcUsd8: bigint | null;
+  usdtUsd8: bigint | null;
+  /** Assumptions the UI must show, including a $1 stable used without a live feed. */
+  notes: string[];
   updatedAt: number;
 };
 
 const ttlMs = 60_000;
 const maxAgeSeconds = 24 * 60 * 60;
+const ONE_USD = 100_000_000n;
 let cache: { at: number; prices: Prices } | null = null;
 
 function scale(answer: bigint, decimals: number): bigint {
@@ -46,34 +51,67 @@ async function ethFallback(): Promise<bigint> {
   return BigInt(Math.round(usd * 1e8));
 }
 
+export function requirePrice(value: bigint | null, name: string): bigint {
+  if (value == null || value <= 0n) throw new Error(`${name} price is unavailable.`);
+  return value;
+}
+
+async function ethOrNull(feed: { usd8: bigint; updatedAt: number } | null, fresh: (updatedAt: number) => boolean): Promise<bigint | null> {
+  if (feed && fresh(feed.updatedAt) && feed.usd8 > 0n) return feed.usd8;
+  try {
+    return await ethFallback();
+  } catch {
+    return null;
+  }
+}
+
+function assumedStable(feed: { usd8: bigint; updatedAt: number } | undefined, fresh: (updatedAt: number) => boolean): { usd8: bigint; assumed: boolean } {
+  if (feed && fresh(feed.updatedAt) && feed.usd8 > 0n) return { usd8: feed.usd8, assumed: false };
+  return { usd8: ONE_USD, assumed: true };
+}
+
 export async function loadPrices(): Promise<Prices> {
-  if (cache && Date.now() - cache.at < ttlMs) return cache.prices;
-  const now = Math.floor(Date.now() / 1000);
+  await connection();
+  const at = Date.now();
+  if (cache && at - cache.at < ttlMs) return cache.prices;
+  const now = Math.floor(at / 1000);
+  const notes: string[] = [];
   if (chain.id === 84532) {
-    let ethUsd8 = 0n;
+    let ethUsd8: bigint | null = null;
     try {
       ethUsd8 = await ethFallback();
     } catch {
-      ethUsd8 = 0n;
+      ethUsd8 = null;
     }
-    const prices: Prices = { ethUsd8, usdcUsd8: 100_000_000n, usdtUsd8: 100_000_000n, updatedAt: now };
-    cache = { at: Date.now(), prices };
+    if (ethUsd8 == null) notes.push("ETH price unavailable.");
+    notes.push("USDC and USDT are shown at $1. This network has no stablecoin price feed.");
+    const prices: Prices = { ethUsd8, usdcUsd8: ONE_USD, usdtUsd8: ONE_USD, notes, updatedAt: now };
+    cache = { at, prices };
     return prices;
   }
   const fresh = (updatedAt: number) => updatedAt > 0 && now - updatedAt < maxAgeSeconds;
   try {
     const [eth, usdc, usdt] = await Promise.all([
-      readFeed(baseMarket.chainlink.ethUsd),
-      readFeed(baseMarket.chainlink.usdcUsd),
-      readFeed(baseMarket.chainlink.usdtUsd),
+      readFeed(baseMarket.chainlink.ethUsd).catch(() => null),
+      readFeed(baseMarket.chainlink.usdcUsd).catch(() => undefined),
+      readFeed(baseMarket.chainlink.usdtUsd).catch(() => undefined),
     ]);
+    const ethUsd8 = await ethOrNull(eth, fresh);
+    if (ethUsd8 == null) notes.push("ETH price unavailable.");
+    const usdcPrice = assumedStable(usdc, fresh);
+    const usdtPrice = assumedStable(usdt, fresh);
+    if (usdcPrice.assumed || usdtPrice.assumed) {
+      const which = [usdcPrice.assumed ? "USDC" : "", usdtPrice.assumed ? "USDT" : ""].filter(Boolean).join(" and ");
+      notes.push(`${which} ${which.includes(" and ") ? "are" : "is"} shown at $1 because the price feed is missing or stale.`);
+    }
     const prices: Prices = {
-      ethUsd8: fresh(eth.updatedAt) ? eth.usd8 : await ethFallback(),
-      usdcUsd8: fresh(usdc.updatedAt) ? usdc.usd8 : 100_000_000n,
-      usdtUsd8: fresh(usdt.updatedAt) ? usdt.usd8 : 100_000_000n,
-      updatedAt: Math.min(eth.updatedAt, usdc.updatedAt, usdt.updatedAt),
+      ethUsd8,
+      usdcUsd8: usdcPrice.usd8,
+      usdtUsd8: usdtPrice.usd8,
+      notes,
+      updatedAt: now,
     };
-    cache = { at: Date.now(), prices };
+    cache = { at, prices };
     return prices;
   } catch (error) {
     if (cache) return cache.prices;

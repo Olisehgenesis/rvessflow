@@ -39,7 +39,7 @@ async function SettingsBody() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">Currency</p>
-          <p className="text-xs text-muted-foreground">Balances are shown in USD. On chain that USD is USDCx, a wrapper of USDC on Base. Other countries add that country’s rate.</p>
+          <p className="text-xs text-muted-foreground">Balances are shown in USD. On chain that USD is {stableLabel}, a wrapper of USDC on {networkName}. Other countries add that country’s rate.</p>
         </div>
         <CurrencyPick code={quote.code} />
       </div>
@@ -70,17 +70,17 @@ async function SettingsBody() {
       </div>
       {who.method === "tester" ? (
         <>
-          <p className="mb-3 text-sm text-muted-foreground">These test accounts sign from this machine on Base mainnet. They need ETH for gas. Payments can start from USDC, USDT, or ETH.</p>
+          <p className="mb-3 text-sm text-muted-foreground">These test accounts sign from this machine on {networkName}. They need ETH for gas. Payments can start from USDC, USDT, or ETH.</p>
           <AccountSwitch people={data.people} current={data.me.address} />
         </>
       ) : (
-        <p className="mb-3 text-sm text-muted-foreground">Payments from this account are signed here. A passkey needs a Base bundler URL. A connected wallet confirms each transaction itself. Test accounts stay available from the sign-in screen.</p>
+        <p className="mb-3 text-sm text-muted-foreground">Payments from this account are signed here. A passkey needs a {networkName} bundler URL. A connected wallet confirms each transaction itself. Test accounts stay available from the sign-in screen.</p>
       )}
       <div className="mt-6">
       <Facts>
         <Fact label="Network" value={networkName} />
         <Fact label="Account" value={shortAddress(data.me.address)} />
-        <Fact label="Gas" value={`${Number(data.eth).toFixed(4)} ETH`} />
+        <Fact label="Gas" value={formatEth(data.eth)} />
         <Fact label="Savings on chain" value={`${money(data.total)} USD`} />
         <Fact label="Vault" value={data.vault ? shortAddress(data.vault) : "Not created yet"} />
         <Fact label="USD token" value={data.protocol.tokenAllowed ? `Allowlisted (${stableLabel})` : "Not allowlisted"} />
@@ -121,5 +121,15 @@ async function SettingsBody() {
       </ul>
     </Page>
   );
+}
+
+/** Up to six fractional digits, trailing zeros removed, so a 0.000007 ETH balance stays visible. */
+function formatEth(value: string): string {
+  const negative = value.trim().startsWith("-");
+  const body = negative ? value.trim().slice(1) : value.trim();
+  const [whole, frac = ""] = body.split(".");
+  const kept = frac.slice(0, 6).replace(/0+$/, "");
+  const shown = kept ? `${whole || "0"}.${kept}` : whole || "0";
+  return `${negative ? "-" : ""}${shown} ETH`;
 }
 

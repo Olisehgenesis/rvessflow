@@ -29,7 +29,7 @@ async function LockBody({ params }: { params: Promise<{ id: string }> }) {
   const now = data.readAt;
   const mature = now >= lock.end;
   return (
-    <Page title={lock.name} back="/vaults">
+    <Page title={lock.name} back="/goals#locks">
       <div className="mb-4">
         <ProductMark kind="lock" size="xl" quiet={lock.settled} />
         <p className="mt-3 text-sm text-muted-foreground">{lock.settled ? "Closed" : mature ? "Ready" : "Locked"}</p>
