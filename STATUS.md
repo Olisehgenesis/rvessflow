@@ -10,6 +10,7 @@ The app and the contracts it calls are on Base mainnet. Base Sepolia addresses i
 - `forge test` from `contracts/` passed in this workspace: 69 tests, 0 failed. That includes the flow, lock, group, smoke, and invariant suites. Coverage is not claimed at 100%.
 - Next.js wallet on Base mainnet. Test accounts still sign on the server from `wallet/testers.json`. Passkey and WalletConnect users sign on their own device. A passkey payment needs `NEXT_PUBLIC_BUNDLER_URL`. No paymaster is wired.
 - Saving-goal pause is stored with the goal note. The contract rejects `pause` for a saving goal, and this change does not upgrade mainnet. Flow and expense pause still go to the contract.
+- The UI is USD-first. USDCx stays the vault’s unit. Wallet balances of USDC, USDT, and ETH (and USDCx or ETHx when held) are priced with Chainlink on Base. Paying for a deposit, goal, lock, or group contribution swaps USDT or ETH to USDC on Uniswap SwapRouter02 when needed, wraps to USDCx, and deposits. Withdrawals default to USDC. No contract code was changed and nothing was deployed. Passkey gas is still unpaid by a paymaster.
 - Goal descriptions, frequency labels, and the activity feed that the chain does not store live in MotherDuck when `MOTHERDUCK_TOKEN` is set, otherwise in `data/local-store.json` (gitignored).
 
 ## Left

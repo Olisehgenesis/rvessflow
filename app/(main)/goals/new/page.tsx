@@ -3,6 +3,7 @@ import { SavingForm, StreamForm } from "@/components/forms";
 import Loading from "../../loading";
 import { KindIntro } from "@/components/product";
 import { Page } from "@/components/ui-bits";
+import { loadPayChoices } from "@/lib/holdings";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,7 +18,7 @@ export default function NewGoalPage({ searchParams }: { searchParams: Promise<{ 
 
 async function NewGoalBody({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
   const who = await viewer();
-  const data = await loadPortfolio(who);
+  const [data, choices] = await Promise.all([loadPortfolio(who), loadPayChoices(who.address)]);
   const params = await searchParams;
   const initial = params.kind === "flow" || params.kind === "expense" ? params.kind : "saving";
   return (
@@ -30,15 +31,15 @@ async function NewGoalBody({ searchParams }: { searchParams: Promise<{ kind?: st
         </TabsList>
         <TabsContent value="saving" className="mt-4">
           <KindIntro kind="saving" />
-          <SavingForm people={data.people} me={data.me.address} />
+          <SavingForm people={data.people} me={data.me.address} choices={choices} />
         </TabsContent>
         <TabsContent value="flow" className="mt-4">
           <KindIntro kind="flow" />
-          <StreamForm kind="flow" people={data.people} me={data.me.address} />
+          <StreamForm kind="flow" people={data.people} me={data.me.address} choices={choices} />
         </TabsContent>
         <TabsContent value="expense" className="mt-4">
           <KindIntro kind="expense" />
-          <StreamForm kind="expense" people={data.people} me={data.me.address} />
+          <StreamForm kind="expense" people={data.people} me={data.me.address} choices={choices} />
         </TabsContent>
       </Tabs>
     </Page>

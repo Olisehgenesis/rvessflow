@@ -1,6 +1,6 @@
 # RvessFlow
 
-RvessFlow is a savings wallet on Base mainnet, built on Superfluid. Money moves as real Superfluid streams: a constant-flow agreement (CFA) stream or a general-distribution agreement (GDA) pool. The app uses USDCx and ETHx on Base. Base Sepolia addresses in the contracts are historical and the app does not read them.
+RvessFlow is a savings wallet on Base mainnet, built on Superfluid. Money moves as real Superfluid streams: a constant-flow agreement (CFA) stream or a general-distribution agreement (GDA) pool. People see USD. Savings are still accounted in USDCx, the Super Token wrapper of USDC, and an existing ETHx balance still shows. Base Sepolia addresses in the contracts are historical and the app does not read them.
 
 **These contracts have not been audited. Do not put real funds in them.**
 
@@ -81,8 +81,29 @@ Signing depends on how you entered:
 
 A saving goal cannot be paused on chain (`pause` reverts for that kind). Pausing one in the app only stops further top-ups. The hold stays in the vault until you resume. Flow and expense pauses still call the contract.
 
+People see USD. The vault still accounts in USDCx, the Super Token wrapper of Circle USDC on Base. Add money, a new goal, a new lock, and a group payment let you pay with USDC, USDT, or ETH. The amount is typed in USD. USDC is wrapped with the vault’s `depositUnderlying` (goals and add money) or `USDCx.upgrade` (locks and groups, which pull the Super Token from the wallet). USDT and ETH are swapped to USDC on Uniswap SwapRouter02, then wrapped. The quote shows the tokens spent, the pool rate, a 0.50% slippage cap, a 20 minute deadline, and the 0.30% protocol fee. Withdrawals come out as USDC (`withdrawUnderlying`) unless you pick USDT or ETH. A passkey signs the approve, swap, wrap, and deposit as one user operation. A connected wallet signs the same calls one transaction at a time. There is no paymaster, so the passkey account needs ETH for gas. New locks are USD only. An ETHx balance still shows if the wallet already holds it. Market addresses live in `lib/base-market.ts`.
+
+| Contract | Address |
+| --- | --- |
+| USDC (Circle) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| USDT | `0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2` |
+| WETH | `0x4200000000000000000000000000000000000006` |
+| USDCx | `0xD04383398dD2426297da660F9CCA3d439AF9ce1b` |
+| ETHx | `0x46fd5cfB4c12D87acD3a13e92BAa53240C661D93` |
+| SwapRouter02 | `0x2626664c2603336E57B271c5C0b26F421741e481` |
+| QuoterV2 | `0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a` |
+| Uniswap V3 factory | `0x33128a8fC17869897dcE68Ed026d694621f6FDfD` |
+| Permit2 (not used; the router takes a normal approval) | `0x000000000022D473030F116dDEE9F6B43aC78BA3` |
+| Chainlink ETH/USD | `0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70` |
+| Chainlink USDC/USD | `0x7e860098F58bBFC8648a4311b374B1D669a2bc6B` |
+| Chainlink USDT/USD | `0xf19d560eB8d2ADf07BD6D13ed03e1D11215721F9` |
+
+Prices come from those Chainlink feeds, cached for 60 seconds. A feed older than a day falls back to $1 for the stablecoins and to CoinGecko for ETH. Quotes for a swap come from QuoterV2, trying the deepest fee tier first (WETH/USDC 0.05%, USDT/USDC 0.01%).
+
+`npm test` checks the USD-to-token sizing, the slippage ceiling and floor, and the swap/wrap calldata.
+
 ```shell
 npm run dev
 ```
 
-`npm run lint` checks the app. Contract tests still run from `contracts/` with `forge test`. The last full run of that suite in this workspace passed (69 tests).
+`npm run lint` checks the app. `npm test` checks the payment math. Contract tests still run from `contracts/` with `forge test`. The last full run of that suite in this workspace passed (69 tests).

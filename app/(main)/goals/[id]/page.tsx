@@ -11,6 +11,7 @@ import { Amount, Notice, Page, when } from "@/components/ui-bits";
 import { inferFrequency, isFrequency } from "@/lib/intent";
 import { goalNotes } from "@/lib/notes";
 import { labeled, percent, show } from "@/lib/display";
+import { loadPayChoices } from "@/lib/holdings";
 import { loadQuote } from "@/lib/rates";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
@@ -40,7 +41,12 @@ async function GoalBody({
   const { id } = await params;
   const fresh = (await searchParams).fresh === "1";
   const who = await viewer();
-  const [data, quote, notes] = await Promise.all([loadPortfolio(who), loadQuote(), goalNotes(who.address)]);
+  const [data, quote, notes, choices] = await Promise.all([
+    loadPortfolio(who),
+    loadQuote(),
+    goalNotes(who.address),
+    loadPayChoices(who.address),
+  ]);
   const flow = data.flows.find((item) => item.id === id);
   if (!flow) notFound();
   const note = notes[flow.id];
@@ -96,7 +102,7 @@ async function GoalBody({
       </section>
       {flow.settled ? null : (
         <div className="mt-5 space-y-3">
-          {saving ? <AddToGoal id={flow.id} /> : null}
+          {saving ? <AddToGoal id={flow.id} choices={choices} /> : null}
           {saving ? (
             appPaused ? (
               <NamedAction id={flow.id} fn="resume" action={doVault} label="Resume goal" />
@@ -113,7 +119,7 @@ async function GoalBody({
               <span>
                 {saving
                   ? appPaused
-                    ? "This goal is paused, so new deposits wait here. The USDCx already held stays in your vault until you resume."
+                    ? "This goal is paused, so new deposits wait here. The USD already held stays in your vault until you resume."
                     : "You can add more funds or pause this goal at any time."
                   : `About ${show((BigInt(flow.rate) * 86400n).toString(), quote)} ${quote.unit} moves every 24 hours while this stream is open.`}
               </span>

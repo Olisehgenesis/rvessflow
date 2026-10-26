@@ -4,14 +4,17 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAddress, isAddress, type Address } from "viem";
-import { ETHx, assetKind } from "@/lib/assets";
+import { assetKind } from "@/lib/assets";
 import { asTokenAmount } from "@/lib/display";
+import { idleSuper, previewLines, previewWithdraw, walletSuper } from "@/lib/funding";
 import type { Intent, SignPayload } from "@/lib/intent";
 import { inferFrequency } from "@/lib/intent";
 import { goalNotes, patchGoalNote, recordActivity, saveGoalNote, type ActivityRecord } from "@/lib/notes";
+import { parseUsd, readPay, readReceive, type PayAsset } from "@/lib/pay-math";
 import { planIntent } from "@/lib/plan";
 import {
   addToGoal,
+  broadcastCalls,
   explain,
   groupAct,
   shiftPayout,
@@ -99,34 +102,82 @@ function wei(value: string): string | null {
   }
 }
 
+function pricedWei(value: string): string | null {
+  try {
+    return (parseUsd(value) * 10n ** 12n).toString();
+  } catch {
+    return null;
+  }
+}
+
+function activityAmount(value: string, priced: boolean): string | null {
+  return priced ? pricedWei(value) : wei(value);
+}
+
+function rethrowRedirect(error: unknown) {
+  if (typeof error === "object" && error !== null && "digest" in error && String((error as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")) {
+    throw error;
+  }
+}
+
+function payField(formData: FormData): PayAsset | undefined {
+  const raw = String(formData.get("pay") ?? "");
+  return raw ? readPay(raw) : undefined;
+}
+
+function usdField(formData: FormData): string {
+  const amount = String(formData.get("amount") ?? "");
+  parseUsd(amount);
+  return amount;
+}
+
+async function finishTester(intent: Intent): Promise<ActionState> {
+  const who = await viewer();
+  const index = await accountIndex();
+  let current = refIntent(intent);
+  for (let step = 0; step < 6; step += 1) {
+    const planned = await planIntent(who.address, current);
+    if (planned.pending) return { error: "That transaction is still confirming. Refresh in a moment." };
+    if (planned.done || planned.calls.length === 0) {
+      await rememberIntent(who.address, planned.intent, planned.id);
+      refresh();
+      redirect(planned.href ?? "/home");
+    }
+    await broadcastCalls(index, planned.calls);
+    current = planned.intent;
+  }
+  return { error: "That payment took more steps than expected. Refresh and try again." };
+}
+
 function activityFrom(owner: string, intent: Intent, id?: string): ActivityRecord | null {
   const at = Math.floor(Date.now() / 1000);
   const base = { id: `app:${intent.ref}`, owner, at, asset: "usdcx" as const };
   if (intent.kind === "saving") {
-    const amount = wei(intent.amount);
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
     return amount ? { ...base, title: "Saved to goal", detail: intent.name, direction: "in", amount, href: `/goals/${id ?? ""}` } : null;
   }
   if (intent.kind === "stream") {
-    const amount = wei(intent.amount);
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
     return amount
       ? { ...base, title: intent.flowKind === "expense" ? "Expense" : "Streamed", detail: intent.name, direction: "out", amount, href: `/goals/${id ?? ""}` }
       : null;
   }
   if (intent.kind === "lock") {
-    const amount = wei(intent.amount);
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
     return amount
       ? { ...base, title: "Locked", detail: intent.name, direction: "out", amount, asset: assetKind(intent.token), href: `/vaults/${id ?? ""}` }
       : null;
   }
   if (intent.kind === "deposit") {
-    const amount = wei(intent.amount);
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
     return amount ? { ...base, title: "Added money", detail: "Wallet", direction: "in", amount, href: "/home" } : null;
   }
   if (intent.kind === "withdraw") {
-    return { ...base, title: "Moved to wallet", detail: "Vault", direction: "out", amount: intent.amount, href: "/home" };
+    const amount = intent.receive ? pricedWei(intent.amount) : intent.amount;
+    return amount ? { ...base, title: "Moved to wallet", detail: intent.receive ? intent.receive.toUpperCase() : "Vault", direction: "out", amount, href: "/home" } : null;
   }
   if (intent.kind === "goal" && intent.fn === "topup") {
-    const amount = wei(intent.amount);
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
     return amount ? { ...base, title: "Saved to goal", detail: "Top up", direction: "in", amount, href: `/goals/${intent.id}` } : null;
   }
   if (intent.kind === "goal" && intent.fn === "release") {
@@ -134,7 +185,7 @@ function activityFrom(owner: string, intent: Intent, id?: string): ActivityRecor
     return amount ? { ...base, title: "Moved to idle", detail: "Goal", direction: "out", amount, href: `/goals/${intent.id}` } : null;
   }
   if (intent.kind === "lockAct" && intent.fn === "topup") {
-    const amount = wei(intent.amount);
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
     return amount ? { ...base, title: "Locked", detail: "Top up", direction: "out", amount, href: `/vaults/${intent.id}` } : null;
   }
   return null;
@@ -266,7 +317,8 @@ export async function createSaving(_prev: ActionState, formData: FormData): Prom
       return { error: "A saving goal holds in your vault. Pick yourself, or use Expense to pay someone else." };
     }
     const name = String(formData.get("name") ?? "");
-    const amount = await quotedAmount(String(formData.get("amount") ?? ""));
+    const pay = payField(formData);
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const description = String(formData.get("description") ?? "").trim().slice(0, 280);
     const intent = refIntent({
       kind: "saving" as const,
@@ -276,9 +328,11 @@ export async function createSaving(_prev: ActionState, formData: FormData): Prom
       description,
       frequency: inferFrequency(duration),
       startedAt: Math.floor(Date.now() / 1000),
+      pay,
       ref: "",
     });
     if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
       const id = await openSaving(await accountIndex(), { name, amount, target: "", duration });
       await rememberIntent(who.address, intent, id);
       refresh();
@@ -286,6 +340,7 @@ export async function createSaving(_prev: ActionState, formData: FormData): Prom
     }
     return await handoff(intent);
   } catch (error) {
+    rethrowRedirect(error);
     return { error: explain(error) };
   }
 }
@@ -301,7 +356,8 @@ export async function createStream(_prev: ActionState, formData: FormData): Prom
     const who = await viewer();
     const duration = readSpan(formData, FLOW_MIN);
     const name = String(formData.get("name") ?? "");
-    const amount = await quotedAmount(String(formData.get("amount") ?? ""));
+    const pay = payField(formData);
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const flowKind = formData.get("kind") === "expense" ? "expense" : "flow";
     const description = String(formData.get("description") ?? "").trim().slice(0, 280);
     const intent = refIntent({
@@ -315,9 +371,11 @@ export async function createStream(_prev: ActionState, formData: FormData): Prom
       description,
       frequency: inferFrequency(duration),
       startedAt: now,
+      pay,
       ref: "",
     });
     if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
       const id = await openStream(await accountIndex(), {
         name,
         amount,
@@ -332,6 +390,7 @@ export async function createStream(_prev: ActionState, formData: FormData): Prom
     }
     return await handoff(intent);
   } catch (error) {
+    rethrowRedirect(error);
     return { error: explain(error) };
   }
 }
@@ -341,9 +400,10 @@ export async function createLock(_prev: ActionState, formData: FormData): Promis
     await requireTerms();
     const who = await viewer();
     const duration = readSpan(formData, LOCK_MIN);
-    const token = String(formData.get("token") ?? "");
-    const amount = await quotedAmount(String(formData.get("amount") ?? ""), token.toLowerCase() === ETHx.toLowerCase());
-    const name = String(formData.get("name") ?? "USDCx");
+    const pay = payField(formData);
+    const token = pay ? "0xD04383398dD2426297da660F9CCA3d439AF9ce1b" : String(formData.get("token") ?? "");
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
+    const name = pay ? "USD" : String(formData.get("name") ?? "USD");
     const intent = refIntent({
       kind: "lock" as const,
       token,
@@ -352,9 +412,11 @@ export async function createLock(_prev: ActionState, formData: FormData): Promis
       duration,
       earnYield: formData.get("yield") === "on",
       startedAt: Math.floor(Date.now() / 1000),
+      pay,
       ref: "",
     });
     if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
       const id = await openLock(await accountIndex(), {
         name,
         amount,
@@ -369,6 +431,7 @@ export async function createLock(_prev: ActionState, formData: FormData): Promis
     }
     return await handoff(intent);
   } catch (error) {
+    rethrowRedirect(error);
     return { error: explain(error) };
   }
 }
@@ -377,14 +440,17 @@ export async function addMoney(_prev: ActionState, formData: FormData): Promise<
   try {
     await requireTerms();
     const who = await viewer();
-    const amount = await quotedAmount(String(formData.get("amount") ?? ""));
+    const pay = payField(formData);
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const intent = refIntent({
       kind: "deposit" as const,
       token: "0xD04383398dD2426297da660F9CCA3d439AF9ce1b",
       amount,
+      pay,
       ref: "",
     });
     if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
       const { depositIdle } = await import("@/lib/protocol");
       await depositIdle(await accountIndex(), amount);
       await rememberIntent(who.address, intent);
@@ -393,6 +459,7 @@ export async function addMoney(_prev: ActionState, formData: FormData): Promise<
     }
     return await handoff(intent);
   } catch (error) {
+    rethrowRedirect(error);
     return { error: explain(error) };
   }
 }
@@ -606,14 +673,16 @@ export async function doAddFunds(_prev: ActionState, formData: FormData): Promis
     await requireTerms();
     const who = await viewer();
     const id = String(formData.get("id") ?? "");
-    const amount = await quotedAmount(String(formData.get("amount") ?? ""));
+    const pay = payField(formData);
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const [data, notes] = await Promise.all([loadPortfolio(who), goalNotes(who.address)]);
     const flow = data.flows.find((item) => item.id === id);
     if (flow?.kind === "saving" && notes[id]?.paused) {
       return { error: "This saving goal is paused. Resume it to add money." };
     }
-    const intent = refIntent({ kind: "goal" as const, fn: "topup" as const, id, amount, ref: "" });
+    const intent = refIntent({ kind: "goal" as const, fn: "topup" as const, id, amount, pay, ref: "" });
     if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
       await addToGoal(await accountIndex(), BigInt(id), amount);
       await rememberIntent(who.address, intent);
       refresh();
@@ -621,6 +690,7 @@ export async function doAddFunds(_prev: ActionState, formData: FormData): Promis
     }
     return await handoff(intent);
   } catch (error) {
+    rethrowRedirect(error);
     return { error: explain(error) };
   }
 }
@@ -681,11 +751,13 @@ export async function doLockTop(_prev: ActionState, formData: FormData): Promise
     await requireTerms();
     const who = await viewer();
     const id = String(formData.get("id") ?? "");
+    const pay = payField(formData);
     const data = await loadPortfolio(who);
     const lock = data.locks.find((item) => item.id === id);
-    const amount = await quotedAmount(String(formData.get("amount") ?? ""), lock ? assetKind(lock.token) === "ethx" : false);
-    const intent = refIntent({ kind: "lockAct" as const, fn: "topup" as const, id, amount, ref: "" });
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""), lock ? assetKind(lock.token) === "ethx" : false);
+    const intent = refIntent({ kind: "lockAct" as const, fn: "topup" as const, id, amount, pay, ref: "" });
     if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
       await lockTopUp(await accountIndex(), BigInt(id), amount);
       await rememberIntent(who.address, intent);
       refresh();
@@ -693,6 +765,7 @@ export async function doLockTop(_prev: ActionState, formData: FormData): Promise
     }
     return await handoff(intent);
   } catch (error) {
+    rethrowRedirect(error);
     return { error: explain(error) };
   }
 }
@@ -743,14 +816,17 @@ export async function doGroup(_prev: ActionState, formData: FormData): Promise<A
     await requireTerms();
     const who = await viewer();
     const id = String(formData.get("id") ?? "");
-    const intent = refIntent({ kind: "group" as const, fn, id, ref: "" });
+    const pay = payField(formData);
+    const intent = refIntent({ kind: "group" as const, fn, id, pay, ref: "" });
     if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
       await groupAct(await accountIndex(), BigInt(id), fn);
       refresh();
       return null;
     }
     return await handoff(intent);
   } catch (error) {
+    rethrowRedirect(error);
     return { error: explain(error) };
   }
 }
@@ -770,4 +846,56 @@ export async function saveGoalDetails(_prev: ActionState, formData: FormData): P
   }
   refresh();
   return null;
+}
+
+export async function withdrawUsd(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await requireTerms();
+    const who = await viewer();
+    const amount = usdField(formData);
+    const receive = readReceive(String(formData.get("receive") ?? "usdc"));
+    const intent = refIntent({ kind: "withdraw" as const, amount, receive, ref: "" });
+    if (who.method === "tester") return await finishTester(intent);
+    return await handoff(intent);
+  } catch (error) {
+    rethrowRedirect(error);
+    return { error: explain(error) };
+  }
+}
+
+export async function previewPay(input: {
+  pay: string;
+  usd?: string;
+  superWei?: string;
+  mode: "vault" | "wallet" | "stream";
+  duration?: number;
+  protocolOnTop?: boolean;
+  full?: boolean;
+}): Promise<{ lines: { label: string; value: string }[]; error?: string }> {
+  try {
+    const who = await viewer();
+    const pay = readPay(input.pay);
+    const covered = input.full ? 0n : input.mode === "wallet" ? await walletSuper(who.address) : await idleSuper(who.address);
+    const lines = await previewLines({
+      pay,
+      usd: input.usd,
+      superWei: input.superWei,
+      mode: input.mode,
+      duration: input.duration,
+      protocolOnTop: input.protocolOnTop,
+      coveredWei: covered.toString(),
+      full: input.full,
+    });
+    return { lines };
+  } catch (error) {
+    return { lines: [], error: error instanceof Error ? error.message : "The quote failed." };
+  }
+}
+
+export async function previewReceive(input: { usd: string; receive: string }): Promise<{ lines: { label: string; value: string }[]; error?: string }> {
+  try {
+    return { lines: await previewWithdraw(input.usd, readReceive(input.receive)) };
+  } catch (error) {
+    return { lines: [], error: error instanceof Error ? error.message : "The quote failed." };
+  }
 }

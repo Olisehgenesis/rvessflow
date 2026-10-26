@@ -1,4 +1,5 @@
 import type { Address, Hex } from "viem";
+import type { PayAsset, ReceiveAsset } from "@/lib/pay-math";
 
 export const frequencies = ["Once", "Daily", "Weekly", "Monthly", "Yearly"] as const;
 export type Frequency = (typeof frequencies)[number];
@@ -44,6 +45,8 @@ export type Intent = (
       description: string;
       frequency: Frequency;
       startedAt: number;
+      /** When set, `amount` is USD and the wallet pays with this asset. */
+      pay?: PayAsset;
     }
   | {
       kind: "stream";
@@ -56,6 +59,7 @@ export type Intent = (
       description: string;
       frequency: Frequency;
       startedAt: number;
+      pay?: PayAsset;
     }
   | {
       kind: "lock";
@@ -65,20 +69,23 @@ export type Intent = (
       duration: number;
       earnYield: boolean;
       startedAt: number;
+      pay?: PayAsset;
     }
-  | { kind: "deposit"; token: string; amount: string }
-  | { kind: "withdraw"; amount: string }
+  | { kind: "deposit"; token: string; amount: string; pay?: PayAsset }
+  | { kind: "withdraw"; amount: string; receive?: ReceiveAsset }
   | {
       kind: "goal";
       fn: "topup" | "release" | "pause" | "resume" | "cancel" | "settle";
       id: string;
       amount: string;
+      pay?: PayAsset;
     }
-  | { kind: "lockAct"; fn: "topup" | "break" | "mature"; id: string; amount: string }
+  | { kind: "lockAct"; fn: "topup" | "break" | "mature"; id: string; amount: string; pay?: PayAsset }
   | {
       kind: "group";
       fn: "postCollateral" | "start" | "contribute" | "exitBeforeStart" | "cancelBeforeStart" | "claimCollateral";
       id: string;
+      pay?: PayAsset;
     }
   | {
       kind: "groupCreate";

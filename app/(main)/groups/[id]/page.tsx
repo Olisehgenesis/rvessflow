@@ -2,10 +2,11 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Loading from "../../loading";
 import { LinkPhone, TurnMove } from "@/components/circle";
-import { GroupButton } from "@/components/forms";
+import { GroupButton, GroupPay } from "@/components/forms";
 import { ProductMark } from "@/components/product";
 import { Fact, Facts, Notice, Page } from "@/components/ui-bits";
 import { phoneFor } from "@/lib/circle";
+import { loadPayChoices } from "@/lib/holdings";
 import { spanLabel } from "@/lib/cycle";
 import { labeled } from "@/lib/display";
 import { loadQuote } from "@/lib/rates";
@@ -23,7 +24,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const who = await viewer();
-  const [data, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
+  const [data, quote, choices] = await Promise.all([loadPortfolio(who), loadQuote(), loadPayChoices(who.address)]);
   const group = data.groups.find((item) => item.id === id);
   if (!group) notFound();
   const me = group.members.find((member) => member.account.toLowerCase() === data.me.address.toLowerCase());
@@ -80,12 +81,14 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
         ) : null}
         {!group.started && !group.cancelled && me && !me.posted ? (
           <>
-            <Notice>Posting collateral moves {labeled(group.collateral, quote)} from your wallet into the group. You get it back if the group is cancelled before it starts, or when it finishes.</Notice>
-            <GroupButton id={group.id} fn="postCollateral" label="Post collateral" />
+            <Notice>Posting collateral moves {labeled(group.collateral, quote)} into the group, plus the 0.3% protocol fee. Pay with USDC, USDT, or ETH. You get the collateral back if the group is cancelled before it starts, or when it finishes.</Notice>
+            <GroupPay id={group.id} fn="postCollateral" label="Post collateral" superWei={group.collateral} choices={choices} />
           </>
         ) : null}
         {!group.started && !group.cancelled && allPosted && mine ? <GroupButton id={group.id} fn="start" label="Start the rotation" /> : null}
-        {group.started && group.cycleOpen ? <GroupButton id={group.id} fn="contribute" label="Pay this cycle" /> : null}
+        {group.started && group.cycleOpen ? (
+          <GroupPay id={group.id} fn="contribute" label="Pay this cycle" superWei={group.contribution} choices={choices} />
+        ) : null}
         {!group.started && !group.cancelled && me ? <GroupButton id={group.id} fn="exitBeforeStart" label="Leave and take collateral back" /> : null}
         {!group.started && !group.cancelled && mine ? <GroupButton id={group.id} fn="cancelBeforeStart" label="Cancel the group" /> : null}
         {(group.cancelled || group.finalized) && me && BigInt(me.collateral) > 0n ? (

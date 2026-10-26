@@ -173,16 +173,18 @@ export function GoalLink({ flow, readAt, quote, appPaused = false }: { flow: Flo
 
 export function LockLink({ lock, quote }: { lock: LockRow; quote: Quote }) {
   const asset = assetByAddress(lock.token);
+  const symbol = asset.symbol === "USDCx" ? "USD" : asset.symbol;
+  const name = asset.symbol === "USDCx" ? "US Dollar" : asset.name;
   const penalty = `${(lock.penaltyBps / 100).toFixed(2).replace(/\.00$/, "")}%`;
   const amount = asset.symbol === "ETHx" ? `${show(lock.principal, { ...quote, code: "fusdcx", unit: "ETH", perToken: 1, digits: 4 })} ETH` : `${quote.unit} ${show(lock.principal, quote)}`;
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
       <Link href={`/vaults/${lock.id}`} className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <TokenMark symbol={asset.symbol} />
+          <TokenMark symbol={symbol} />
           <div>
-            <p className="font-medium">{asset.symbol}</p>
-            <p className="text-xs text-muted-foreground">{asset.name}</p>
+            <p className="font-medium">{symbol}</p>
+            <p className="text-xs text-muted-foreground">{name}</p>
           </div>
         </div>
         <IconChevron className="size-4 text-muted-foreground" />

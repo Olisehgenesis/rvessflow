@@ -5,8 +5,8 @@ import { ActivityList } from "@/components/activity-list";
 import { BalanceCard } from "@/components/balance-card";
 import { Greeting } from "@/components/greeting";
 import { IconDown, IconLock, IconMenu, IconPlay } from "@/components/icons";
-import { show } from "@/lib/display";
 import { loadActivity } from "@/lib/activity";
+import { loadHoldings } from "@/lib/holdings";
 import { loadQuote } from "@/lib/rates";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
@@ -19,14 +19,10 @@ export default function HomePage() {
   );
 }
 
-function add(left: string, right: string) {
-  return (BigInt(left) + BigInt(right)).toString();
-}
-
 async function HomeBody() {
   const who = await viewer();
   const [data, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
-  const available = add(add(data.wallet, data.idle), data.held);
+  const holdings = await loadHoldings(who.address, data, quote);
   let activity: Awaited<ReturnType<typeof loadActivity>> = [];
   try {
     activity = await loadActivity(who.address, data);
@@ -44,11 +40,13 @@ async function HomeBody() {
       <Greeting name={data.me.name} />
       <p className="mt-1 text-sm text-muted-foreground">Save. Stream. Grow.</p>
       <BalanceCard
-        unit={quote.unit}
-        total={show(data.total, quote)}
-        available={show(available, quote)}
-        streaming={show(data.streaming, quote)}
-        locked={show(data.locked, quote)}
+        totalUsd={holdings.totalUsd}
+        totalLocal={holdings.totalLocal}
+        localUnit={holdings.localUnit}
+        rows={holdings.rows}
+        available={holdings.available}
+        streaming={holdings.streaming}
+        locked={holdings.locked}
       />
       <nav className="mt-4 grid grid-cols-3 gap-2" aria-label="Start">
         <RoundLink href="/goals/new" icon={<IconDown className="size-5" />} label="Save" />

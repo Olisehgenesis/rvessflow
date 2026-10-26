@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { parseUnits } from "viem";
-import { assets, type Asset } from "@/lib/assets";
+import { useState } from "react";
 import { IconChevron, IconInfo } from "@/components/icons";
+import { PayWith, ReceiveWith, type PayChoice } from "@/components/pay-with";
 import { useSignedAction } from "@/components/sign-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +23,7 @@ import {
   doRelease,
   doVault,
   switchAccount,
+  withdrawUsd,
   type ActionState,
 } from "@/lib/actions";
 import type { Person } from "@/lib/protocol";
@@ -33,9 +33,9 @@ const field = "h-12 rounded-2xl border-border bg-white px-4 text-base shadow-non
 const FLOW_MIN = 60;
 const LOCK_MIN = 3600;
 
-function Submit({ pending, children }: { pending: boolean; children: string }) {
+function Submit({ pending, hold = false, children }: { pending: boolean; hold?: boolean; children: string }) {
   return (
-    <Button type="submit" disabled={pending} className="h-12 w-full rounded-full text-base">
+    <Button type="submit" disabled={pending || hold} className="h-12 w-full rounded-full text-base">
       {pending ? "Sending…" : children}
     </Button>
   );
@@ -66,7 +66,7 @@ export function AccountSwitch({ people, current }: { people: Person[]; current: 
   );
 }
 
-export function SavingForm({ people, me }: { people: Person[]; me: string }) {
+export function SavingForm({ people, me, choices }: { people: Person[]; me: string; choices: PayChoice[] }) {
   const [state, action, pending] = useSignedAction(createSaving);
   const [end, setEnd] = useState(() => addDays(startOfDay(new Date()), 180));
   const duration = secondsUntilEnd(end);
@@ -78,7 +78,7 @@ export function SavingForm({ people, me }: { people: Person[]; me: string }) {
   return (
     <form action={action} className="space-y-4">
       <Field label="Name" name="name" placeholder="Emergency fund" />
-      <Field label="Amount" name="amount" placeholder="300,000" inputMode="decimal" />
+      <PayWith choices={choices} mode="vault" />
       <label className="block space-y-1.5">
         <Label>Send to</Label>
         <span className="relative block">
@@ -105,7 +105,7 @@ export function SavingForm({ people, me }: { people: Person[]; me: string }) {
   );
 }
 
-export function StreamForm({ kind, people, me }: { kind: "flow" | "expense"; people: Person[]; me: string }) {
+export function StreamForm({ kind, people, me, choices }: { kind: "flow" | "expense"; people: Person[]; me: string; choices: PayChoice[] }) {
   const [state, action, pending] = useSignedAction(createStream);
   const today = startOfDay(new Date());
   const [start, setStart] = useState(today);
@@ -118,7 +118,7 @@ export function StreamForm({ kind, people, me }: { kind: "flow" | "expense"; peo
     <form action={action} className="space-y-4">
       <input type="hidden" name="kind" value={kind} />
       <Field label="Name" name="name" placeholder={kind === "expense" ? "Rent" : "Monthly flow"} />
-      <Field label="Amount" name="amount" placeholder="200" inputMode="decimal" />
+      <PayWith choices={choices} mode="stream" duration={problem ? undefined : window.duration} />
       {kind === "expense" ? (
         <label className="block space-y-1.5">
           <Label>Send to</Label>
@@ -145,95 +145,40 @@ export function StreamForm({ kind, people, me }: { kind: "flow" | "expense"; peo
   );
 }
 
-function looseWei(value: string): bigint | null {
-  const clean = value.replace(/,/g, "").trim();
-  if (!clean) return 0n;
-  if (!/^\d+(\.\d{1,18})?$/.test(clean)) return null;
-  try {
-    return parseUnits(clean, 18);
-  } catch {
-    return null;
-  }
-}
-
-function penaltyLabel(typed: string, bps: number, asset: Asset, quote: Quote) {
+function penaltyLabel(typed: string, bps: number, quote: Quote) {
   const pct = (bps / 100).toFixed(2).replace(/\.00$/, "");
   const value = Number(typed.replace(/,/g, "").trim());
   if (!Number.isFinite(value) || value <= 0) return `${pct}%`;
   const fee = (value * bps) / 10_000;
-  const unit = asset.symbol === "ETHx" ? "ETH" : quote.unit;
-  const digits = asset.symbol === "ETHx" ? 6 : quote.digits;
-  const shown = fee.toLocaleString("en-US", { maximumFractionDigits: digits });
-  return `${pct}% (${unit} ${shown})`;
+  const usd = `USD ${fee.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (quote.code === "usd" || quote.code === "fusdcx" || !(quote.perToken > 0)) return `${pct}% (${usd})`;
+  const local = (fee * quote.perToken).toLocaleString("en-US", { maximumFractionDigits: quote.digits });
+  return `${pct}% (${usd} · ${quote.unit} ${local})`;
 }
 
-export function LockForm({ penalty, quote }: { penalty: number; quote: Quote }) {
+export function LockForm({ penalty, quote, choices }: { penalty: number; quote: Quote; choices: PayChoice[] }) {
   const [state, action, pending] = useSignedAction(createLock);
   const [earn, setEarn] = useState(false);
-  const [asset, setAsset] = useState<Asset>(assets[0]);
-  const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [end, setEnd] = useState(() => addDays(startOfDay(new Date()), 180));
   const duration = secondsUntilEnd(end);
   const problem = dateProblem(duration, LOCK_MIN);
   const today = startOfDay(new Date());
-  const wei = useMemo(() => looseWei(amount), [amount]);
   const pct = (penalty / 100).toFixed(2).replace(/\.00$/, "");
+  const badAmount = amount.trim() !== "" && !/^\d+(\.\d{1,2})?$/.test(amount.replace(/,/g, "").trim());
   return (
     <form action={action} className="space-y-4">
-      <input type="hidden" name="token" value={asset.address} />
-      <input type="hidden" name="name" value={asset.symbol} />
-      <button type="button" onClick={() => setOpen(true)} className="flex w-full items-center justify-between rounded-2xl border border-border bg-card px-4 py-3 text-left">
-        <span className="flex items-center gap-3">
-          <TokenMark symbol={asset.symbol} />
-          <span>
-            <span className="block font-medium">{asset.symbol}</span>
-            <span className="block text-xs text-muted-foreground">{asset.name}</span>
-          </span>
-        </span>
-        <IconChevron className="size-4 text-muted-foreground" />
-      </button>
-      {open ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setOpen(false)}>
-          <div role="dialog" aria-modal="true" aria-label="Choose asset" className="w-full max-w-lg rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={(event) => event.stopPropagation()}>
-            <p className="mb-3 text-base font-medium">Asset</p>
-            <ul className="divide-y divide-border">
-              {assets.map((item) => (
-                <li key={item.address}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 py-3 text-left"
-                    onClick={() => {
-                      setAsset(item);
-                      setOpen(false);
-                    }}
-                  >
-                    <TokenMark symbol={item.symbol} />
-                    <span>
-                      <span className="block font-medium">{item.symbol}</span>
-                      <span className="block text-xs text-muted-foreground">{item.name}</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      ) : null}
-      <label className="block space-y-1.5">
-        <Label>Amount</Label>
-        <Input name="amount" value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder="500,000" className={field} required />
-      </label>
+      <PayWith choices={choices} mode="wallet" protocolOnTop onAmount={setAmount} />
       <DateField label="Unlock date" presentation="unlock" value={end} onChange={setEnd} min={today} max={addDays(today, 30 * 365 - 1)} />
       <input type="hidden" name="duration" value={problem ? "" : duration} />
       {problem ? <p className="text-sm text-destructive">{problem}</p> : null}
-      {wei === null ? <p className="text-sm text-destructive">Enter an amount greater than zero.</p> : null}
+      {badAmount ? <p className="text-sm text-destructive">Enter the amount in USD.</p> : null}
       <div className="rounded-2xl bg-muted px-4 py-3">
         <p className="flex items-center gap-2 text-sm font-medium">
           <IconInfo className="size-4" />
           Penalty on early unlock
         </p>
-        <p className="mt-1 text-sm font-semibold">{wei === null ? `${pct}%` : penaltyLabel(amount, penalty, asset, quote)}</p>
+        <p className="mt-1 text-sm font-semibold">{penaltyLabel(amount, penalty, quote)}</p>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
           Your funds will be locked until the scheduled date. Early unlock will incur a {pct}% penalty.
         </p>
@@ -241,13 +186,13 @@ export function LockForm({ penalty, quote }: { penalty: number; quote: Quote }) 
       <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3">
         <div>
           <p className="text-sm font-medium">Earn yield</p>
-          <p className="text-xs text-muted-foreground">Paid only when a reward budget is funded for {asset.symbol}.</p>
+          <p className="text-xs text-muted-foreground">Paid only when a reward budget is funded for USD.</p>
         </div>
         <Switch checked={earn} onCheckedChange={setEarn} />
         <input type="hidden" name="yield" value={earn ? "on" : "off"} />
       </div>
       <ErrorNote error={state?.error} />
-      <Submit pending={pending || Boolean(problem) || wei === null || wei === 0n}>Create lock</Submit>
+      <Submit pending={pending} hold={Boolean(problem) || badAmount || amount.trim() === ""}>Create lock</Submit>
     </form>
   );
 }
@@ -260,11 +205,11 @@ export function TokenMark({ symbol }: { symbol: string }) {
   );
 }
 
-export function AddMoneyForm() {
+export function AddMoneyForm({ choices }: { choices: PayChoice[] }) {
   const [state, action, pending] = useSignedAction(addMoney);
   return (
     <form action={action} className="space-y-4">
-      <Field label="Amount" name="amount" placeholder="100" inputMode="decimal" hint="Moves USDCx from this wallet into your vault, including the 0.3% protocol fee." />
+      <PayWith choices={choices} mode="vault" full />
       <ErrorNote error={state?.error} />
       <Submit pending={pending}>Add money</Submit>
     </form>
@@ -297,8 +242,9 @@ export function AddFunds(props: { id: string }) {
   return <AmountAction {...props} action={doAddFunds} label="Add to goal" />;
 }
 
-export function AddToGoal({ id }: { id: string }) {
+export function AddToGoal({ id, choices }: { id: string; choices: PayChoice[] }) {
   const [open, setOpen] = useState(false);
+  const [state, run, pending] = useSignedAction(doAddFunds);
   if (!open) {
     return (
       <Button type="button" onClick={() => setOpen(true)} className="h-12 w-full rounded-full text-base">
@@ -306,13 +252,33 @@ export function AddToGoal({ id }: { id: string }) {
       </Button>
     );
   }
-  return <AddFunds id={id} />;
+  return (
+    <form action={run} className="space-y-3">
+      <input type="hidden" name="id" value={id} />
+      <PayWith choices={choices} mode="vault" />
+      <ErrorNote error={state?.error} />
+      <Submit pending={pending}>Add to goal</Submit>
+    </form>
+  );
 }
 export function ReleaseFunds(props: { id: string }) {
   return <AmountAction {...props} action={doRelease} label="Move back to idle" />;
 }
-export function TopUpLock(props: { id: string }) {
-  return <AmountAction {...props} action={doLockTop} label="Top up" />;
+export function TopUpLock({ id, choices }: { id: string; choices?: PayChoice[] }) {
+  if (!choices) return <AmountAction id={id} action={doLockTop} label="Top up" />;
+  return <TopUpUsd id={id} choices={choices} />;
+}
+
+function TopUpUsd({ id, choices }: { id: string; choices: PayChoice[] }) {
+  const [state, run, pending] = useSignedAction(doLockTop);
+  return (
+    <form action={run} className="space-y-3">
+      <input type="hidden" name="id" value={id} />
+      <PayWith choices={choices} mode="wallet" protocolOnTop />
+      <ErrorNote error={state?.error} />
+      <Submit pending={pending}>Top up</Submit>
+    </form>
+  );
 }
 
 export function NamedAction({ id, fn, action, label, tone = "primary" }: { id: string; fn: string; action: (state: ActionState, data: FormData) => Promise<ActionState>; label: string; tone?: "primary" | "quiet" }) {
@@ -339,8 +305,16 @@ export function VaultButtons({ id, paused, canSettle }: { id: string; paused: bo
   );
 }
 
-export function WithdrawIdle({ amount }: { amount: string }) {
-  return <NamedAction id={amount} fn="withdraw" action={doVault} label="Move idle USDCx to this wallet" tone="quiet" />;
+export function WithdrawForm({ idleUsd }: { idleUsd: string }) {
+  const [state, run, pending] = useSignedAction(withdrawUsd);
+  return (
+    <form action={run} className="space-y-3">
+      <p className="text-sm text-muted-foreground">Idle in the vault: ${idleUsd}. USDC is the default. USDT and ETH are swapped after the withdrawal.</p>
+      <ReceiveWith />
+      <ErrorNote error={state?.error} />
+      <Submit pending={pending}>Withdraw</Submit>
+    </form>
+  );
 }
 
 export function BreakLock({ id }: { id: string }) {
@@ -351,6 +325,31 @@ export function MatureLock({ id }: { id: string }) {
 }
 export function GroupButton({ id, fn, label }: { id: string; fn: string; label: string }) {
   return <NamedAction id={id} fn={fn} action={doGroup} label={label} />;
+}
+
+export function GroupPay({
+  id,
+  fn,
+  label,
+  superWei,
+  choices,
+}: {
+  id: string;
+  fn: string;
+  label: string;
+  superWei: string;
+  choices: PayChoice[];
+}) {
+  const [state, run, pending] = useSignedAction(doGroup);
+  return (
+    <form action={run} className="space-y-3">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="fn" value={fn} />
+      <PayWith choices={choices} mode="wallet" fixedSuper={superWei} protocolOnTop />
+      <ErrorNote error={state?.error} />
+      <Submit pending={pending}>{label}</Submit>
+    </form>
+  );
 }
 
 function Field({ label, hint, ...props }: React.ComponentProps<typeof Input> & { label: string; hint?: string }) {
