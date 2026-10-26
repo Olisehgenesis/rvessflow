@@ -7,7 +7,7 @@ import { IconBolt, IconDown, IconLock, IconPeople, IconPlus, IconTarget } from "
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 const actions = [
-  { href: "/home/add", title: "Add money", body: "Crypto, mobile money, or a card", icon: IconDown, well: "bg-[#D4F06B] text-[#1C2A14]" },
+  { href: "/home/add", title: "Top up", body: "Crypto, mobile money, or a card", icon: IconDown, well: "bg-[#D4F06B] text-[#1C2A14]" },
   { href: "/goals/new", title: "New goal", body: "Set a goal and watch it grow", icon: IconTarget, well: "bg-[#D4F06B] text-[#1C2A14]" },
   { href: "/vaults/new", title: "New lock", body: "Vaults", icon: IconLock, well: "bg-[#E7F6C8] text-[#1C2A14]" },
   { href: "/goals/new?kind=flow", title: "Start stream", body: "A recurring payment", icon: IconBolt, well: "bg-[#E4D9FF] text-[#6A4ED4]" },
@@ -36,7 +36,7 @@ function CreateMenuBody() {
         <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-[#E3E8DC]" />
         <SheetHeader className="px-1 pb-2">
           <SheetTitle>Create</SheetTitle>
-          <SheetDescription>Add money, or start a goal, lock, stream, or group.</SheetDescription>
+          <SheetDescription>Top up, or start a goal, lock, stream, or group.</SheetDescription>
         </SheetHeader>
         <ul className="space-y-2">
           {actions.map((action) => (

@@ -33,7 +33,7 @@ async function AssetsBody() {
         </Link>
       </div>
       <Link href="/home/add" className="mt-2 flex h-12 items-center justify-center rounded-full bg-[#D4F06B] text-sm font-semibold text-[#141414]">
-        Add money
+        Top up
       </Link>
     </Page>
   );

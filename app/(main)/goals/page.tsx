@@ -34,7 +34,7 @@ async function GoalsBody() {
       }
     >
       <p className="mb-3 text-sm text-muted-foreground">
-        {open === 0 ? "No active goals. Adding money does not require one." : `${open} active goal${open === 1 ? "" : "s"}`}
+        {open === 0 ? "No active goals. Topping up does not require one." : `${open} active goal${open === 1 ? "" : "s"}`}
       </p>
       {data.flows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card px-4 py-5">

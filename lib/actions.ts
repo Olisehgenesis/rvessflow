@@ -684,7 +684,7 @@ export async function doAddFunds(_prev: ActionState, formData: FormData): Promis
     const [data, notes] = await Promise.all([loadPortfolio(who), goalNotes(who.address)]);
     const flow = data.flows.find((item) => item.id === id);
     if (flow?.kind === "saving" && notes[id]?.paused) {
-      return { error: "This saving goal is paused. Resume it to add money." };
+      return { error: "This saving goal is paused. Resume it to top up." };
     }
     const intent = refIntent({ kind: "goal" as const, fn: "topup" as const, id, amount, pay, ref: "" });
     if (who.method === "tester") {

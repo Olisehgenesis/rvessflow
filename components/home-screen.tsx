@@ -113,10 +113,10 @@ async function HomeReady({
         available={holdings.available}
         streaming={holdings.streaming}
         locked={holdings.locked}
-        showReceive={funded}
+        showWithdraw={funded}
       />
       {portfolio.vault ? null : (
-        <p className="mt-3 text-sm text-muted-foreground">No savings vault on Base yet. Adding money or opening a goal creates one. You can receive on Base before that.</p>
+        <p className="mt-3 text-sm text-muted-foreground">No savings vault on Base yet. Topping up or opening a goal creates one. You can receive on Base before that.</p>
       )}
       {starting ? <GettingStarted /> : null}
       {held.length > 0 ? (
@@ -154,7 +154,7 @@ async function HomeReady({
 function GettingStarted() {
   const steps = [
     { href: "/home/add", title: "Fund your wallet", body: "Receive on Base, convert crypto you hold, or use a provider that is configured." },
-    { href: "/goals/new", title: "Create your first goal", body: "Optional. A goal is not required before you add money." },
+    { href: "/goals/new", title: "Create your first goal", body: "Optional. A goal is not required before you top up." },
   ];
   return (
     <section className="mt-4">

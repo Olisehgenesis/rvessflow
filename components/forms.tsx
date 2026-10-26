@@ -211,7 +211,7 @@ export function AddMoneyForm({ choices }: { choices: PayChoice[] }) {
     <form action={action} className="space-y-4">
       <PayWith choices={choices} mode="vault" full />
       <ErrorNote error={state?.error} />
-      <Submit pending={pending}>Add money</Submit>
+      <Submit pending={pending}>Top up</Submit>
     </form>
   );
 }

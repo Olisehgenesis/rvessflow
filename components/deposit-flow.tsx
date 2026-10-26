@@ -157,7 +157,7 @@ export function CryptoDeposit({
 
   return (
     <main className="px-4 pt-4 pb-8">
-      <FlowHeader title="Add money" back="/home/add" />
+      <FlowHeader title="Top up" back="/home/add" />
       <section className="rounded-3xl border border-border bg-card p-4">
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">Wallet balance</p>
@@ -190,7 +190,7 @@ export function CryptoDeposit({
 
       <section className="mt-6">
         <h2 className="text-base font-semibold">Choose payment token</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Select the token you want to use to add money to your wallet.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Select the token you want to use to top up your wallet.</p>
         <div className="mt-3 space-y-2">
           {tokens.map((token) => (
             <TokenRow key={token.pay} token={token} selected={token.pay === pay} onSelect={() => setPay(token.pay)} />

@@ -15,7 +15,7 @@ export default function AddMoneyPage() {
   return (
     <Suspense fallback={<Loading />}>
       <main className="px-4 pt-4 pb-8">
-        <FlowHeader title="Add money" back="/home" />
+        <FlowHeader title="Top up" back="/home" />
         <h2 className="text-lg font-semibold">Choose how to fund your wallet</h2>
         <p className="mt-1 mb-4 text-sm text-muted-foreground">Every option opens a real flow on Base mainnet. A provider without keys stays on its screen and says what is missing.</p>
         <div className="space-y-2">

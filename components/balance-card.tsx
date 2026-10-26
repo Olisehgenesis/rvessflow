@@ -76,7 +76,7 @@ export function HomeBalance({
   available,
   streaming,
   locked,
-  showReceive,
+  showWithdraw,
 }: {
   totalUsd: string;
   totalUsdc: string;
@@ -85,7 +85,7 @@ export function HomeBalance({
   available: string;
   streaming: string;
   locked: string;
-  showReceive: boolean;
+  showWithdraw: boolean;
 }) {
   const conceal = useConceal();
   const usd = (value: string) => (conceal ? hidden : `$${value}`);
@@ -126,13 +126,13 @@ export function HomeBalance({
           </div>
         ))}
       </dl>
-      <div className={`mt-4 grid gap-2 ${showReceive ? "grid-cols-2" : "grid-cols-1"}`}>
+      <div className={`mt-4 grid gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
         <Link href="/home/add" className={lime}>
-          Add money
+          Top up
         </Link>
-        {showReceive ? (
-          <Link href="/home/add/receive" className="flex h-12 items-center justify-center rounded-full border border-[#141414]/15 bg-white/70 text-sm font-semibold">
-            Receive
+        {showWithdraw ? (
+          <Link href="/home/add/withdraw" className="flex h-12 items-center justify-center rounded-full border border-[#141414]/15 bg-white/70 text-sm font-semibold">
+            Withdraw
           </Link>
         ) : null}
       </div>
