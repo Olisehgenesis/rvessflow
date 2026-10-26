@@ -20,7 +20,7 @@ import {
   type ReceiveAsset,
 } from "@/lib/pay-math";
 import { loadPrices, type Prices } from "@/lib/prices";
-import { addresses, erc20, factoryAbi, publicClient, streamNeed, vaultAbi } from "@/lib/protocol";
+import { addresses, erc20, factoryAbi, publicClient, stableLabel, streamNeed, vaultAbi } from "@/lib/protocol";
 
 const quoterAbi = parseAbi([
   "function quoteExactOutputSingle((address tokenIn, address tokenOut, uint256 amount, uint24 fee, uint160 sqrtPriceLimitX96) params) returns (uint256 amountIn, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
@@ -43,8 +43,8 @@ export type FundQuote = {
   prices: Prices;
 };
 
-const symbols: Record<PayAsset, string> = { usdc: "USDC", usdt: "USDT", eth: "ETH" };
-const scales: Record<PayAsset, number> = { usdc: 6, usdt: 6, eth: 18 };
+const symbols: Record<PayAsset, string> = { usdc: "USDC", usdt: "USDT", eth: "ETH", usdcx: stableLabel };
+const scales: Record<PayAsset, number> = { usdc: 6, usdt: 6, eth: 18, usdcx: 18 };
 
 async function allowance(owner: Address, token: Address, spender: Address) {
   return publicClient.readContract({ address: token, abi: erc20, functionName: "allowance", args: [owner, spender] });
@@ -120,6 +120,21 @@ export async function quoteFund(pay: PayAsset, needed: bigint, mode: "vault" | "
       prices,
     };
   }
+  if (pay === "usdcx") {
+    const fee = protocolFeeOf(needed);
+    return {
+      pay,
+      underlying: 0n,
+      minted: needed,
+      fee,
+      credit: needed,
+      amountIn: needed + fee,
+      amountInMax: needed + fee,
+      feeTier: 0,
+      gasEstimate: 0n,
+      prices,
+    };
+  }
   const quoted = await quoteOutput(pay, sized.underlying);
   return {
     pay,
@@ -138,6 +153,29 @@ export async function quoteFund(pay: PayAsset, needed: bigint, mode: "vault" | "
 export async function fundingCalls(owner: Address, vault: Address, pay: PayAsset, needed: bigint, mode: "vault" | "wallet"): Promise<PreparedCall[]> {
   if (needed <= 0n) return [];
   const quote = await quoteFund(pay, needed, mode);
+  if (pay === "usdcx") {
+    if (mode === "wallet") {
+      const held = await walletSuper(owner);
+      if (held < quote.amountInMax) throw new Error(`Not enough ${stableLabel} in this wallet.`);
+      return [];
+    }
+    const allowanceNow = await allowance(owner, addresses.fusdcx, vault);
+    return buildFundCalls({
+      payer: owner,
+      pay,
+      mode,
+      vault,
+      superToken: addresses.fusdcx,
+      underlying: 0n,
+      minted: quote.minted,
+      amountInMax: quote.amountInMax,
+      feeTier: 0,
+      deadline: 0n,
+      approveRouter: false,
+      resetRouterAllowance: false,
+      approveWrap: allowanceNow < quote.amountInMax,
+    });
+  }
   const spender = mode === "vault" ? vault : baseMarket.usdcx;
   const [wrapAllowance, routerAllowance] = await Promise.all([
     allowance(owner, baseMarket.usdc, spender),
@@ -187,6 +225,7 @@ function usd8OfSuper(superAmount: bigint, usdcUsd8: bigint): bigint {
 }
 
 function rateLine(quote: FundQuote): string {
+  if (quote.pay === "usdcx") return `1 ${stableLabel} = $${formatPrice8(quote.prices.usdcUsd8)}`;
   if (quote.pay === "usdc" || quote.amountIn <= 0n) return `1 USDC = $${formatPrice8(quote.prices.usdcUsd8)}`;
   const usd8 = (quote.underlying * quote.prices.usdcUsd8) / 1_000_000n;
   const perToken = (usd8 * 10n ** BigInt(scales[quote.pay])) / quote.amountIn;
@@ -197,14 +236,14 @@ export function fundingLines(quote: FundQuote, heading?: string): QuoteLine[] {
   const lines: QuoteLine[] = [];
   if (heading) lines.push({ label: "You add", value: heading });
   lines.push({ label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(quote.fee, quote.prices.usdcUsd8))}` });
-  lines.push({ label: "USDC wrapped", value: formatAmount(quote.underlying, 6, 2) });
+  if (quote.pay !== "usdcx") lines.push({ label: "USDC wrapped", value: formatAmount(quote.underlying, 6, 2) });
   lines.push({
-    label: quote.pay === "usdc" ? "You spend" : "You spend at most",
+    label: quote.pay === "usdc" || quote.pay === "usdcx" ? "You spend" : "You spend at most",
     value: `${formatAmount(quote.amountInMax, scales[quote.pay], quote.pay === "eth" ? 6 : 2)} ${symbols[quote.pay]}`,
   });
   lines.push({ label: "Rate", value: rateLine(quote) });
-  lines.push({ label: "Slippage", value: quote.pay === "usdc" ? "No swap" : `${(SLIPPAGE_BPS / 100).toFixed(2)}% max` });
-  lines.push({ label: "Deadline", value: "20 minutes" });
+  lines.push({ label: "Slippage", value: quote.pay === "usdc" || quote.pay === "usdcx" ? "No swap" : `${(SLIPPAGE_BPS / 100).toFixed(2)}% max` });
+  if (quote.pay !== "usdcx") lines.push({ label: "Deadline", value: "20 minutes" });
   return lines;
 }
 
@@ -251,19 +290,17 @@ export async function previewLines(input: {
   if (pulledFee > 0n) needed += pulledFee;
   const covered = input.full ? 0n : BigInt(input.coveredWei ?? "0");
   if (covered >= needed) {
-    return [
-      { label: "You add", value: heading },
+    return shownQuote([
       {
         label: "Protocol fee",
         value: pulledFee > 0n ? `0.30% · $${formatUsd8(usd8OfSuper(pulledFee, prices.usdcUsd8))}` : "0.30% · $0.00",
       },
-      { label: "Already available", value: "Nothing more to swap or wrap" },
       { label: "You spend", value: "0" },
       { label: "Slippage", value: "No swap" },
-    ];
+    ]);
   }
   const mode = input.mode === "wallet" ? "wallet" : "vault";
-  if (input.pay !== "usdc") {
+  if (input.pay !== "usdc" && input.pay !== "usdcx") {
     const code = await publicClient.getCode({ address: baseMarket.quoterV2 });
     if (!code || code === "0x") return [];
   }
@@ -274,13 +311,13 @@ export async function previewLines(input: {
     const feeLine = { label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(pulledFee, prices.usdcUsd8))}` };
     if (index >= 0) lines[index] = feeLine;
   }
-  if (covered > 0n) {
-    lines.splice(1, 0, { label: "Already available", value: `$${formatUsd8(usd8OfSuper(covered, prices.usdcUsd8))}` });
-  }
-  if (input.mode === "stream") {
-    lines.splice(1, 0, { label: "Held for the stream", value: "Deposit and one hour of cushion, on top of the goal" });
-  }
-  return lines;
+  return shownQuote(lines);
+}
+
+const hiddenQuote = new Set(["You add", "Held for the stream", "Already available"]);
+
+function shownQuote(lines: QuoteLine[]): QuoteLine[] {
+  return lines.filter((line) => !hiddenQuote.has(line.label));
 }
 
 export async function previewWithdraw(usd: string, receive: ReceiveAsset): Promise<QuoteLine[]> {

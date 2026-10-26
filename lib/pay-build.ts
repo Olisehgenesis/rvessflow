@@ -7,6 +7,7 @@ const erc20 = parseAbi(["function approve(address spender, uint256 amount) retur
 const superToken = parseAbi(["function upgrade(uint256 amount)"]);
 const vaultPay = parseAbi([
   "function depositUnderlying(address token, uint256 underlyingAmount)",
+  "function depositSuper(address token, uint256 amount)",
   "function withdrawUnderlying(address token, uint256 amount)",
 ]);
 const routerAbi = parseAbi([
@@ -31,7 +32,9 @@ export type FundInput = {
   /** Where USDC is wrapped. "vault" calls depositUnderlying. "wallet" calls USDCx.upgrade. */
   mode: "vault" | "wallet";
   vault: Address;
-  /** 6-decimal USDC that must be wrapped. */
+  /** Savings token deposited directly. Defaults to mainnet USDCx. */
+  superToken?: Address;
+  /** 6-decimal USDC that must be wrapped. Zero when paying with the savings token. */
   underlying: bigint;
   /** 18-decimal amount passed to USDCx.upgrade. Ignored for a vault deposit. */
   minted: bigint;
@@ -46,6 +49,20 @@ export type FundInput = {
 };
 
 export function buildFundCalls(input: FundInput): PreparedCall[] {
+  if (input.pay === "usdcx") {
+    const token = input.superToken ?? baseMarket.usdcx;
+    const calls: PreparedCall[] = [];
+    if (input.approveWrap && input.amountInMax > 0n) calls.push(approve(token, input.vault, input.amountInMax));
+    if (input.minted > 0n) {
+      calls.push(
+        call(
+          input.vault,
+          encodeFunctionData({ abi: vaultPay, functionName: "depositSuper", args: [token, input.minted] }),
+        ),
+      );
+    }
+    return calls;
+  }
   if (input.underlying <= 0n) return [];
   const calls: PreparedCall[] = [];
   const spender = input.mode === "vault" ? input.vault : baseMarket.usdcx;

@@ -20,6 +20,7 @@ export const depositTokenMeta: Record<PayAsset, { symbol: string; name: string }
   usdc: { symbol: "USDC", name: "USD Coin" },
   usdt: { symbol: "USDT", name: "Tether USD" },
   eth: { symbol: "ETH", name: "Ethereum" },
+  usdcx: { symbol: "USDCx", name: "Savings token" },
 };
 
 export type TokenFilter = "all" | "stable" | "popular" | "other";
@@ -32,7 +33,7 @@ const filters: Record<TokenFilter, PayAsset[]> = {
 };
 
 export function tokenScale(pay: PayAsset): number {
-  return pay === "eth" ? 18 : 6;
+  return pay === "eth" || pay === "usdcx" ? 18 : 6;
 }
 
 export function matchesToken(pay: PayAsset, filter: TokenFilter, query: string): boolean {

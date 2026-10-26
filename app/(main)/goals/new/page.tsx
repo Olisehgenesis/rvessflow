@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { SavingForm, StreamForm } from "@/components/forms";
+import { GoalName } from "@/components/goal-name";
 import Loading from "../../loading";
 import { KindIntro } from "@/components/product";
 import { Page } from "@/components/ui-bits";
@@ -23,6 +24,7 @@ async function NewGoalBody({ searchParams }: { searchParams: Promise<{ kind?: st
   const initial = params.kind === "flow" || params.kind === "expense" ? params.kind : "saving";
   return (
     <Page title="Create goal" back="/goals">
+      <GoalName>
       <Tabs defaultValue={initial}>
         <TabsList className="grid h-11 w-full grid-cols-3 rounded-full bg-muted p-1">
           <TabsTrigger value="saving" className="rounded-full">Saving</TabsTrigger>
@@ -42,6 +44,7 @@ async function NewGoalBody({ searchParams }: { searchParams: Promise<{ kind?: st
           <StreamForm kind="expense" people={data.people} me={data.me.address} choices={choices} />
         </TabsContent>
       </Tabs>
+      </GoalName>
     </Page>
   );
 }

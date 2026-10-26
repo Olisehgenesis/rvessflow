@@ -340,6 +340,51 @@ export type Portfolio = {
   };
 };
 
+type FlowRecord = {
+  kind: number;
+  settled: boolean;
+  paused: boolean;
+  active: boolean;
+  reserved: bigint;
+  rate: bigint;
+  start: bigint;
+  end: bigint;
+  duration: bigint;
+  remaining: bigint;
+  token: Address;
+  recipient: Address;
+  name: Hex;
+  earliestStart: bigint;
+  createdAt: bigint;
+  goalAmount: bigint;
+};
+
+function toFlowRow(id: bigint, flow: FlowRecord, now: bigint): FlowRow {
+  const kind = Number(flow.kind);
+  const remaining = kind === 1 && !flow.settled ? flow.reserved : streamRemaining({ ...flow, kind }, now);
+  return {
+    id: id.toString(),
+    name: readName(flow.name) || "Untitled",
+    kind: kindName[kind] ?? "flow",
+    token: flow.token,
+    recipient: flow.recipient,
+    recipientName: personName(flow.recipient),
+    active: flow.active,
+    paused: flow.paused,
+    settled: flow.settled,
+    start: Number(flow.start),
+    end: Number(flow.end),
+    earliestStart: Number(flow.earliestStart),
+    duration: Number(flow.duration),
+    createdAt: Number(flow.createdAt),
+    rate: flow.rate.toString(),
+    reserved: flow.reserved.toString(),
+    goal: flow.goalAmount.toString(),
+    saved: (kind === 1 && !flow.settled ? flow.reserved : 0n).toString(),
+    remaining: remaining.toString(),
+  };
+}
+
 function streamRemaining(flow: {
   kind: number;
   settled: boolean;
@@ -422,31 +467,7 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
       });
       readAt = Math.floor(Date.now() / 1000);
       const now = BigInt(readAt);
-      flows = records.map((flow, i) => {
-        const kind = Number(flow.kind);
-        const remaining = kind === 1 && !flow.settled ? flow.reserved : streamRemaining({ ...flow, kind }, now);
-        return {
-          id: ids[i].toString(),
-          name: readName(flow.name) || "Untitled",
-          kind: kindName[kind] ?? "flow",
-          token: flow.token,
-          recipient: flow.recipient,
-          recipientName: personName(flow.recipient),
-          active: flow.active,
-          paused: flow.paused,
-          settled: flow.settled,
-          start: Number(flow.start),
-          end: Number(flow.end),
-          earliestStart: Number(flow.earliestStart),
-          duration: Number(flow.duration),
-          createdAt: Number(flow.createdAt),
-          rate: flow.rate.toString(),
-          reserved: flow.reserved.toString(),
-          goal: flow.goalAmount.toString(),
-          saved: (kind === 1 && !flow.settled ? flow.reserved : 0n).toString(),
-          remaining: remaining.toString(),
-        };
-      });
+      flows = records.map((flow, i) => toFlowRow(ids[i], flow, now));
     }
   }
 
@@ -611,6 +632,56 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
   };
 });
 
+export type IncomingItem = { flow: FlowRow; vault: Address; from: string };
+
+/** Goals that live in someone else's vault and pay this wallet. */
+export const loadIncoming = cache(async (me: Address): Promise<IncomingItem[]> => {
+  const others = people().filter((person) => person.address.toLowerCase() !== me.toLowerCase());
+  if (others.length === 0) return [];
+  const vaults = await publicClient.multicall({
+    contracts: others.map((person) => ({
+      address: addresses.factory,
+      abi: factoryAbi,
+      functionName: "vaultOf" as const,
+      args: [person.address] as const,
+    })),
+    allowFailure: false,
+  });
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  const mine = me.toLowerCase();
+  const items: IncomingItem[] = [];
+  for (let i = 0; i < others.length; i++) {
+    const vault = vaults[i];
+    if (vault === zeroAddress) continue;
+    const count = Number(await publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "flowCount" }));
+    if (count === 0) continue;
+    const ids = await publicClient.multicall({
+      contracts: Array.from({ length: count }, (_, index) => ({
+        address: vault,
+        abi: vaultAbi,
+        functionName: "flowIdAt" as const,
+        args: [BigInt(index)] as const,
+      })),
+      allowFailure: false,
+    });
+    const records = await publicClient.multicall({
+      contracts: ids.map((id) => ({
+        address: vault,
+        abi: vaultAbi,
+        functionName: "getFlow" as const,
+        args: [id] as const,
+      })),
+      allowFailure: false,
+    });
+    records.forEach((record, index) => {
+      const flow = toFlowRow(ids[index], record, now);
+      if (flow.settled || flow.recipient.toLowerCase() !== mine) return;
+      items.push({ flow, vault, from: others[i].name });
+    });
+  }
+  return items;
+});
+
 async function vaultFor(index: number): Promise<Address> {
   const { account } = signer(index);
   const existing = await publicClient.readContract({
@@ -679,7 +750,7 @@ export async function streamNeed(amount: bigint, duration: bigint): Promise<bigi
   return reserved + buffer * 2n + cushion;
 }
 
-export async function openSaving(index: number, input: { name: string; amount: string; target: string; duration: number }) {
+export async function openSaving(index: number, input: { name: string; amount: string; target: string; duration: number; startAt?: number }) {
   const amount = parseAmount(input.amount);
   const target = input.target.trim() ? parseAmount(input.target) : amount;
   const vault = await vaultFor(index);
@@ -690,6 +761,32 @@ export async function openSaving(index: number, input: { name: string; amount: s
     args: [addresses.fusdcx],
   });
   if (idle < amount) await deposit(index, vault, amount - idle);
+  const startAt = input.startAt ?? 0;
+  if (startAt > Math.floor(Date.now() / 1000)) {
+    const { account } = signer(index);
+    await write(index, {
+      address: vault,
+      abi: vaultAbi,
+      functionName: "createFlow",
+      args: [
+        {
+          token: addresses.fusdcx,
+          recipient: account.address,
+          kind: 1,
+          amount,
+          earliestStart: BigInt(startAt),
+          duration: BigInt(input.duration),
+          goalAmount: target,
+          allowSubflows: false,
+          predecessorId: 0n,
+          chainMode: 0,
+          keeperGated: false,
+          name: toName(input.name),
+        },
+      ],
+    });
+    return latestFlowId(vault);
+  }
   await write(index, {
     address: vault,
     abi: vaultAbi,

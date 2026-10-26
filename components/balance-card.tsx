@@ -2,8 +2,11 @@
 
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
+import { RollingText, useFlowingValue } from "@/components/flowing";
 import { IconChevron, IconEye, IconEyeOff } from "@/components/icons";
 import { RetryButton } from "@/components/retry-button";
+import { streamDigits } from "@/lib/display";
+import type { Quote } from "@/lib/quote";
 import { TopUpSheet, WithdrawSheet, type SavingBox } from "@/components/withdraw-sheet";
 
 const hidden = "••••••";
@@ -69,6 +72,17 @@ export function BalanceError({ message }: { message: string }) {
   );
 }
 
+export type BalancePulse = {
+  readAt: number;
+  wallet: string;
+  rate: string;
+  ceiling: string;
+  totalUsd8: string;
+  availableUsd8: string;
+  usdcUsd8: string;
+  quote: Quote;
+};
+
 export function HomeBalance({
   totalUsd,
   totalLocal,
@@ -80,6 +94,12 @@ export function HomeBalance({
   savings = [],
   unit = "USD",
   network = "Base",
+  pulse,
+  quote,
+  usdcUsd8 = "0",
+  availableUsd8 = "0",
+  streamingUsd8 = "0",
+  lockedUsd8 = "0",
 }: {
   totalUsd: string;
   totalLocal?: string;
@@ -91,14 +111,63 @@ export function HomeBalance({
   savings?: SavingBox[];
   unit?: string;
   network?: string;
+  pulse?: BalancePulse;
+  quote?: Quote;
+  usdcUsd8?: string;
+  availableUsd8?: string;
+  streamingUsd8?: string;
+  lockedUsd8?: string;
 }) {
   const conceal = useConceal();
-  const usd = (value: string) => (conceal ? hidden : `$${value}`);
-  const columns = [
-    { label: "Available", usd: available },
-    { label: "Streaming", usd: streaming },
-    { label: "Locked", usd: locked },
-  ];
+  const liveWei = useFlowingValue(pulse?.readAt ?? 0, pulse?.wallet ?? "0", pulse?.rate ?? "0", pulse?.wallet ?? "0", pulse?.ceiling);
+  const ticking = Boolean(pulse && BigInt(pulse.rate) > 0n);
+  let shownTotal = totalUsd;
+  let shownLocal = totalLocal;
+  let shownAvailable = available;
+  let availableNowUsd8 = availableUsd8;
+  if (ticking && pulse) {
+    const livePrice = BigInt(pulse.usdcUsd8);
+    const delta = liveWei - BigInt(pulse.wallet);
+    const deltaUsd8 = livePrice > 0n ? (delta * livePrice) / 10n ** 18n : 0n;
+    const totalNow = BigInt(pulse.totalUsd8) + deltaUsd8;
+    const availableNow = BigInt(pulse.availableUsd8) + deltaUsd8;
+    const usdPlaces = dollarPlaces(BigInt(pulse.rate));
+    shownTotal = formatUsdPlaces(totalNow, usdPlaces);
+    availableNowUsd8 = (availableNow < 0n ? 0n : availableNow).toString();
+    shownAvailable = formatUsdPlaces(BigInt(availableNowUsd8), usdPlaces);
+    const local = formatLocal(totalNow, pulse.quote, livePrice, streamDigits(BigInt(pulse.rate), pulse.quote));
+    if (local) shownLocal = local;
+  }
+  const price = BigInt(pulse?.usdcUsd8 ?? usdcUsd8);
+  const localQuote = pulse?.quote ?? quote;
+  const preferLocal = Boolean(localUnit && shownLocal && localQuote);
+  const localPlaces = ticking && localQuote ? streamDigits(BigInt(pulse?.rate ?? "0"), localQuote) : (localQuote?.digits ?? 0);
+  const availableLocal = preferLocal && localQuote ? formatLocal(BigInt(availableNowUsd8), localQuote, price, ticking ? localPlaces : localQuote.digits) : "";
+  const streamingLocal = preferLocal && localQuote ? formatLocal(BigInt(streamingUsd8), localQuote, price, localQuote.digits) : "";
+  const lockedLocal = preferLocal && localQuote ? formatLocal(BigInt(lockedUsd8), localQuote, price, localQuote.digits) : "";
+  const figure = (prefix: string, value: string, live: boolean) => {
+    const lead = prefix === "$" ? "$" : `${prefix} `;
+    if (conceal) return hidden;
+    return live ? (
+      <>
+        {lead}
+        <RollingText text={value} />
+      </>
+    ) : (
+      `${lead}${value}`
+    );
+  };
+  const columns = preferLocal
+    ? [
+        { label: "Available", prefix: localUnit ?? "", value: availableLocal, live: ticking },
+        { label: "Streaming", prefix: localUnit ?? "", value: streamingLocal, live: false },
+        { label: "Locked", prefix: localUnit ?? "", value: lockedLocal, live: false },
+      ]
+    : [
+        { label: "Available", prefix: "$", value: shownAvailable, live: ticking },
+        { label: "Streaming", prefix: "$", value: streaming, live: false },
+        { label: "Locked", prefix: "$", value: locked, live: false },
+      ];
   return (
     <section className="mt-5 rounded-3xl border border-[#D7E7B0] bg-[#E7F4C4] p-4 text-[#141414]">
       <div className="flex items-center justify-between">
@@ -118,15 +187,17 @@ export function HomeBalance({
           </Link>
         </div>
       </div>
-      <p className="mt-2 font-display text-4xl font-semibold tracking-tight tabular-nums">{usd(totalUsd)}</p>
-      {totalLocal && localUnit ? (
-        <p className="mt-0.5 text-sm text-[#3C4A2E] tabular-nums">{conceal ? hidden : `${localUnit} ${totalLocal}`}</p>
+      <p className="mt-2 font-display text-4xl font-semibold tracking-tight tabular-nums">
+        {preferLocal ? figure(localUnit ?? "", shownLocal ?? "", ticking) : figure("$", shownTotal, ticking)}
+      </p>
+      {preferLocal ? (
+        <p className="mt-0.5 text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal, ticking)}</p>
       ) : null}
       <dl className="mt-4 grid grid-cols-3">
         {columns.map((column, index) => (
           <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#141414]/10 px-3"}>
             <dt className="text-xs text-[#3C4A2E]">{column.label}</dt>
-            <dd className="mt-1 text-sm font-semibold tabular-nums">{usd(column.usd)}</dd>
+            <dd className="mt-1 text-sm font-semibold tabular-nums">{figure(column.prefix, column.value, column.live)}</dd>
           </div>
         ))}
       </dl>
@@ -136,4 +207,36 @@ export function HomeBalance({
       </div>
     </section>
   );
+}
+
+function dollarPlaces(rateWei: bigint): number {
+  const step = Number(rateWei) / 1e18;
+  if (!Number.isFinite(step) || step >= 0.01) return 2;
+  if (step >= 0.0001) return 4;
+  return 6;
+}
+
+function formatUsdPlaces(usd8: bigint, places: number): string {
+  const negative = usd8 < 0n;
+  const abs = negative ? -usd8 : usd8;
+  const scale = 100_000_000n;
+  const whole = abs / scale;
+  const grouped = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (places <= 0) return `${negative ? "-" : ""}${grouped}`;
+  const frac = ((abs % scale) * 10n ** BigInt(places)) / scale;
+  return `${negative ? "-" : ""}${grouped}.${frac.toString().padStart(places, "0")}`;
+}
+
+function formatLocal(usd8: bigint, quote: Quote, usdcUsd8: bigint, places: number): string {
+  if (quote.code === "usd" || quote.code === "fusdcx" || !(quote.perToken > 0) || usdcUsd8 <= 0n) return "";
+  const per = BigInt(Math.round(quote.perToken * 1_000_000));
+  if (per <= 0n) return "";
+  const scale = 10n ** BigInt(Math.max(places, 0));
+  const den = usdcUsd8 * 1_000_000n;
+  const scaled = (usd8 * per * scale + den / 2n) / den;
+  const whole = scaled / scale;
+  const grouped = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (places <= 0) return grouped;
+  const frac = (scaled % scale).toString().padStart(places, "0");
+  return `${grouped}.${frac}`;
 }

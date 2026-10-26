@@ -1,12 +1,12 @@
 import "server-only";
 
-import type { Address } from "viem";
+import { zeroAddress, type Address } from "viem";
 import { baseMarket } from "@/lib/base-market";
 import { maxUsdInput } from "@/lib/deposit-math";
 import { balanceColumns } from "@/lib/home-math";
 import { formatAmount, formatUsd8, type PayAsset } from "@/lib/pay-math";
 import { loadPrices } from "@/lib/prices";
-import { addresses, erc20, networkName, publicClient, stableLabel, type Portfolio } from "@/lib/protocol";
+import { addresses, erc20, factoryAbi, networkName, publicClient, stableLabel, vaultAbi, type Portfolio } from "@/lib/protocol";
 import type { Quote } from "@/lib/quote";
 
 export type HoldingRow = {
@@ -31,6 +31,12 @@ export type HoldingsView = {
   totalUsd: string;
   totalLocal?: string;
   localUnit?: string;
+  /** USD value with 8 decimals, before display rounding. */
+  totalUsd8: string;
+  availableUsd8: string;
+  streamingUsd8: string;
+  lockedUsd8: string;
+  usdcUsd8: string;
   available: string;
   streaming: string;
   locked: string;
@@ -59,10 +65,32 @@ function money(usd8: bigint): string {
   return formatUsd8(usd8);
 }
 
-async function tokenBalance(token: Address, owner: Address): Promise<bigint> {
+async function hasCode(token: Address): Promise<boolean> {
   const code = await publicClient.getCode({ address: token });
-  if (!code || code === "0x") return 0n;
+  return Boolean(code && code !== "0x");
+}
+
+async function tokenBalance(token: Address, owner: Address): Promise<bigint> {
+  if (!(await hasCode(token))) return 0n;
   return publicClient.readContract({ address: token, abi: erc20, functionName: "balanceOf", args: [owner] });
+}
+
+/** Wallet fUSDCx plus idle vault fUSDCx. Both can fund a goal without a swap. */
+async function spendableSuper(owner: Address): Promise<bigint> {
+  if (!(await hasCode(addresses.fusdcx))) return 0n;
+  const [wallet, vault] = await Promise.all([
+    publicClient.readContract({ address: addresses.fusdcx, abi: erc20, functionName: "balanceOf", args: [owner] }),
+    publicClient.readContract({ address: addresses.factory, abi: factoryAbi, functionName: "vaultOf", args: [owner] }),
+  ]);
+  if (vault === zeroAddress) return wallet;
+  const idle = await publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "unallocated", args: [addresses.fusdcx] });
+  return wallet + idle;
+}
+
+function superChoice(amount: bigint, price8: bigint): PayChoice {
+  const shown = formatAmount(amount / 10n ** 12n, 6, 2);
+  const value = valueOf(amount, 18, price8);
+  return { pay: "usdcx", label: stableLabel, balance: shown, usd: money(value), maxUsd: maxUsdInput(value) };
 }
 
 export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: Quote): Promise<HoldingsView> {
@@ -115,16 +143,59 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
     totalUsd: money(total),
     totalLocal: localText(total, quote, prices.usdcUsd8),
     localUnit,
+    totalUsd8: total.toString(),
+    availableUsd8: columns.available.toString(),
+    streamingUsd8: columns.streaming.toString(),
+    lockedUsd8: columns.locked.toString(),
+    usdcUsd8: prices.usdcUsd8.toString(),
     available: money(columns.available),
     streaming: money(columns.streaming),
     locked: money(columns.locked),
     idleUsd: money(idleValue),
-    choices: [
-      { pay: "usdc", label: "USDC", balance: formatAmount(usdc, 6, 2), usd: money(valueOf(usdc, 6, prices.usdcUsd8)), maxUsd: maxUsdInput(valueOf(usdc, 6, prices.usdcUsd8)) },
-      { pay: "usdt", label: "USDT", balance: formatAmount(usdt, 6, 2), usd: money(valueOf(usdt, 6, prices.usdtUsd8)), maxUsd: maxUsdInput(valueOf(usdt, 6, prices.usdtUsd8)) },
-      { pay: "eth", label: "ETH", balance: formatAmount(eth, 18, 6), usd: money(valueOf(eth, 18, prices.ethUsd8)), maxUsd: maxUsdInput(valueOf(eth, 18, prices.ethUsd8)) },
-    ],
+    choices: await payChoices(owner, prices, usdc, usdt, eth),
   };
+}
+
+async function payChoices(
+  owner: Address,
+  prices: Awaited<ReturnType<typeof loadPrices>>,
+  usdc: bigint,
+  usdt: bigint,
+  eth: bigint,
+): Promise<PayChoice[]> {
+  const [usdcListed, usdtListed, superAmount] = await Promise.all([
+    hasCode(baseMarket.usdc),
+    hasCode(baseMarket.usdt),
+    spendableSuper(owner),
+  ]);
+  const choices: PayChoice[] = [];
+  if (superAmount > 0n) choices.push(superChoice(superAmount, prices.usdcUsd8));
+  choices.push({
+    pay: "eth",
+    label: "ETH",
+    balance: formatAmount(eth, 18, 6),
+    usd: money(valueOf(eth, 18, prices.ethUsd8)),
+    maxUsd: maxUsdInput(valueOf(eth, 18, prices.ethUsd8)),
+  });
+  if (usdcListed) {
+    choices.push({
+      pay: "usdc",
+      label: "USDC",
+      balance: formatAmount(usdc, 6, 2),
+      usd: money(valueOf(usdc, 6, prices.usdcUsd8)),
+      maxUsd: maxUsdInput(valueOf(usdc, 6, prices.usdcUsd8)),
+    });
+  }
+  if (usdtListed) {
+    choices.push({
+      pay: "usdt",
+      label: "USDT",
+      balance: formatAmount(usdt, 6, 2),
+      usd: money(valueOf(usdt, 6, prices.usdtUsd8)),
+      maxUsd: maxUsdInput(valueOf(usdt, 6, prices.usdtUsd8)),
+    });
+  }
+  return choices;
 }
 
 export async function loadPayChoices(owner: Address): Promise<PayChoice[]> {
@@ -134,9 +205,5 @@ export async function loadPayChoices(owner: Address): Promise<PayChoice[]> {
     tokenBalance(baseMarket.usdt, owner),
     publicClient.getBalance({ address: owner }),
   ]);
-  return [
-    { pay: "usdc", label: "USDC", balance: formatAmount(usdc, 6, 2), usd: money(valueOf(usdc, 6, prices.usdcUsd8)), maxUsd: maxUsdInput(valueOf(usdc, 6, prices.usdcUsd8)) },
-    { pay: "usdt", label: "USDT", balance: formatAmount(usdt, 6, 2), usd: money(valueOf(usdt, 6, prices.usdtUsd8)), maxUsd: maxUsdInput(valueOf(usdt, 6, prices.usdtUsd8)) },
-    { pay: "eth", label: "ETH", balance: formatAmount(eth, 18, 6), usd: money(valueOf(eth, 18, prices.ethUsd8)), maxUsd: maxUsdInput(valueOf(eth, 18, prices.ethUsd8)) },
-  ];
+  return payChoices(owner, prices, usdc, usdt, eth);
 }

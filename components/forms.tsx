@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
+import { isAddress } from "viem";
 import { IconChevron, IconInfo } from "@/components/icons";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { TokenIcon } from "@/components/token-icon";
+import { useGoalName } from "@/components/goal-name";
 import { PayWith, ReceiveWith, type PayChoice } from "@/components/pay-with";
 import { useSignedAction } from "@/components/sign-action";
 import { Button } from "@/components/ui/button";
@@ -29,7 +31,7 @@ import {
   type ActionState,
 } from "@/lib/actions";
 import type { Person } from "@/lib/protocol";
-import { DateField, addDays, dateProblem, secondsUntilEnd, startOfDay, streamWindow } from "@/components/date-field";
+import { DateField, addDays, dateProblem, formatDay, secondsUntilEnd, spanText, startOfDay, streamWindow } from "@/components/date-field";
 
 const field = "h-12 rounded-2xl border-border bg-white px-4 text-base shadow-none";
 const FLOW_MIN = 60;
@@ -71,76 +73,141 @@ export function AccountSwitch({ people, current }: { people: Person[]; current: 
   );
 }
 
-export function SavingForm({ people, me, choices }: { people: Person[]; me: string; choices: PayChoice[] }) {
-  const [state, action, pending] = useSignedAction(createSaving);
-  const [end, setEnd] = useState(() => addDays(startOfDay(new Date()), 180));
-  const duration = secondsUntilEnd(end);
-  const problem = dateProblem(duration, FLOW_MIN);
-  const today = startOfDay(new Date());
-  const options = people.some((person) => person.address.toLowerCase() === me.toLowerCase())
-    ? people
-    : [{ name: "You", address: me as Person["address"] }, ...people];
+function othersOf(people: Person[], me: string) {
+  return people.filter((person) => person.address.toLowerCase() !== me.toLowerCase());
+}
+
+function SendToFields({ people, me }: { people: Person[]; me: string }) {
+  const fieldId = useId();
+  const others = othersOf(people, me);
+  const [id, setId] = useState(others[0]?.address ?? "");
+  const known = others.find((person) => person.address.toLowerCase() === id.trim().toLowerCase());
+  const bad = id.trim() !== "" && !isAddress(id.trim());
   return (
-    <form action={action} className="space-y-4">
-      <Field label="Name" name="name" placeholder="Emergency fund" />
-      <PayWith choices={choices} mode="vault" />
+    <div className="space-y-3">
       <label className="block space-y-1.5">
         <Label>Send to</Label>
         <span className="relative block">
-          <select name="recipient" className={`${field} w-full appearance-none pr-10`} defaultValue={me}>
-            {options.map((person) => (
+          <select
+            className={`${field} w-full appearance-none pr-10`}
+            value={known?.address ?? ""}
+            onChange={(event) => {
+              if (event.target.value) setId(event.target.value);
+            }}
+          >
+            {others.map((person) => (
               <option key={person.address} value={person.address}>
                 {person.name}
               </option>
             ))}
+            <option value="">{others.length === 0 ? "No other account on this device" : "Another wallet"}</option>
           </select>
           <IconChevron className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted-foreground" />
         </span>
       </label>
-      <div className="rounded-2xl border border-border bg-card px-4 py-3">
-        <p className="text-xs text-muted-foreground">Starts</p>
-        <p className="mt-0.5 text-sm font-medium">Starts today.</p>
-      </div>
-      <DateField label="Ends" presentation="ends" value={end} onChange={setEnd} min={today} max={addDays(today, 30 * 365 - 1)} />
-      <input type="hidden" name="duration" value={problem ? "" : duration} />
+      <label className="block space-y-1.5">
+        <Label htmlFor={fieldId}>ID</Label>
+        <Input
+          id={fieldId}
+          name="recipient"
+          value={id}
+          onChange={(event) => setId(event.target.value)}
+          placeholder="0x…"
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          className={field}
+          aria-invalid={bad}
+        />
+      </label>
+      {bad ? <p className="text-sm text-destructive">Enter their wallet address.</p> : null}
+    </div>
+  );
+}
+
+function When({ start, end, onStart, onEnd }: { start: Date; end: Date; onStart: (next: Date) => void; onEnd: (next: Date) => void }) {
+  const today = startOfDay(new Date());
+  const latest = addDays(today, 30 * 365 - 1);
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <DateField label="Starts" value={start} onChange={onStart} min={today} max={latest} />
+      <DateField label="Duration" value={end} onChange={onEnd} min={start} max={latest} summary={`${spanText(start, end)} · ${formatDay(end)}`} />
+    </div>
+  );
+}
+
+export function SavingForm({ people, me, choices }: { people: Person[]; me: string; choices: PayChoice[] }) {
+  const [saveState, save, savePending] = useSignedAction(createSaving);
+  const [sendState, send, sendPending] = useSignedAction(createStream);
+  const [someoneElse, setSomeoneElse] = useState(false);
+  const today = startOfDay(new Date());
+  const [start, setStart] = useState(today);
+  const [end, setEnd] = useState(() => addDays(today, 180));
+  const window = streamWindow(start, end);
+  const problem = startOfDay(end) < startOfDay(start) ? "The end date has to be on or after the start date." : dateProblem(window.duration, FLOW_MIN);
+  const state = someoneElse ? sendState : saveState;
+  const pending = someoneElse ? sendPending : savePending;
+  const draftName = useGoalName();
+  return (
+    <form action={someoneElse ? send : save} className="space-y-4">
+      {someoneElse ? <input type="hidden" name="kind" value="expense" /> : null}
+      <input type="hidden" name="name" value={draftName} />
+      <PayWith choices={choices} mode={someoneElse ? "stream" : "vault"} duration={someoneElse && !problem ? window.duration : undefined} />
+      <ForSomeoneElseControlled people={people} me={me} on={someoneElse} onToggle={setSomeoneElse} />
+      <When start={start} end={end} onStart={setStart} onEnd={setEnd} />
+      <input type="hidden" name="startAt" value={problem ? "" : window.startAt} />
+      <input type="hidden" name="duration" value={problem ? "" : window.duration} />
       {problem ? <p className="text-sm text-destructive">{problem}</p> : null}
+      {someoneElse ? <p className="text-sm text-muted-foreground">A saving stays in your vault. This pays their wallet instead.</p> : null}
       <ErrorNote error={state?.error} />
       <Submit pending={pending || Boolean(problem)}>Create goal</Submit>
     </form>
   );
 }
 
+function ForSomeoneElseControlled({
+  people,
+  me,
+  on,
+  onToggle,
+}: {
+  people: Person[];
+  me: string;
+  on: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <label className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+        <input type="checkbox" checked={on} onChange={(event) => onToggle(event.target.checked)} className="size-4 accent-[#141414]" />
+        <span className="text-sm font-medium">For someone else</span>
+      </label>
+      {on ? <SendToFields people={people} me={me} /> : <input type="hidden" name="recipient" value={me} />}
+    </div>
+  );
+}
+
 export function StreamForm({ kind, people, me, choices }: { kind: "flow" | "expense"; people: Person[]; me: string; choices: PayChoice[] }) {
   const [state, action, pending] = useSignedAction(createStream);
+  const [someoneElse, setSomeoneElse] = useState(kind === "expense");
   const today = startOfDay(new Date());
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(() => addDays(today, 180));
   const window = streamWindow(start, end);
   const problem = startOfDay(end) < startOfDay(start) ? "The end date has to be on or after the start date." : dateProblem(window.duration, FLOW_MIN);
-  const others = people.filter((person) => person.address.toLowerCase() !== me.toLowerCase());
-  const latest = addDays(today, 30 * 365 - 1);
+  const payingSomeone = kind === "expense" || someoneElse;
+  const draftName = useGoalName();
   return (
     <form action={action} className="space-y-4">
-      <input type="hidden" name="kind" value={kind} />
-      <Field label="Name" name="name" placeholder={kind === "expense" ? "Rent" : "Monthly flow"} />
+      <input type="hidden" name="kind" value={payingSomeone ? "expense" : "flow"} />
+      <input type="hidden" name="name" value={draftName} />
       <PayWith choices={choices} mode="stream" duration={problem ? undefined : window.duration} />
       {kind === "expense" ? (
-        <label className="block space-y-1.5">
-          <Label>Send to</Label>
-          <select name="recipient" className={`${field} w-full`} defaultValue={others[0]?.address}>
-            {others.length === 0 ? <option value="">No other account yet</option> : null}
-            {others.map((person) => (
-              <option key={person.address} value={person.address}>
-                {person.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SendToFields people={people} me={me} />
       ) : (
-        <p className="text-sm text-muted-foreground">This streams the amount back to you.</p>
+        <ForSomeoneElseControlled people={people} me={me} on={someoneElse} onToggle={setSomeoneElse} />
       )}
-      <DateField label="Starts" value={start} onChange={setStart} min={today} max={latest} />
-      <DateField label="Ends" presentation="ends" value={end} onChange={setEnd} min={start} max={latest} />
+      <When start={start} end={end} onStart={setStart} onEnd={setEnd} />
       <input type="hidden" name="startAt" value={problem ? "" : window.startAt} />
       <input type="hidden" name="duration" value={problem ? "" : window.duration} />
       {problem ? <p className="text-sm text-destructive">{problem}</p> : null}

@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { BalanceError, BalanceSkeleton, HomeBalance } from "@/components/balance-card";
 import { IconBell, IconChevron, IconMark } from "@/components/icons";
-import { ProductMark, type ProductKind } from "@/components/product";
+import { GoalLink, ProductMark, type ProductKind } from "@/components/product";
 import { ActivityList } from "@/components/activity-list";
 import { PrivateLine, PrivateUsd } from "@/components/private-money";
 import { ProfileAvatar } from "@/components/profile-avatar";
@@ -11,7 +11,7 @@ import { percent, show } from "@/lib/display";
 import { hasTokenAmount, showGettingStarted } from "@/lib/home-math";
 import { loadActivity, type ActivityView } from "@/lib/activity";
 import { loadHoldings, type HoldingRow, type HoldingsView } from "@/lib/holdings";
-import { loadPortfolio, networkName, type Portfolio } from "@/lib/protocol";
+import { loadIncoming, loadPortfolio, networkName, type Portfolio } from "@/lib/protocol";
 import { loadQuote } from "@/lib/rates";
 import type { Quote } from "@/lib/quote";
 import type { Address } from "viem";
@@ -90,6 +90,11 @@ async function HomeReady({
   } catch (error) {
     activityError = error instanceof Error ? error.message : "Activity could not be loaded.";
   }
+  const incoming = await loadIncoming(who.address);
+  const liveIn = incoming.filter((item) => item.flow.active && !item.flow.paused && !item.flow.settled && BigInt(item.flow.rate) > 0n);
+  const inflow = liveIn.reduce((sum, item) => sum + BigInt(item.flow.rate), 0n);
+  const stillDue = liveIn.reduce((sum, item) => sum + BigInt(item.flow.remaining), 0n);
+  const walletWei = BigInt(portfolio.wallet);
   const amounts = holdings.rows.map((row) => row.amount);
   const funded = amounts.some(hasTokenAmount);
   const starting = showGettingStarted({
@@ -120,13 +125,50 @@ async function HomeReady({
         unit={quote.unit}
         network={networkName}
         showWithdraw={funded}
+        quote={quote}
+        usdcUsd8={holdings.usdcUsd8}
+        availableUsd8={holdings.availableUsd8}
+        streamingUsd8={holdings.streamingUsd8}
+        lockedUsd8={holdings.lockedUsd8}
+        pulse={
+          inflow > 0n
+            ? {
+                readAt: portfolio.readAt,
+                wallet: portfolio.wallet,
+                rate: inflow.toString(),
+                ceiling: (walletWei + stillDue).toString(),
+                totalUsd8: holdings.totalUsd8,
+                availableUsd8: holdings.availableUsd8,
+                usdcUsd8: holdings.usdcUsd8,
+                quote,
+              }
+            : undefined
+        }
       />
       {portfolio.vault ? null : (
         <p className="mt-3 text-sm text-muted-foreground">
           No savings vault on {networkName} yet. Topping up or opening a goal creates one. You can receive on {networkName} before that.
         </p>
       )}
-      {starting ? <GettingStarted /> : null}
+      {incoming.length > 0 ? (
+        <section className="mt-4">
+          <h2 className="text-sm font-semibold">Coming in</h2>
+          <ul className="mt-2 space-y-3">
+            {incoming.map((item) => (
+              <li key={`${item.vault}-${item.flow.id}`}>
+                <GoalLink
+                  flow={item.flow}
+                  readAt={portfolio.readAt}
+                  quote={quote}
+                  caption={`From ${item.from}`}
+                  href={`/goals/from/${item.vault}/${item.flow.id}`}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {starting && incoming.length === 0 ? <GettingStarted /> : null}
       {held.length > 0 ? (
         <section className="mt-6">
           <div className="mb-2 flex items-end justify-between">
@@ -220,17 +262,23 @@ export function AssetList({ rows, localUnit }: { rows: HoldingRow[]; localUnit?:
               <span className="block text-xs text-muted-foreground">{row.network}</span>
             </span>
             <span className="text-right">
-              <span className="block text-sm font-semibold">
-                <PrivateUsd value={row.usd} />
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                <PrivateLine value={`${row.amount} ${row.label}`} />
-              </span>
               {row.local && localUnit ? (
-                <span className="block text-[11px] text-muted-foreground">
+                <span className="block text-sm font-semibold">
                   <PrivateLine value={`${localUnit} ${row.local}`} />
                 </span>
+              ) : (
+                <span className="block text-sm font-semibold">
+                  <PrivateUsd value={row.usd} />
+                </span>
+              )}
+              {row.local && localUnit ? (
+                <span className="block text-xs text-muted-foreground">
+                  <PrivateUsd value={row.usd} />
+                </span>
               ) : null}
+              <span className="block text-[11px] text-muted-foreground">
+                <PrivateLine value={`${row.amount} ${row.label}`} />
+              </span>
             </span>
             <IconChevron className="size-4 shrink-0 text-muted-foreground" />
           </Link>

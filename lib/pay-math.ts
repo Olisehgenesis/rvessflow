@@ -1,11 +1,11 @@
 import { PROTOCOL_FEE_BPS, SLIPPAGE_BPS, SUPER_UNIT } from "@/lib/base-market";
 
-export type PayAsset = "usdc" | "usdt" | "eth";
+export type PayAsset = "usdc" | "usdt" | "eth" | "usdcx";
 export type ReceiveAsset = "usdc" | "usdt" | "eth";
 
 export function readPay(value: string): PayAsset {
-  if (value === "usdc" || value === "usdt" || value === "eth") return value;
-  throw new Error("Pick USDC, USDT, or ETH.");
+  if (value === "usdc" || value === "usdt" || value === "eth" || value === "usdcx") return value;
+  throw new Error("Pick USDC, USDT, ETH, or the savings token.");
 }
 
 export function readReceive(value: string): ReceiveAsset {

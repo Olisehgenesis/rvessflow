@@ -17,7 +17,7 @@ import type { PayAsset } from "@/lib/pay-math";
 const primary = "flex h-12 w-full items-center justify-center rounded-full bg-primary text-base font-medium text-primary-foreground disabled:opacity-50";
 const secondary = "flex h-12 w-full items-center justify-center rounded-full border border-border bg-card text-base font-medium";
 
-const symbols: Record<PayAsset, string> = { usdc: "USDC", usdt: "USDT", eth: "ETH" };
+const symbols: Record<PayAsset, string> = { usdc: "USDC", usdt: "USDT", eth: "ETH", usdcx: "USDCx" };
 
 export function FlowHeader({ title, back, close }: { title: string; back?: string; close?: string }) {
   return (

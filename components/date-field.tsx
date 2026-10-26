@@ -33,6 +33,16 @@ export function streamWindow(start: Date, end: Date, now = new Date()): { startA
   return { startAt, duration: secondsUntilEnd(end, origin) };
 }
 
+export function spanText(start: Date, end: Date): string {
+  const days = Math.round((startOfDay(end).getTime() - startOfDay(start).getTime()) / 86400000);
+  if (days <= 0) return "Same day";
+  if (days % 30 === 0) {
+    const months = days / 30;
+    return `${months} month${months === 1 ? "" : "s"}`;
+  }
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
 export function dateProblem(duration: number, minSeconds: number): string | null {
   if (!Number.isInteger(duration) || duration < minSeconds) {
     return minSeconds >= 3600 ? "Pick a day at least an hour from now." : "Pick a later day. The contract needs at least a minute.";
@@ -67,6 +77,7 @@ export function DateField({
   min,
   max,
   presentation = "plain",
+  summary: summaryOverride,
 }: {
   label: string;
   hint?: string;
@@ -75,6 +86,7 @@ export function DateField({
   min: Date;
   max: Date;
   presentation?: "plain" | "ends" | "unlock";
+  summary?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [shown, setShown] = useState(() => new Date(value.getFullYear(), value.getMonth(), 1));
@@ -84,7 +96,7 @@ export function DateField({
   const earliest = new Date(min.getFullYear(), min.getMonth(), 1);
   const latest = new Date(max.getFullYear(), max.getMonth(), 1);
   const isToday = sameDay(value, today);
-  const summary = presentation === "ends" ? `Ends · ${formatDay(value)}` : presentation === "unlock" ? formatDay(value) : isToday ? `Today · ${formatDay(value)}` : formatDay(value);
+  const summary = summaryOverride ?? (presentation === "ends" ? `Ends · ${formatDay(value)}` : presentation === "unlock" ? formatDay(value) : isToday ? `Today · ${formatDay(value)}` : formatDay(value));
 
   function shift(by: number) {
     const next = new Date(shown.getFullYear(), shown.getMonth() + by, 1);

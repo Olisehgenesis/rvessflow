@@ -5,6 +5,21 @@ import { percent, show, streamDigits } from "@/lib/display";
 import { chainQuote, type Quote } from "@/lib/quote";
 import { Progress } from "@/components/ui/progress";
 
+export function useFlowingValue(readAt: number, base: string, perSecond: string, floor?: string, ceiling?: string) {
+  const now = useNow(readAt);
+  return moved(readAt, now, base, perSecond, floor, ceiling);
+}
+
+export function RollingText({ text }: { text: string }) {
+  return (
+    <span className="inline-flex tabular-nums" aria-label={text}>
+      {text.split("").map((char, index) => (
+        <RollChar key={`${index}-${text.length}`} char={char} />
+      ))}
+    </span>
+  );
+}
+
 function useNow(readAt: number) {
   const [now, setNow] = useState(readAt);
   useEffect(() => {

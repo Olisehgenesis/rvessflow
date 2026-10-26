@@ -5,7 +5,7 @@ import { assetByAddress } from "@/lib/assets";
 import { fundingCalls, superForUsd, superForWithdraw, withdrawCalls } from "@/lib/funding";
 import type { Intent, Plan, PreparedCall } from "@/lib/intent";
 import { readPay, type PayAsset } from "@/lib/pay-math";
-import { readName, toName } from "@/lib/protocol";
+import { readName, stableLabel, toName } from "@/lib/protocol";
 import {
   addresses,
   allowAbi,
@@ -57,7 +57,7 @@ async function sizedAmount(pay: PayAsset | undefined, amount: string): Promise<b
 
 async function coverVault(calls: PreparedCall[], owner: Address, vault: Address, pay: PayAsset | undefined, shortfall: bigint) {
   if (shortfall <= 0n) return;
-  if (!pay) {
+  if (!pay || pay === "usdcx") {
     await approveIfNeeded(calls, owner, addresses.fusdcx, vault, withProtocolFee(shortfall));
     calls.push(encode(vault, vaultAbi, "depositSuper", [addresses.fusdcx, shortfall]));
     return;
@@ -68,6 +68,7 @@ async function coverVault(calls: PreparedCall[], owner: Address, vault: Address,
 async function coverWallet(calls: PreparedCall[], owner: Address, pay: PayAsset, due: bigint) {
   const balance = await balanceOf(owner, addresses.fusdcx);
   if (balance >= due) return;
+  if (pay === "usdcx") throw new Error(`Not enough ${stableLabel} in this wallet.`);
   calls.push(...(await fundingCalls(owner, owner, pay, due - balance, "wallet")));
 }
 
@@ -154,8 +155,27 @@ async function planSaving(owner: Address, intent: Extract<Intent, { kind: "savin
   });
   const calls: PreparedCall[] = [];
   if (idle < amount) await coverVault(calls, owner, found.vault, pay, amount - idle);
+  const startAt = intent.startAt ?? 0;
+  const later = startAt > Math.floor(Date.now() / 1000);
   calls.push(
-    encode(found.vault, vaultAbi, "openSavings", [addresses.fusdcx, amount, BigInt(intent.duration), toName(intent.name), amount]),
+    later
+      ? encode(found.vault, vaultAbi, "createFlow", [
+          {
+            token: addresses.fusdcx,
+            recipient: owner,
+            kind: 1,
+            amount,
+            earliestStart: BigInt(startAt),
+            duration: BigInt(intent.duration),
+            goalAmount: amount,
+            allowSubflows: false,
+            predecessorId: 0n,
+            chainMode: 0,
+            keeperGated: false,
+            name: toName(intent.name),
+          },
+        ])
+      : encode(found.vault, vaultAbi, "openSavings", [addresses.fusdcx, amount, BigInt(intent.duration), toName(intent.name), amount]),
   );
   return { calls, intent: { ...intent, submitted: true }, done: false };
 }

@@ -45,6 +45,8 @@ export type Intent = (
       description: string;
       frequency: Frequency;
       startedAt: number;
+      /** Unix seconds. `0` starts the hold now. A later time waits for `createFlow`. */
+      startAt?: number;
       /** When set, `amount` is USD and the wallet pays with this asset. */
       pay?: PayAsset;
     }

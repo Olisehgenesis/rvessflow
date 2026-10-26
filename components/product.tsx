@@ -133,19 +133,33 @@ export function goalStatus(flow: FlowRow, readAt: number, appPaused = false) {
   return "Waiting";
 }
 
-export function GoalLink({ flow, readAt, quote, appPaused = false }: { flow: FlowRow; readAt: number; quote: Quote; appPaused?: boolean }) {
+export function GoalLink({
+  flow,
+  readAt,
+  quote,
+  appPaused = false,
+  href,
+  caption,
+}: {
+  flow: FlowRow;
+  readAt: number;
+  quote: Quote;
+  appPaused?: boolean;
+  href?: string;
+  caption?: string;
+}) {
   const { whole, part, label, progress } = goalFigures(flow);
   const pace = goalStatus(flow, readAt, appPaused);
   const live = pace === "Active" && flow.kind !== "saving" && flow.active && !flow.paused;
   return (
-    <Link href={`/goals/${flow.id}`} className="block rounded-2xl border border-border bg-card p-4">
+    <Link href={href ?? `/goals/${flow.id}`} className="block rounded-2xl border border-border bg-card p-4">
       <div className="flex items-start gap-3">
         <ProductMark kind={flow.kind} size="sm" quiet={flow.settled} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate font-medium">{flow.name}</p>
-              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="text-xs text-muted-foreground">{caption ?? label}</p>
             </div>
             <IconChevron className="mt-1 size-4 shrink-0 text-muted-foreground" />
           </div>

@@ -19,6 +19,30 @@ type Line = { label: string; value: string };
 
 const inputClass = "h-12 w-full rounded-2xl border border-border bg-white px-4 text-base outline-none";
 
+/** Keep a quote error on screen for 10 seconds. A newer error replaces it at once. */
+function useHeldError() {
+  const [error, setShown] = useState("");
+  const until = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  function setError(next: string) {
+    clearTimeout(timer.current);
+    if (next) {
+      setShown(next);
+      until.current = Date.now() + 10_000;
+      timer.current = setTimeout(() => setShown(""), 10_000);
+      return;
+    }
+    const wait = until.current - Date.now();
+    if (wait > 0) {
+      timer.current = setTimeout(() => setShown(""), wait);
+      return;
+    }
+    setShown("");
+  }
+  return [error, setError] as const;
+}
+
 function QuoteList({ lines, error }: { lines: Line[]; error: string }) {
   if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (!lines.length) return null;
@@ -182,13 +206,16 @@ export function PayWith({
   const [usd, setUsd] = useState("");
   const [share, setShare] = useState(0);
   const [lines, setLines] = useState<Line[]>([]);
-  const [error, setError] = useState("");
+  const [error, setError] = useHeldError();
   const ticket = useRef(0);
 
   useEffect(() => {
     const mine = ++ticket.current;
     const hasAmount = Boolean(fixedSuper && fixedSuper !== "0") || Boolean(usd.trim());
-    if (!hasAmount) return;
+    if (!hasAmount) {
+      setError("");
+      return;
+    }
     const handle = setTimeout(() => {
       void previewPay({
         pay,
@@ -247,12 +274,15 @@ export function ReceiveWith() {
   const [receive, setReceive] = useState<ReceiveAsset>("usdc");
   const [usd, setUsd] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
-  const [error, setError] = useState("");
+  const [error, setError] = useHeldError();
   const ticket = useRef(0);
 
   useEffect(() => {
     const mine = ++ticket.current;
-    if (!usd.trim()) return;
+    if (!usd.trim()) {
+      setError("");
+      return;
+    }
     const handle = setTimeout(() => {
       void previewReceive({ usd, receive }).then((result) => {
         if (mine !== ticket.current) return;

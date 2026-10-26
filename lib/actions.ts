@@ -313,14 +313,25 @@ function readSpan(formData: FormData, min: number): number {
   return duration;
 }
 
+function readStart(formData: FormData): number | { error: string } {
+  const startAt = Number(formData.get("startAt") ?? "0");
+  const now = Math.floor(Date.now() / 1000);
+  if (!Number.isInteger(startAt) || startAt < 0 || (startAt !== 0 && (startAt < now - 120 || startAt > now + MAX_SPAN))) {
+    return { error: "Pick a start date from today onward." };
+  }
+  return startAt;
+}
+
 export async function createSaving(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const start = readStart(formData);
+  if (typeof start !== "number") return start;
   try {
     await requireTerms();
     const who = await viewer();
     const duration = readSpan(formData, FLOW_MIN);
     const sendTo = String(formData.get("recipient") ?? "");
     if (sendTo && sendTo.toLowerCase() !== who.address.toLowerCase()) {
-      return { error: "A saving goal holds in your vault. Pick yourself, or use Expense to pay someone else." };
+      return { error: "A saving stays in your vault. Check For someone else on Flow to pay another wallet." };
     }
     const name = String(formData.get("name") ?? "");
     const pay = payField(formData);
@@ -334,12 +345,13 @@ export async function createSaving(_prev: ActionState, formData: FormData): Prom
       description,
       frequency: inferFrequency(duration),
       startedAt: Math.floor(Date.now() / 1000),
+      startAt: start,
       pay,
       ref: "",
     });
     if (who.method === "tester") {
       if (pay) return await finishTester(intent);
-      const id = await openSaving(await accountIndex(), { name, amount, target: "", duration });
+      const id = await openSaving(await accountIndex(), { name, amount, target: "", duration, startAt: start });
       await rememberIntent(who.address, intent, id);
       refresh();
       redirect(`/goals/${id}?fresh=1`);
@@ -352,11 +364,10 @@ export async function createSaving(_prev: ActionState, formData: FormData): Prom
 }
 
 export async function createStream(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const startAt = Number(formData.get("startAt") ?? "0");
+  const start = readStart(formData);
+  if (typeof start !== "number") return start;
+  const startAt = start;
   const now = Math.floor(Date.now() / 1000);
-  if (!Number.isInteger(startAt) || startAt < 0 || (startAt !== 0 && (startAt < now - 120 || startAt > now + MAX_SPAN))) {
-    return { error: "Pick a start date from today onward." };
-  }
   try {
     await requireTerms();
     const who = await viewer();
