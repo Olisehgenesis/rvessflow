@@ -145,7 +145,7 @@ Source for every address above, including the OpenZeppelin proxies and beacons, 
 
 ### Base Sepolia
 
-Deployed 26 October 2026. Localhost reads this set when `RVESS_NETWORK=sepolia`. Production still reads Base mainnet. The owner is a 2-of-3 Safe. Jamie, Alex, and Taylor are the signers. Any two of them can act. One is not enough. fUSDCx and ETHx are allowlisted. No keeper was set. `contractVersion` is 3 on the allowlist, 2 on the factory, 3 on the lock vault, and 4 on the group. Gas was paid by `0xB1819b7287B8e709A526D942f5c3e1ae7389054D`.
+Chain id 84532. Explorer: [sepolia.basescan.org](https://sepolia.basescan.org). Deployed 26 October 2026. The app reads this set when `RVESS_NETWORK=sepolia`, including `npm run dev -- sepolia` and `npm run build -- sepolia`. Production still reads Base mainnet. The owner is a 2-of-3 Safe. Jamie, Alex, and Taylor are the signers. Any two of them can act. One is not enough. fUSDCx and ETHx are allowlisted. No keeper was set. `contractVersion` is 3 on the allowlist, 2 on the factory, 3 on the lock vault, and 4 on the group. Gas was paid by `0xB1819b7287B8e709A526D942f5c3e1ae7389054D`.
 
 | | Address |
 | --- | --- |
@@ -164,7 +164,18 @@ Deployed 26 October 2026. Localhost reads this set when `RVESS_NETWORK=sepolia`.
 | Group implementation | `0xBe4C482A15C9abcD6d07F927A1E65778f9e2f0EB` |
 | Group | `0x70f5CF80052E8a8E0e5e252d33cd15F059956E3D` |
 
-An earlier deploy the same day is owned by the single testnet wallet `0xB1819b7287B8e709A526D942f5c3e1ae7389054D`. Localhost does not read it.
+The factory proxy's initialization created the live beacons. The conduit beacon is first, then the vault beacon. The lock vault's initialization created the yield payer that lock uses. The vault and group extensions sit on the implementations.
+
+| | Address |
+| --- | --- |
+| Vault code extension | `0xbE9C62BD73F753d956776408740636F732182DcF` |
+| Group extension | `0x14382FA3c6C7198351df2A0610eD6D112df5bf5A` |
+| Yield payer, lock implementation | `0x1f67A351a7cBdC1b79682465541e0fc8bD46F677` |
+| Yield payer, lock vault | `0xd3298C96B799bf58004035Ce5CbC0e1D7430E3a6` |
+| Conduit beacon | `0x46f9f70CE15f7b80A95B0115598f61250E2d9aAe` |
+| Vault beacon | `0x9C5c9E0Ff7cF63A25236b95372252D4c7EcC16b3` |
+
+An earlier deploy the same day is owned by the single testnet wallet `0xB1819b7287B8e709A526D942f5c3e1ae7389054D`. The app does not read it.
 
 | | Address |
 | --- | --- |
@@ -212,6 +223,7 @@ Forwarders are the same on Base and Base Sepolia.
 | Base USDCx | `0xD04383398dD2426297da660F9CCA3d439AF9ce1b` |
 | Base ETHx | `0x46fd5cfB4c12D87acD3a13e92BAa53240C661D93` |
 | Base Sepolia host | `0x109412E3C84f0539b43d39dB691B08c90f58dC7c` |
+| Base Sepolia fUSDC | `0x6B0dacea6a72E759243c99Eaed840DEe9564C194` |
 | Base Sepolia fUSDCx | `0x1650581F573eAd727B92073B5Ef8B4f5B94D1648` |
 | Base Sepolia ETHx | `0x143ea239159155B408e71CDbE836e8CFD6766732` |
 

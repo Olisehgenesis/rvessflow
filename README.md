@@ -1,6 +1,6 @@
 # RvessFlow
 
-RvessFlow is a savings wallet on Base mainnet, built on Superfluid. Money moves as real Superfluid streams: a constant-flow agreement (CFA) stream or a general-distribution agreement (GDA) pool. People see USD. Savings are still accounted in USDCx, the Super Token wrapper of USDC, and an existing ETHx balance still shows. Base Sepolia addresses in the contracts are historical and the app does not read them.
+RvessFlow is a savings wallet on Base, built on Superfluid. Money moves as real Superfluid streams: a constant-flow agreement (CFA) stream or a general-distribution agreement (GDA) pool. People see USD. On Base mainnet, savings are accounted in USDCx, the Super Token wrapper of USDC. On Base Sepolia the stable token is fUSDCx. An existing ETHx balance still shows. Production reads Base mainnet. `npm run dev -- sepolia` and `npm run build -- sepolia` read the Base Sepolia deployment.
 
 **These contracts have not been audited. Do not put real funds in them.**
 
@@ -65,13 +65,13 @@ cd contracts
 forge script script/Deploy.s.sol:DeployBaseMainnet --rpc-url "$BASE_RPC_URL" --broadcast
 ```
 
-`DeployBaseSepolia` remains for the old testnet set. The script deploys upgradeable proxies and registers the chain's Super Tokens. On Base that is USDCx and ETHx. On Base Sepolia there is no Circle USDCx, so the stable token is fUSDCx. Addresses are in `src/SuperfluidAddresses.sol`. The live Base mainnet proxies the app talks to are listed in [CONTRACTS.md](CONTRACTS.md).
+`DeployBaseSepolia` remains for the old testnet set. The script deploys upgradeable proxies and registers the chain's Super Tokens. On Base that is USDCx and ETHx. On Base Sepolia there is no Circle USDCx, so the stable token is fUSDCx. Addresses are in `src/SuperfluidAddresses.sol`. The live Base mainnet proxies, and the Base Sepolia 2-of-3 set the app reads, are both in [CONTRACTS.md](CONTRACTS.md).
 
 The owner can upgrade the allowlist, factory, lock vault, and group through their proxies. An upgrade waits two days. `upgradeVaults` and `upgradeConduits` on the factory upgrade every vault or every conduit.
 
 ## App
 
-The web app is the Next.js project at the repository root. It reads Base mainnet (`BASE_RPC_URL`, or `https://mainnet.base.org`).
+The web app is the Next.js project at the repository root. It reads Base mainnet (`BASE_RPC_URL`, or `https://mainnet.base.org`) unless the network is Sepolia: `npm run dev -- sepolia`, `npm run build -- sepolia`, or `RVESS_NETWORK=sepolia`.
 
 Signing depends on how you entered:
 
@@ -127,6 +127,8 @@ Prices come from those Chainlink feeds, cached for 60 seconds. A feed older than
 
 ```shell
 npm run dev
+npm run dev -- sepolia
+npm run build -- base
 ```
 
 `npm run lint` checks the app. `npm test` checks the payment math. Contract tests still run from `contracts/` with `forge test`. The last full run of that suite in this workspace passed (69 tests).
