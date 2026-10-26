@@ -31,7 +31,7 @@ async function GoalsBody() {
     >
       <p className="mb-3 text-sm text-muted-foreground">{open === 0 ? "No active goals" : `${open} active goal${open === 1 ? "" : "s"}`}</p>
       {data.flows.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card px-4 py-6">
+        <div className="rounded-3xl border border-border/70 bg-card px-4 py-6 shadow-[0_10px_28px_rgba(20,27,45,0.06)]">
           <p className="text-sm text-muted-foreground">A saving holds money still. A flow or expense streams it until the end date.</p>
           <Link href="/goals/new" className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground">
             Create goal

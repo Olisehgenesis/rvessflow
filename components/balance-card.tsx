@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
-import { IconEye, IconEyeOff } from "@/components/icons";
+import { IconChevron, IconEye, IconEyeOff, IconSun } from "@/components/icons";
 
 const hidden = "••••••";
 const storageKey = "rvess-hide-balance";
@@ -31,14 +31,6 @@ function writeConceal(next: boolean) {
   listeners.forEach((listener) => listener());
 }
 
-export type BalanceRow = {
-  key: string;
-  label: string;
-  amount: string;
-  usd: string;
-  local?: string;
-};
-
 export function useConceal() {
   return useSyncExternalStore(subscribeConceal, readConceal, () => false);
 }
@@ -47,73 +39,78 @@ export function toggleConceal() {
   writeConceal(!readConceal());
 }
 
-export function BalanceCard({
+export function HomeBalance({
   totalUsd,
+  totalUsdc,
   totalLocal,
   localUnit,
-  rows,
   available,
+  availableUsdc,
   streaming,
+  streamingUsdc,
   locked,
+  lockedUsdc,
 }: {
   totalUsd: string;
+  totalUsdc: string;
   totalLocal?: string;
   localUnit?: string;
-  rows: BalanceRow[];
   available: string;
+  availableUsdc: string;
   streaming: string;
+  streamingUsdc: string;
   locked: string;
+  lockedUsdc: string;
 }) {
   const conceal = useConceal();
   const usd = (value: string) => (conceal ? hidden : `$${value}`);
-  const local = (value?: string) => (conceal || !value || !localUnit ? "" : `${localUnit} ${value}`);
+  const usdc = (value: string) => (conceal ? hidden : value);
+  const columns = [
+    { label: "Available", usd: available, usdc: availableUsdc },
+    { label: "Streaming", usd: streaming, usdc: streamingUsdc },
+    { label: "Locked", usd: locked, usdc: lockedUsdc },
+  ];
   return (
-    <section className="mt-5 rounded-3xl border border-border bg-card p-4">
+    <section className="relative mt-5 overflow-hidden rounded-3xl bg-[#D4F06B] p-4 text-[#172114] shadow-[0_12px_30px_rgba(20,27,45,0.06)]">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">Total balance</p>
-        <button
-          type="button"
-          aria-label={conceal ? "Show balance" : "Hide balance"}
-          aria-pressed={conceal}
-          onClick={() => writeConceal(!conceal)}
-          className="grid size-8 place-items-center text-muted-foreground"
-        >
-          {conceal ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
-        </button>
+        <p className="text-sm font-medium">Total balance</p>
+        <div className="flex items-center">
+          <button
+            type="button"
+            aria-label={conceal ? "Show balance" : "Hide balance"}
+            aria-pressed={conceal}
+            onClick={() => writeConceal(!conceal)}
+            className="grid size-8 place-items-center"
+          >
+            {conceal ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
+          </button>
+          <Link href="/home/assets" aria-label="Balance details" className="grid size-8 place-items-center">
+            <IconChevron className="size-4" />
+          </Link>
+        </div>
       </div>
-      <p className="mt-1 font-display text-4xl font-semibold tracking-tight tabular-nums">{usd(totalUsd)}</p>
-      {totalLocal && localUnit ? <p className="mt-1 text-sm text-muted-foreground tabular-nums">{local(totalLocal)}</p> : null}
-      <dl className="mt-4 grid grid-cols-3 gap-2 text-xs">
-        <div>
-          <dt className="text-muted-foreground">Available</dt>
-          <dd className="mt-1 font-medium tabular-nums">{usd(available)}</dd>
+      <div className="mt-2 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 font-display text-4xl font-semibold tracking-tight tabular-nums">
+            {usd(totalUsd)}
+            <IconSun className="size-5 shrink-0 text-[#E2A93B]" />
+          </p>
+          <p className="mt-1 text-sm font-medium text-[#3C4A2E] tabular-nums">≈ {usdc(totalUsdc)} USDC</p>
+          {totalLocal && localUnit ? (
+            <p className="mt-0.5 text-sm text-[#3C4A2E] tabular-nums">{conceal ? hidden : `${localUnit} ${totalLocal}`}</p>
+          ) : null}
         </div>
-        <div>
-          <dt className="text-muted-foreground">Streaming</dt>
-          <dd className="mt-1 font-medium tabular-nums">{usd(streaming)}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Locked</dt>
-          <dd className="mt-1 font-medium tabular-nums">{usd(locked)}</dd>
-        </div>
-      </dl>
-      <ul className="mt-4 divide-y divide-border border-t border-border">
-        {rows.map((row) => (
-          <li key={row.key} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-            <span>
-              <span className="block font-medium">{row.label}</span>
-              <span className="block text-xs text-muted-foreground tabular-nums">{conceal ? hidden : row.amount}</span>
-            </span>
-            <span className="text-right">
-              <span className="block font-medium tabular-nums">{usd(row.usd)}</span>
-              {row.local ? <span className="block text-xs text-muted-foreground tabular-nums">{local(row.local)}</span> : null}
-            </span>
-          </li>
+        <img src="/home/wallet.webp" alt="" className="mt-1 w-24 shrink-0" />
+      </div>
+      <dl className="relative z-10 mt-4 grid grid-cols-3">
+        {columns.map((column, index) => (
+          <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#172114]/15 px-2"}>
+            <dt className="text-xs">{column.label}</dt>
+            <dd className="mt-1 text-sm font-semibold tabular-nums">{usd(column.usd)}</dd>
+            <p className="text-[11px] text-[#3C4A2E] tabular-nums">≈ {usdc(column.usdc)} USDC</p>
+          </div>
         ))}
-      </ul>
-      <Link href="/home/add" className="mt-4 flex h-12 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
-        Add money
-      </Link>
+      </dl>
     </section>
   );
 }

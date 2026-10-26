@@ -24,7 +24,7 @@ async function VaultsBody() {
         Lock your assets and earn more, with a small penalty for early access.
       </p>
       {data.locks.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card px-4 py-6">
+        <div className="rounded-3xl border border-border/70 bg-card px-4 py-6 shadow-[0_10px_28px_rgba(20,27,45,0.06)]">
           <p className="font-medium">No locks yet</p>
           <p className="mt-1 text-sm text-muted-foreground">A lock keeps the principal in the lock contract until the unlock date.</p>
         </div>

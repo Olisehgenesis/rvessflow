@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Dialog } from "radix-ui";
 import { Check, ChevronLeft, ChevronRight, Fingerprint, Lock, Mail, Shield, Wallet, X } from "lucide-react";
 import { IconMark } from "@/components/icons";
@@ -8,6 +8,14 @@ import { enterApp, lookUpEmail, noteTerms, openSession } from "@/lib/actions";
 import { connectWallet, createPasskeyWallet, unlockPasskey } from "@/lib/auth-client";
 import { shortAddress } from "@/lib/display";
 import { readPasskeys, type SavedPasskey } from "@/lib/passkey-vault";
+
+function subscribePasskey() {
+  return () => {};
+}
+
+function passkeyOnClient() {
+  return typeof window.PublicKeyCredential !== "undefined";
+}
 
 type Kind = "passkey" | "wallet";
 type Attempt = "create" | "unlock" | "connect";
@@ -48,7 +56,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
   const [saved, setSaved] = useState<SavedPasskey[]>([]);
   const [checked, setChecked] = useState(false);
   const [onDevice, setOnDevice] = useState(false);
-  const [canPasskey, setCanPasskey] = useState(true);
+  const canPasskey = useSyncExternalStore(subscribePasskey, passkeyOnClient, () => true);
   const [mode, setMode] = useState<Mode>(intent === "login" ? "signin" : "create");
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState("");
@@ -63,7 +71,6 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
   const [phase, setPhase] = useState<Phase>({ name: "choose" });
 
   useEffect(() => {
-    setCanPasskey(typeof window.PublicKeyCredential !== "undefined");
     let live = true;
     readPasskeys()
       .then((rows) => {

@@ -35,6 +35,16 @@ async function SettingsBody() {
     : "No upgrade is scheduled";
   return (
     <Page title="Settings">
+      <nav className="mb-4 grid grid-cols-2 gap-2" aria-label="Wallet">
+        <Link href="/vaults" className="rounded-3xl border border-border/70 bg-card px-4 py-3 text-sm font-semibold shadow-[0_10px_28px_rgba(20,27,45,0.05)]">
+          Vaults
+          <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Locks</span>
+        </Link>
+        <Link href="/home/assets" className="rounded-3xl border border-border/70 bg-card px-4 py-3 text-sm font-semibold shadow-[0_10px_28px_rgba(20,27,45,0.05)]">
+          Assets
+          <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Balances on Base</span>
+        </Link>
+      </nav>
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">Currency</p>
