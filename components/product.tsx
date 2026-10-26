@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { FlowingText } from "@/components/flowing";
+import { IconCalendar, IconChevron, IconLock } from "@/components/icons";
+import { PenaltyHint } from "@/components/penalty-hint";
+import { TokenMark } from "@/components/forms";
 import { when } from "@/components/ui-bits";
 import { Progress } from "@/components/ui/progress";
+import { assetByAddress } from "@/lib/assets";
 import { percent, show } from "@/lib/display";
 import type { Quote } from "@/lib/quote";
 import type { FlowRow, LockRow } from "@/lib/protocol";
@@ -120,20 +124,19 @@ export function goalFigures(flow: FlowRow) {
   return { saving, whole, part, label, progress: percent(part, whole) };
 }
 
-export function goalStatus(flow: FlowRow, readAt: number) {
+export function goalStatus(flow: FlowRow, readAt: number, appPaused = false) {
   const saving = flow.kind === "saving";
-  const live = !saving && flow.active && !flow.paused && !flow.settled && readAt < flow.end && BigInt(flow.remaining) > 0n;
   if (flow.settled) return "Closed";
-  if (flow.paused) return "Paused";
-  if (live) return "Streaming";
-  if (flow.active) return saving ? "Holding" : "Open";
+  if (flow.paused || appPaused) return "Paused";
+  if (!flow.active && (flow.earliestStart > readAt || flow.earliestStart === 0 && !saving)) return flow.active ? "Active" : "Waiting";
+  if (flow.active || saving) return "Active";
   return "Waiting";
 }
 
-export function GoalLink({ flow, readAt, quote }: { flow: FlowRow; readAt: number; quote: Quote }) {
+export function GoalLink({ flow, readAt, quote, appPaused = false }: { flow: FlowRow; readAt: number; quote: Quote; appPaused?: boolean }) {
   const { whole, part, label, progress } = goalFigures(flow);
-  const live = goalStatus(flow, readAt) === "Streaming";
-  const pace = goalStatus(flow, readAt);
+  const pace = goalStatus(flow, readAt, appPaused);
+  const live = pace === "Active" && flow.kind !== "saving" && flow.active && !flow.paused;
   return (
     <Link href={`/goals/${flow.id}`} className="block rounded-2xl border border-border bg-card p-4">
       <div className="flex items-start gap-3">
@@ -144,7 +147,7 @@ export function GoalLink({ flow, readAt, quote }: { flow: FlowRow; readAt: numbe
               <p className="truncate font-medium">{flow.name}</p>
               <p className="text-xs text-muted-foreground">{label}</p>
             </div>
-            <Status>{pace}</Status>
+            <IconChevron className="mt-1 size-4 shrink-0 text-muted-foreground" />
           </div>
         </div>
       </div>
@@ -157,46 +160,57 @@ export function GoalLink({ flow, readAt, quote }: { flow: FlowRow; readAt: numbe
         <p className="shrink-0 text-xs font-medium tabular-nums">{progress}%</p>
       </div>
       <Progress value={progress} indicatorClassName="bg-foreground" className="mt-2 h-1.5 bg-muted" />
-      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-        <span>Ends {when(flow.end || flow.earliestStart)}</span>
-        <span aria-hidden>›</span>
+      <div className="mt-3 flex items-center justify-between gap-3 text-xs">
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <IconCalendar className="size-3.5" />
+          Ends · {when(flow.end || flow.earliestStart)}
+        </span>
+        <Status>{pace}</Status>
       </div>
     </Link>
   );
 }
 
 export function LockLink({ lock, quote }: { lock: LockRow; quote: Quote }) {
+  const asset = assetByAddress(lock.token);
+  const symbol = asset.symbol === "USDCx" ? "USD" : asset.symbol;
+  const name = asset.symbol === "USDCx" ? "US Dollar" : asset.name;
   const penalty = `${(lock.penaltyBps / 100).toFixed(2).replace(/\.00$/, "")}%`;
+  const amount = asset.symbol === "ETHx" ? `${show(lock.principal, { ...quote, code: "fusdcx", unit: "ETH", perToken: 1, digits: 4 })} ETH` : `${quote.unit} ${show(lock.principal, quote)}`;
   return (
-    <Link href={`/vaults/${lock.id}`} className="block rounded-2xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between gap-3">
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <Link href={`/vaults/${lock.id}`} className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <ProductMark kind="lock" size="sm" quiet={lock.settled} />
+          <TokenMark symbol={symbol} />
           <div>
-            <p className="font-medium">{lock.name || "USDCx"}</p>
-            <p className="text-xs text-muted-foreground">USDCx</p>
+            <p className="font-medium">{symbol}</p>
+            <p className="text-xs text-muted-foreground">{name}</p>
           </div>
         </div>
-        <span aria-hidden className="text-muted-foreground">›</span>
-      </div>
-      <dl className="mt-4 space-y-2 text-sm">
+        <IconChevron className="size-4 text-muted-foreground" />
+      </Link>
+      <dl className="mt-4 space-y-2.5 text-sm">
         <div className="flex justify-between gap-3">
           <dt className="text-muted-foreground">Amount locked</dt>
-          <dd className="font-medium tabular-nums">{quote.unit} {show(lock.principal, quote)}</dd>
+          <dd className="font-medium tabular-nums">{amount}</dd>
         </div>
         <div className="flex justify-between gap-3">
           <dt className="text-muted-foreground">Unlock date</dt>
           <dd className="font-medium">{when(lock.end)}</dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-muted-foreground">Penalty</dt>
-          <dd className="font-medium">{penalty} early unlock</dd>
+          <dt className="flex items-center gap-1 text-muted-foreground">
+            Penalty
+            <PenaltyHint rate={penalty} />
+          </dt>
+          <dd className="font-medium">{penalty} (early unlock)</dd>
         </div>
       </dl>
-      <div className="mt-3">
-        <Status>{lock.settled ? "Closed" : "Locked"}</Status>
-      </div>
-    </Link>
+      <Link href={`/vaults/${lock.id}`} className="mt-4 flex h-11 items-center justify-center gap-2 rounded-full border border-border bg-background text-sm font-medium">
+        <IconLock className="size-4" />
+        {lock.settled ? "Closed" : "Locked"}
+      </Link>
+    </div>
   );
 }
 

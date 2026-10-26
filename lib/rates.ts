@@ -22,10 +22,10 @@ export async function loadQuoteFor(code: string): Promise<Quote> {
     const digits = choice.code === "jpy" || choice.code === "ugx" ? 0 : 2;
     const local = perToken.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
     const pegText = `USDC is ${peg.usd.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 4 })} USD on CoinGecko`;
-    const country = choice.code === "usd" ? pegText : `${pegText}. 1 USDCx ≈ ${local} ${choice.label} at the ${table.date} rate`;
+    const country = choice.code === "usd" ? pegText : `${pegText}. 1 USD ≈ ${local} ${choice.label} at the ${table.date} rate`;
     return { code: choice.code, unit: choice.label, perToken, digits, note: `${country}.` };
   } catch {
-    return { ...chainQuote(), note: "Country rates did not load, so amounts stay in USDCx." };
+    return { ...chainQuote(), note: "Country rates did not load, so amounts stay in USD." };
   }
 }
 

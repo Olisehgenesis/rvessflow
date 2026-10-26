@@ -1,0 +1,308 @@
+import "server-only";
+
+import { decodeFunctionResult, encodeFunctionData, parseAbi, zeroAddress, type Address } from "viem";
+import { baseMarket, poolFees, SLIPPAGE_BPS, SUPER_UNIT } from "@/lib/base-market";
+import type { PreparedCall } from "@/lib/intent";
+import { buildFundCalls, buildWithdrawCalls, quoteDeadline } from "@/lib/pay-build";
+import {
+  formatAmount,
+  formatPrice8,
+  formatUsd8,
+  fundForNet,
+  netSuperForUsd,
+  parseUsd,
+  protocolFeeOf,
+  slippageCeiling,
+  slippageFloor,
+  wrapForSuper,
+  type PayAsset,
+  type ReceiveAsset,
+} from "@/lib/pay-math";
+import { loadPrices, type Prices } from "@/lib/prices";
+import { addresses, erc20, factoryAbi, publicClient, streamNeed, vaultAbi } from "@/lib/protocol";
+
+const quoterAbi = parseAbi([
+  "function quoteExactOutputSingle((address tokenIn, address tokenOut, uint256 amount, uint24 fee, uint160 sqrtPriceLimitX96) params) returns (uint256 amountIn, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
+  "function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96) params) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
+]);
+
+export type QuoteLine = { label: string; value: string };
+
+export type FundQuote = {
+  pay: PayAsset;
+  underlying: bigint;
+  minted: bigint;
+  fee: bigint;
+  credit: bigint;
+  amountIn: bigint;
+  amountInMax: bigint;
+  feeTier: number;
+  prices: Prices;
+};
+
+const symbols: Record<PayAsset, string> = { usdc: "USDC", usdt: "USDT", eth: "ETH" };
+const scales: Record<PayAsset, number> = { usdc: 6, usdt: 6, eth: 18 };
+
+async function allowance(owner: Address, token: Address, spender: Address) {
+  return publicClient.readContract({ address: token, abi: erc20, functionName: "allowance", args: [owner, spender] });
+}
+
+async function quoteOutput(pay: "usdt" | "eth", usdcOut: bigint): Promise<{ amountIn: bigint; feeTier: number }> {
+  const tokenIn = pay === "eth" ? baseMarket.weth : baseMarket.usdt;
+  let last = "Uniswap has no price for that swap right now.";
+  for (const fee of poolFees[pay]) {
+    try {
+      const data = encodeFunctionData({
+        abi: quoterAbi,
+        functionName: "quoteExactOutputSingle",
+        args: [{ tokenIn, tokenOut: baseMarket.usdc, amount: usdcOut, fee, sqrtPriceLimitX96: 0n }],
+      });
+      const raw = await publicClient.call({ to: baseMarket.quoterV2, data });
+      const decoded = decodeFunctionResult({ abi: quoterAbi, functionName: "quoteExactOutputSingle", data: raw.data ?? "0x" });
+      if (decoded[0] > 0n) return { amountIn: decoded[0], feeTier: fee };
+    } catch (error) {
+      last = error instanceof Error ? error.message : last;
+    }
+  }
+  throw new Error(last);
+}
+
+async function quoteInput(receive: "usdt" | "eth", usdcIn: bigint): Promise<{ amountOut: bigint; feeTier: number }> {
+  const tokenOut = receive === "eth" ? baseMarket.weth : baseMarket.usdt;
+  const tiers = receive === "eth" ? poolFees.eth : poolFees.usdt;
+  let last = "Uniswap has no price for that withdrawal.";
+  for (const fee of tiers) {
+    try {
+      const data = encodeFunctionData({
+        abi: quoterAbi,
+        functionName: "quoteExactInputSingle",
+        args: [{ tokenIn: baseMarket.usdc, tokenOut, amountIn: usdcIn, fee, sqrtPriceLimitX96: 0n }],
+      });
+      const raw = await publicClient.call({ to: baseMarket.quoterV2, data });
+      const decoded = decodeFunctionResult({ abi: quoterAbi, functionName: "quoteExactInputSingle", data: raw.data ?? "0x" });
+      if (decoded[0] > 0n) return { amountOut: decoded[0], feeTier: fee };
+    } catch (error) {
+      last = error instanceof Error ? error.message : last;
+    }
+  }
+  throw new Error(last);
+}
+
+export async function superForUsd(usd: string): Promise<bigint> {
+  const prices = await loadPrices();
+  return netSuperForUsd(parseUsd(usd), prices.usdcUsd8);
+}
+
+/** `needed` is the USDCx that must end up credited (vault) or sitting in the wallet (lock, group). */
+export async function quoteFund(pay: PayAsset, needed: bigint, mode: "vault" | "wallet"): Promise<FundQuote> {
+  const prices = await loadPrices();
+  const wrapped = wrapForSuper(needed);
+  const sized =
+    mode === "vault"
+      ? fundForNet(needed)
+      : { underlying: wrapped.underlying, minted: wrapped.minted, fee: 0n, credit: wrapped.minted };
+  if (pay === "usdc") {
+    return {
+      pay,
+      underlying: sized.underlying,
+      minted: sized.minted,
+      fee: sized.fee,
+      credit: sized.credit,
+      amountIn: sized.underlying,
+      amountInMax: sized.underlying,
+      feeTier: 0,
+      prices,
+    };
+  }
+  const quoted = await quoteOutput(pay, sized.underlying);
+  return {
+    pay,
+    underlying: sized.underlying,
+    minted: sized.minted,
+    fee: sized.fee,
+    credit: sized.credit,
+    amountIn: quoted.amountIn,
+    amountInMax: slippageCeiling(quoted.amountIn),
+    feeTier: quoted.feeTier,
+    prices,
+  };
+}
+
+export async function fundingCalls(owner: Address, vault: Address, pay: PayAsset, needed: bigint, mode: "vault" | "wallet"): Promise<PreparedCall[]> {
+  if (needed <= 0n) return [];
+  const quote = await quoteFund(pay, needed, mode);
+  const spender = mode === "vault" ? vault : baseMarket.usdcx;
+  const [wrapAllowance, routerAllowance] = await Promise.all([
+    allowance(owner, baseMarket.usdc, spender),
+    pay === "usdt" ? allowance(owner, baseMarket.usdt, baseMarket.swapRouter02) : Promise.resolve(0n),
+  ]);
+  return buildFundCalls({
+    payer: owner,
+    pay,
+    mode,
+    vault,
+    underlying: quote.underlying,
+    minted: quote.minted,
+    amountInMax: quote.amountInMax,
+    feeTier: quote.feeTier,
+    deadline: quoteDeadline(Math.floor(Date.now() / 1000)),
+    approveRouter: pay === "usdt" && routerAllowance < quote.amountInMax,
+    resetRouterAllowance: pay === "usdt" && routerAllowance > 0n && routerAllowance < quote.amountInMax,
+    approveWrap: wrapAllowance < quote.underlying,
+  });
+}
+
+export async function withdrawCalls(owner: Address, vault: Address, superAmount: bigint, receive: ReceiveAsset): Promise<PreparedCall[]> {
+  const underlying = superAmount / (10n ** 12n);
+  let amountOutMinimum = 0n;
+  let feeTier = 500;
+  if (receive !== "usdc") {
+    const quoted = await quoteInput(receive, underlying);
+    amountOutMinimum = slippageFloor(quoted.amountOut);
+    feeTier = quoted.feeTier;
+  }
+  const routerAllowance = receive === "usdc" ? 0n : await allowance(owner, baseMarket.usdc, baseMarket.swapRouter02);
+  return buildWithdrawCalls({
+    vault,
+    payer: owner,
+    superAmount,
+    receive,
+    feeTier,
+    deadline: quoteDeadline(Math.floor(Date.now() / 1000)),
+    amountOutMinimum,
+    approveRouter: receive !== "usdc" && routerAllowance < underlying,
+    resetRouterAllowance: receive !== "usdc" && routerAllowance > 0n && routerAllowance < underlying,
+  });
+}
+
+function usd8OfSuper(superAmount: bigint, usdcUsd8: bigint): bigint {
+  return (superAmount * usdcUsd8) / 10n ** 18n;
+}
+
+function rateLine(quote: FundQuote): string {
+  if (quote.pay === "usdc" || quote.amountIn <= 0n) return `1 USDC = $${formatPrice8(quote.prices.usdcUsd8)}`;
+  const usd8 = (quote.underlying * quote.prices.usdcUsd8) / 1_000_000n;
+  const perToken = (usd8 * 10n ** BigInt(scales[quote.pay])) / quote.amountIn;
+  return `1 ${symbols[quote.pay]} = $${formatPrice8(perToken)}`;
+}
+
+export function fundingLines(quote: FundQuote, heading?: string): QuoteLine[] {
+  const lines: QuoteLine[] = [];
+  if (heading) lines.push({ label: "You add", value: heading });
+  lines.push({ label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(quote.fee, quote.prices.usdcUsd8))}` });
+  lines.push({ label: "USDC wrapped", value: formatAmount(quote.underlying, 6, 2) });
+  lines.push({
+    label: quote.pay === "usdc" ? "You spend" : "You spend at most",
+    value: `${formatAmount(quote.amountInMax, scales[quote.pay], quote.pay === "eth" ? 6 : 2)} ${symbols[quote.pay]}`,
+  });
+  lines.push({ label: "Rate", value: rateLine(quote) });
+  lines.push({ label: "Slippage", value: quote.pay === "usdc" ? "No swap" : `${(SLIPPAGE_BPS / 100).toFixed(2)}% max` });
+  lines.push({ label: "Deadline", value: "20 minutes" });
+  return lines;
+}
+
+export async function idleSuper(owner: Address): Promise<bigint> {
+  const vault = await publicClient.readContract({
+    address: addresses.factory,
+    abi: factoryAbi,
+    functionName: "vaultOf",
+    args: [owner],
+  });
+  if (vault === zeroAddress) return 0n;
+  return publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "unallocated", args: [addresses.fusdcx] });
+}
+
+export async function walletSuper(owner: Address): Promise<bigint> {
+  return publicClient.readContract({ address: addresses.fusdcx, abi: erc20, functionName: "balanceOf", args: [owner] });
+}
+
+export async function previewLines(input: {
+  pay: PayAsset;
+  usd?: string;
+  superWei?: string;
+  mode: "vault" | "wallet" | "stream";
+  duration?: number;
+  /** Lock and group pulls add the 0.30% fee on top of the face amount. */
+  protocolOnTop?: boolean;
+  coveredWei?: string;
+  /** Add money deposits the full amount even when the vault already holds some. */
+  full?: boolean;
+}): Promise<QuoteLine[]> {
+  const prices = await loadPrices();
+  let face = 0n;
+  if (input.superWei) face = BigInt(input.superWei);
+  else if (input.usd) face = netSuperForUsd(parseUsd(input.usd), prices.usdcUsd8);
+  if (face <= 0n) throw new Error("Enter the amount in USD.");
+  const heading = `$${formatUsd8(usd8OfSuper(face, prices.usdcUsd8))}`;
+  let needed = face;
+  if (input.mode === "stream") {
+    const duration = Number(input.duration);
+    if (!Number.isInteger(duration) || duration < 60) throw new Error("Pick the end date first.");
+    needed = await streamNeed(face, BigInt(duration));
+  }
+  const pulledFee = input.protocolOnTop ? protocolFeeOf(face) : 0n;
+  if (pulledFee > 0n) needed += pulledFee;
+  const covered = input.full ? 0n : BigInt(input.coveredWei ?? "0");
+  if (covered >= needed) {
+    return [
+      { label: "You add", value: heading },
+      {
+        label: "Protocol fee",
+        value: pulledFee > 0n ? `0.30% · $${formatUsd8(usd8OfSuper(pulledFee, prices.usdcUsd8))}` : "0.30% · $0.00",
+      },
+      { label: "Already available", value: "Nothing more to swap or wrap" },
+      { label: "You spend", value: "0" },
+      { label: "Slippage", value: "No swap" },
+    ];
+  }
+  const mode = input.mode === "wallet" ? "wallet" : "vault";
+  const quote = await quoteFund(input.pay, needed - covered, mode);
+  const lines = fundingLines(quote, heading);
+  if (pulledFee > 0n) {
+    const index = lines.findIndex((line) => line.label === "Protocol fee");
+    const feeLine = { label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(pulledFee, prices.usdcUsd8))}` };
+    if (index >= 0) lines[index] = feeLine;
+  }
+  if (covered > 0n) {
+    lines.splice(1, 0, { label: "Already available", value: `$${formatUsd8(usd8OfSuper(covered, prices.usdcUsd8))}` });
+  }
+  if (input.mode === "stream") {
+    lines.splice(1, 0, { label: "Held for the stream", value: "Deposit and one hour of cushion, on top of the goal" });
+  }
+  return lines;
+}
+
+export async function previewWithdraw(usd: string, receive: ReceiveAsset): Promise<QuoteLine[]> {
+  const prices = await loadPrices();
+  const superAmount = await superForWithdraw(usd);
+  if (superAmount <= 0n) throw new Error("Enter the amount in USD.");
+  const underlying = superAmount / SUPER_UNIT;
+  const heading = `$${formatUsd8(usd8OfSuper(superAmount, prices.usdcUsd8))}`;
+  if (receive === "usdc") {
+    return [
+      { label: "You withdraw", value: heading },
+      { label: "You receive", value: `${formatAmount(underlying, 6, 2)} USDC` },
+      { label: "Rate", value: `1 USDC = $${formatPrice8(prices.usdcUsd8)}` },
+      { label: "Slippage", value: "No swap" },
+      { label: "Deadline", value: "None" },
+    ];
+  }
+  const quoted = await quoteInput(receive, underlying);
+  const min = slippageFloor(quoted.amountOut);
+  const scale = receive === "eth" ? 18 : 6;
+  const symbol = receive === "eth" ? "ETH" : "USDT";
+  const usd8 = (underlying * prices.usdcUsd8) / 1_000_000n;
+  const perToken = quoted.amountOut > 0n ? (usd8 * 10n ** BigInt(scale)) / quoted.amountOut : 0n;
+  return [
+    { label: "You withdraw", value: heading },
+    { label: "You receive at least", value: `${formatAmount(min, scale, receive === "eth" ? 6 : 2)} ${symbol}` },
+    { label: "Rate", value: `1 ${symbol} = $${formatPrice8(perToken)}` },
+    { label: "Slippage", value: `${(SLIPPAGE_BPS / 100).toFixed(2)}% max` },
+    { label: "Deadline", value: "20 minutes" },
+  ];
+}
+
+export async function superForWithdraw(usd: string): Promise<bigint> {
+  const net = await superForUsd(usd);
+  return (net / SUPER_UNIT) * SUPER_UNIT;
+}

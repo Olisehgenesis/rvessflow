@@ -1,24 +1,37 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAddress, isAddress, type Address } from "viem";
+import { assetKind } from "@/lib/assets";
+import { asTokenAmount } from "@/lib/display";
+import { idleSuper, previewLines, previewWithdraw, walletSuper } from "@/lib/funding";
+import type { Intent, SignPayload } from "@/lib/intent";
+import { inferFrequency } from "@/lib/intent";
+import { goalNotes, patchGoalNote, recordActivity, saveGoalNote, type ActivityRecord } from "@/lib/notes";
+import { parseUsd, readPay, readReceive, type PayAsset } from "@/lib/pay-math";
+import { planIntent } from "@/lib/plan";
 import {
   addToGoal,
+  broadcastCalls,
   explain,
   groupAct,
   shiftPayout,
+  linkPhone,
+  loadPortfolio,
   lockBreak,
   lockMature,
   lockTopUp,
-  linkPhone,
   openLock,
   openSaving,
   openStream,
+  parseAmount,
   releaseGoal,
   vaultCall,
 } from "@/lib/protocol";
 import { currencyForCountry } from "@/lib/place";
+import { loadQuote } from "@/lib/rates";
 import {
   acceptApplicant,
   addDraftMember,
@@ -26,6 +39,7 @@ import {
   declineApplicant,
   deleteDraft,
   dropPhone,
+  groupCreateIntent,
   launchDraft,
   moveDraftMember,
   openDraft,
@@ -37,9 +51,178 @@ import {
   savePhone,
   setDraftOpen,
 } from "@/lib/circle";
-import { acceptedTerms, accountIndex, clearSession, currencyChoice, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet } from "@/lib/session";
+import { acceptedTerms, accountIndex, clearSession, currencyChoice, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet, viewer, type Viewer } from "@/lib/session";
 
-export type ActionState = { error: string } | null;
+export type ActionState = { error?: string; sign?: SignPayload } | null;
+
+function refIntent<T extends Intent>(intent: T): T {
+  return { ...intent, ref: intent.ref || randomUUID() };
+}
+
+async function quotedAmount(raw: string, eth = false): Promise<string> {
+  const clean = raw.replace(/,/g, "").trim();
+  if (eth) return clean;
+  return asTokenAmount(clean, await loadQuote());
+}
+
+function signPayload(who: Viewer, intent: Intent, calls: SignPayload["calls"]): ActionState {
+  if (who.method === "tester") return { error: "This account signs on the server." };
+  return {
+    sign: {
+      nonce: randomUUID(),
+      calls,
+      intent,
+      method: who.method,
+      address: who.address,
+    },
+  };
+}
+
+async function rememberIntent(owner: string, intent: Intent, id?: string) {
+  if ((intent.kind === "saving" || intent.kind === "stream") && id) {
+    await saveGoalNote(owner, id, { description: intent.description, frequency: intent.frequency, paused: false });
+  }
+  if (intent.kind === "groupCreate") {
+    try {
+      await deleteDraft(intent.draftId);
+    } catch {
+      // The draft is already gone, or this account cannot remove it.
+    }
+  }
+  const row = activityFrom(owner, intent, id);
+  if (row) await recordActivity(row);
+}
+
+function wei(value: string): string | null {
+  try {
+    const amount = parseAmount(value);
+    return amount > 0n ? amount.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function pricedWei(value: string): string | null {
+  try {
+    return (parseUsd(value) * 10n ** 12n).toString();
+  } catch {
+    return null;
+  }
+}
+
+function activityAmount(value: string, priced: boolean): string | null {
+  return priced ? pricedWei(value) : wei(value);
+}
+
+function rethrowRedirect(error: unknown) {
+  if (typeof error === "object" && error !== null && "digest" in error && String((error as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")) {
+    throw error;
+  }
+}
+
+function payField(formData: FormData): PayAsset | undefined {
+  const raw = String(formData.get("pay") ?? "");
+  return raw ? readPay(raw) : undefined;
+}
+
+function usdField(formData: FormData): string {
+  const amount = String(formData.get("amount") ?? "");
+  parseUsd(amount);
+  return amount;
+}
+
+async function finishTester(intent: Intent): Promise<ActionState> {
+  const who = await viewer();
+  const index = await accountIndex();
+  let current = refIntent(intent);
+  for (let step = 0; step < 6; step += 1) {
+    const planned = await planIntent(who.address, current);
+    if (planned.pending) return { error: "That transaction is still confirming. Refresh in a moment." };
+    if (planned.done || planned.calls.length === 0) {
+      await rememberIntent(who.address, planned.intent, planned.id);
+      refresh();
+      redirect(planned.href ?? "/home");
+    }
+    await broadcastCalls(index, planned.calls);
+    current = planned.intent;
+  }
+  return { error: "That payment took more steps than expected. Refresh and try again." };
+}
+
+function activityFrom(owner: string, intent: Intent, id?: string): ActivityRecord | null {
+  const at = Math.floor(Date.now() / 1000);
+  const base = { id: `app:${intent.ref}`, owner, at, asset: "usdcx" as const };
+  if (intent.kind === "saving") {
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
+    return amount ? { ...base, title: "Saved to goal", detail: intent.name, direction: "in", amount, href: `/goals/${id ?? ""}` } : null;
+  }
+  if (intent.kind === "stream") {
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
+    return amount
+      ? { ...base, title: intent.flowKind === "expense" ? "Expense" : "Streamed", detail: intent.name, direction: "out", amount, href: `/goals/${id ?? ""}` }
+      : null;
+  }
+  if (intent.kind === "lock") {
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
+    return amount
+      ? { ...base, title: "Locked", detail: intent.name, direction: "out", amount, asset: assetKind(intent.token), href: `/vaults/${id ?? ""}` }
+      : null;
+  }
+  if (intent.kind === "deposit") {
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
+    return amount ? { ...base, title: "Added money", detail: "Wallet", direction: "in", amount, href: "/home" } : null;
+  }
+  if (intent.kind === "withdraw") {
+    const amount = intent.receive ? pricedWei(intent.amount) : intent.amount;
+    return amount ? { ...base, title: "Moved to wallet", detail: intent.receive ? intent.receive.toUpperCase() : "Vault", direction: "out", amount, href: "/home" } : null;
+  }
+  if (intent.kind === "goal" && intent.fn === "topup") {
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
+    return amount ? { ...base, title: "Saved to goal", detail: "Top up", direction: "in", amount, href: `/goals/${intent.id}` } : null;
+  }
+  if (intent.kind === "goal" && intent.fn === "release") {
+    const amount = wei(intent.amount);
+    return amount ? { ...base, title: "Moved to idle", detail: "Goal", direction: "out", amount, href: `/goals/${intent.id}` } : null;
+  }
+  if (intent.kind === "lockAct" && intent.fn === "topup") {
+    const amount = activityAmount(intent.amount, Boolean(intent.pay));
+    return amount ? { ...base, title: "Locked", detail: "Top up", direction: "out", amount, href: `/vaults/${intent.id}` } : null;
+  }
+  return null;
+}
+
+async function handoff(intent: Intent): Promise<ActionState> {
+  const who = await viewer();
+  if (who.method === "tester") throw new Error("This account signs on the server.");
+  const ready = refIntent(intent);
+  const step = await planIntent(who.address, ready);
+  if (step.pending) return { error: "That transaction is still confirming. Refresh in a moment." };
+  if (step.done || step.calls.length === 0) {
+    await rememberIntent(who.address, step.intent, step.id);
+    if (step.href) redirect(step.href);
+    return null;
+  }
+  return signPayload(who, step.intent, step.calls);
+}
+
+export async function continueIntent(intent: Intent): Promise<{ error?: string; href?: string; sign?: SignPayload }> {
+  try {
+    await requireTerms();
+    const who = await viewer();
+    if (who.method === "tester") return { error: "This session signs on the server. Reload and try again." };
+    const step = await planIntent(who.address, intent);
+    if (step.pending) return { error: "The transaction was sent, but the account has not caught up yet. Refresh in a moment." };
+    if (step.done || step.calls.length === 0) {
+      await rememberIntent(who.address, step.intent, step.id);
+      refresh();
+      return { href: step.href };
+    }
+    const signed = signPayload(who, step.intent, step.calls);
+    return signed?.sign ? { sign: signed.sign } : { error: "The wallet could not be asked to sign." };
+  } catch (error) {
+    return { error: explain(error) };
+  }
+}
 
 function refresh() {
   revalidatePath("/", "layout");
@@ -125,20 +308,41 @@ function readSpan(formData: FormData, min: number): number {
 }
 
 export async function createSaving(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  let id = "";
   try {
     await requireTerms();
-    id = await openSaving(await accountIndex(), {
-      name: String(formData.get("name") ?? ""),
-      amount: String(formData.get("amount") ?? ""),
-      target: String(formData.get("target") ?? ""),
-      duration: readSpan(formData, FLOW_MIN),
+    const who = await viewer();
+    const duration = readSpan(formData, FLOW_MIN);
+    const sendTo = String(formData.get("recipient") ?? "");
+    if (sendTo && sendTo.toLowerCase() !== who.address.toLowerCase()) {
+      return { error: "A saving goal holds in your vault. Pick yourself, or use Expense to pay someone else." };
+    }
+    const name = String(formData.get("name") ?? "");
+    const pay = payField(formData);
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
+    const description = String(formData.get("description") ?? "").trim().slice(0, 280);
+    const intent = refIntent({
+      kind: "saving" as const,
+      name,
+      amount,
+      duration,
+      description,
+      frequency: inferFrequency(duration),
+      startedAt: Math.floor(Date.now() / 1000),
+      pay,
+      ref: "",
     });
+    if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
+      const id = await openSaving(await accountIndex(), { name, amount, target: "", duration });
+      await rememberIntent(who.address, intent, id);
+      refresh();
+      redirect(`/goals/${id}?fresh=1`);
+    }
+    return await handoff(intent);
   } catch (error) {
+    rethrowRedirect(error);
     return { error: explain(error) };
   }
-  refresh();
-  redirect(`/goals/${id}?fresh=1`);
 }
 
 export async function createStream(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -147,40 +351,117 @@ export async function createStream(_prev: ActionState, formData: FormData): Prom
   if (!Number.isInteger(startAt) || startAt < 0 || (startAt !== 0 && (startAt < now - 120 || startAt > now + MAX_SPAN))) {
     return { error: "Pick a start date from today onward." };
   }
-  let id = "";
   try {
     await requireTerms();
-    id = await openStream(await accountIndex(), {
-      name: String(formData.get("name") ?? ""),
-      amount: String(formData.get("amount") ?? ""),
-      duration: readSpan(formData, FLOW_MIN),
-      kind: formData.get("kind") === "expense" ? "expense" : "flow",
-      recipient: String(formData.get("recipient") ?? "") as Address,
+    const who = await viewer();
+    const duration = readSpan(formData, FLOW_MIN);
+    const name = String(formData.get("name") ?? "");
+    const pay = payField(formData);
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
+    const flowKind = formData.get("kind") === "expense" ? "expense" : "flow";
+    const description = String(formData.get("description") ?? "").trim().slice(0, 280);
+    const intent = refIntent({
+      kind: "stream" as const,
+      name,
+      amount,
+      duration,
+      flowKind,
+      recipient: String(formData.get("recipient") ?? who.address),
       startAt,
+      description,
+      frequency: inferFrequency(duration),
+      startedAt: now,
+      pay,
+      ref: "",
     });
+    if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
+      const id = await openStream(await accountIndex(), {
+        name,
+        amount,
+        duration,
+        kind: flowKind,
+        recipient: intent.recipient as Address,
+        startAt,
+      });
+      await rememberIntent(who.address, intent, id);
+      refresh();
+      redirect(`/goals/${id}?fresh=1`);
+    }
+    return await handoff(intent);
   } catch (error) {
+    rethrowRedirect(error);
     return { error: explain(error) };
   }
-  refresh();
-  redirect(`/goals/${id}?fresh=1`);
 }
 
 export async function createLock(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  let id = "";
   try {
     await requireTerms();
-    id = await openLock(await accountIndex(), {
-      name: String(formData.get("name") ?? ""),
-      amount: String(formData.get("amount") ?? ""),
-      target: String(formData.get("target") ?? ""),
-      duration: readSpan(formData, LOCK_MIN),
+    const who = await viewer();
+    const duration = readSpan(formData, LOCK_MIN);
+    const pay = payField(formData);
+    const token = pay ? "0xD04383398dD2426297da660F9CCA3d439AF9ce1b" : String(formData.get("token") ?? "");
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
+    const name = pay ? "USD" : String(formData.get("name") ?? "USD");
+    const intent = refIntent({
+      kind: "lock" as const,
+      token,
+      name,
+      amount,
+      duration,
       earnYield: formData.get("yield") === "on",
+      startedAt: Math.floor(Date.now() / 1000),
+      pay,
+      ref: "",
     });
+    if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
+      const id = await openLock(await accountIndex(), {
+        name,
+        amount,
+        target: "",
+        duration,
+        earnYield: intent.earnYield,
+        token: isAddress(token) ? getAddress(token) : undefined,
+      });
+      await rememberIntent(who.address, intent, id);
+      refresh();
+      redirect(id ? `/vaults/${id}?fresh=1` : "/vaults");
+    }
+    return await handoff(intent);
   } catch (error) {
+    rethrowRedirect(error);
     return { error: explain(error) };
   }
-  refresh();
-  redirect(id ? `/vaults/${id}?fresh=1` : "/vaults");
+}
+
+export async function addMoney(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await requireTerms();
+    const who = await viewer();
+    const pay = payField(formData);
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
+    const intent = refIntent({
+      kind: "deposit" as const,
+      token: "0xD04383398dD2426297da660F9CCA3d439AF9ce1b",
+      amount,
+      pay,
+      ref: "",
+    });
+    if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
+      const { depositIdle } = await import("@/lib/protocol");
+      await depositIdle(await accountIndex(), amount);
+      await rememberIntent(who.address, intent);
+      refresh();
+      redirect("/home");
+    }
+    return await handoff(intent);
+  } catch (error) {
+    rethrowRedirect(error);
+    return { error: explain(error) };
+  }
 }
 
 export async function createDraft(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -281,40 +562,55 @@ export async function removeDraft(_prev: ActionState, formData: FormData): Promi
 }
 
 export async function startDraft(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  let chainId = "";
   try {
     await requireTerms();
-    chainId = await launchDraft(String(formData.get("id") ?? ""));
+    const who = await viewer();
+    const draftId = String(formData.get("id") ?? "");
+    if (who.method === "tester") {
+      const chainId = await launchDraft(draftId);
+      refresh();
+      redirect(chainId ? `/groups/${chainId}` : "/groups");
+    }
+    return await handoff(refIntent(await groupCreateIntent(draftId)));
   } catch (error) {
     return spoken(error);
   }
-  refresh();
-  redirect(chainId ? `/groups/${chainId}` : "/groups");
 }
 
 export async function moveTurn(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     await requireTerms();
+    const who = await viewer();
+    const id = String(formData.get("id"));
+    const from = Number(formData.get("from"));
     const dir = formData.get("dir") === "up" ? -1 : 1;
-    await shiftPayout(await accountIndex(), BigInt(String(formData.get("id"))), Number(formData.get("from")), dir);
+    if (who.method === "tester") {
+      await shiftPayout(await accountIndex(), BigInt(id), from, dir);
+      refresh();
+      return null;
+    }
+    return await handoff(refIntent({ kind: "payout", id, from, dir, ref: "" }));
   } catch (error) {
     return spoken(error);
   }
-  refresh();
-  return null;
 }
 
 export async function useMyPhone(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     await requireTerms();
-    const who = String(formData.get("address") ?? "") as Address;
-    const phone = isAddress(who) ? await phoneFor(who) : "";
-    await linkPhone(await accountIndex(), BigInt(String(formData.get("id"))), phone);
+    const who = await viewer();
+    const id = String(formData.get("id"));
+    const address = String(formData.get("address") ?? "");
+    const phone = isAddress(address) ? await phoneFor(address as Address) : "";
+    if (who.method === "tester") {
+      await linkPhone(await accountIndex(), BigInt(id), phone);
+      refresh();
+      return null;
+    }
+    return await handoff(refIntent({ kind: "phone", id, phone, ref: "" }));
   } catch (error) {
     return spoken(error);
   }
-  refresh();
-  return null;
 }
 
 export async function addPhone(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -372,45 +668,140 @@ export async function keepPassword(_prev: ActionState, formData: FormData): Prom
   return null;
 }
 
-async function run(work: () => Promise<void>): Promise<ActionState> {
+export async function doAddFunds(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     await requireTerms();
-    await work();
+    const who = await viewer();
+    const id = String(formData.get("id") ?? "");
+    const pay = payField(formData);
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
+    const [data, notes] = await Promise.all([loadPortfolio(who), goalNotes(who.address)]);
+    const flow = data.flows.find((item) => item.id === id);
+    if (flow?.kind === "saving" && notes[id]?.paused) {
+      return { error: "This saving goal is paused. Resume it to add money." };
+    }
+    const intent = refIntent({ kind: "goal" as const, fn: "topup" as const, id, amount, pay, ref: "" });
+    if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
+      await addToGoal(await accountIndex(), BigInt(id), amount);
+      await rememberIntent(who.address, intent);
+      refresh();
+      return null;
+    }
+    return await handoff(intent);
   } catch (error) {
+    rethrowRedirect(error);
     return { error: explain(error) };
   }
-  refresh();
-  return null;
-}
-
-export async function doAddFunds(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  return run(async () => addToGoal(await accountIndex(), BigInt(String(formData.get("id"))), String(formData.get("amount") ?? "")));
 }
 
 export async function doRelease(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  return run(async () => releaseGoal(await accountIndex(), BigInt(String(formData.get("id"))), String(formData.get("amount") ?? "")));
+  try {
+    await requireTerms();
+    const who = await viewer();
+    const id = String(formData.get("id") ?? "");
+    const amount = await quotedAmount(String(formData.get("amount") ?? ""));
+    const intent = refIntent({ kind: "goal" as const, fn: "release" as const, id, amount, ref: "" });
+    if (who.method === "tester") {
+      await releaseGoal(await accountIndex(), BigInt(id), amount);
+      await rememberIntent(who.address, intent);
+      refresh();
+      return null;
+    }
+    return await handoff(intent);
+  } catch (error) {
+    return { error: explain(error) };
+  }
 }
 
 export async function doVault(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const fn = String(formData.get("fn")) as "pause" | "resume" | "cancel" | "settle" | "withdraw";
-  const id = BigInt(String(formData.get("id") ?? "0"));
-  return run(async () => vaultCall(await accountIndex(), fn, id));
+  const raw = String(formData.get("id") ?? "0");
+  try {
+    await requireTerms();
+    const who = await viewer();
+    if (fn === "pause" || fn === "resume") {
+      const data = await loadPortfolio(who);
+      const flow = data.flows.find((item) => item.id === raw);
+      if (flow?.kind === "saving") {
+        await patchGoalNote(who.address, raw, { paused: fn === "pause" });
+        refresh();
+        return null;
+      }
+    }
+    const intent = refIntent(
+      fn === "withdraw"
+        ? { kind: "withdraw" as const, amount: raw, ref: "" }
+        : { kind: "goal" as const, fn, id: raw, amount: "", ref: "" },
+    );
+    if (who.method === "tester") {
+      await vaultCall(await accountIndex(), fn, BigInt(raw));
+      if (fn === "withdraw") await rememberIntent(who.address, intent);
+      refresh();
+      return null;
+    }
+    return await handoff(intent);
+  } catch (error) {
+    return { error: explain(error) };
+  }
 }
 
 export async function doLockTop(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  return run(async () => lockTopUp(await accountIndex(), BigInt(String(formData.get("id"))), String(formData.get("amount") ?? "")));
+  try {
+    await requireTerms();
+    const who = await viewer();
+    const id = String(formData.get("id") ?? "");
+    const pay = payField(formData);
+    const data = await loadPortfolio(who);
+    const lock = data.locks.find((item) => item.id === id);
+    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""), lock ? assetKind(lock.token) === "ethx" : false);
+    const intent = refIntent({ kind: "lockAct" as const, fn: "topup" as const, id, amount, pay, ref: "" });
+    if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
+      await lockTopUp(await accountIndex(), BigInt(id), amount);
+      await rememberIntent(who.address, intent);
+      refresh();
+      return null;
+    }
+    return await handoff(intent);
+  } catch (error) {
+    rethrowRedirect(error);
+    return { error: explain(error) };
+  }
 }
 
 export async function doBreak(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const state = await run(async () => lockBreak(await accountIndex(), BigInt(String(formData.get("id")))));
-  if (state?.error) return state;
-  redirect("/vaults");
+  try {
+    await requireTerms();
+    const who = await viewer();
+    const id = String(formData.get("id") ?? "");
+    const intent = refIntent({ kind: "lockAct" as const, fn: "break" as const, id, amount: "", ref: "" });
+    if (who.method === "tester") {
+      await lockBreak(await accountIndex(), BigInt(id));
+      refresh();
+      redirect("/vaults");
+    }
+    return await handoff(intent);
+  } catch (error) {
+    return { error: explain(error) };
+  }
 }
 
 export async function doMature(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const state = await run(async () => lockMature(await accountIndex(), BigInt(String(formData.get("id")))));
-  if (state?.error) return state;
-  redirect("/vaults");
+  try {
+    await requireTerms();
+    const who = await viewer();
+    const id = String(formData.get("id") ?? "");
+    const intent = refIntent({ kind: "lockAct" as const, fn: "mature" as const, id, amount: "", ref: "" });
+    if (who.method === "tester") {
+      await lockMature(await accountIndex(), BigInt(id));
+      refresh();
+      redirect("/vaults");
+    }
+    return await handoff(intent);
+  } catch (error) {
+    return { error: explain(error) };
+  }
 }
 
 export async function doGroup(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -421,5 +812,90 @@ export async function doGroup(_prev: ActionState, formData: FormData): Promise<A
     | "exitBeforeStart"
     | "cancelBeforeStart"
     | "claimCollateral";
-  return run(async () => groupAct(await accountIndex(), BigInt(String(formData.get("id"))), fn));
+  try {
+    await requireTerms();
+    const who = await viewer();
+    const id = String(formData.get("id") ?? "");
+    const pay = payField(formData);
+    const intent = refIntent({ kind: "group" as const, fn, id, pay, ref: "" });
+    if (who.method === "tester") {
+      if (pay) return await finishTester(intent);
+      await groupAct(await accountIndex(), BigInt(id), fn);
+      refresh();
+      return null;
+    }
+    return await handoff(intent);
+  } catch (error) {
+    rethrowRedirect(error);
+    return { error: explain(error) };
+  }
+}
+
+export async function saveGoalDetails(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const who = await viewer();
+    const id = String(formData.get("id") ?? "");
+    const description = String(formData.get("description") ?? "").trim().slice(0, 280);
+    const frequency = String(formData.get("frequency") ?? "Monthly");
+    if (!["Once", "Daily", "Weekly", "Monthly", "Yearly"].includes(frequency)) {
+      return { error: "Pick a frequency." };
+    }
+    await patchGoalNote(who.address, id, { description, frequency: frequency as "Once" | "Daily" | "Weekly" | "Monthly" | "Yearly" });
+  } catch (error) {
+    return { error: explain(error) };
+  }
+  refresh();
+  return null;
+}
+
+export async function withdrawUsd(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await requireTerms();
+    const who = await viewer();
+    const amount = usdField(formData);
+    const receive = readReceive(String(formData.get("receive") ?? "usdc"));
+    const intent = refIntent({ kind: "withdraw" as const, amount, receive, ref: "" });
+    if (who.method === "tester") return await finishTester(intent);
+    return await handoff(intent);
+  } catch (error) {
+    rethrowRedirect(error);
+    return { error: explain(error) };
+  }
+}
+
+export async function previewPay(input: {
+  pay: string;
+  usd?: string;
+  superWei?: string;
+  mode: "vault" | "wallet" | "stream";
+  duration?: number;
+  protocolOnTop?: boolean;
+  full?: boolean;
+}): Promise<{ lines: { label: string; value: string }[]; error?: string }> {
+  try {
+    const who = await viewer();
+    const pay = readPay(input.pay);
+    const covered = input.full ? 0n : input.mode === "wallet" ? await walletSuper(who.address) : await idleSuper(who.address);
+    const lines = await previewLines({
+      pay,
+      usd: input.usd,
+      superWei: input.superWei,
+      mode: input.mode,
+      duration: input.duration,
+      protocolOnTop: input.protocolOnTop,
+      coveredWei: covered.toString(),
+      full: input.full,
+    });
+    return { lines };
+  } catch (error) {
+    return { lines: [], error: error instanceof Error ? error.message : "The quote failed." };
+  }
+}
+
+export async function previewReceive(input: { usd: string; receive: string }): Promise<{ lines: { label: string; value: string }[]; error?: string }> {
+  try {
+    return { lines: await previewWithdraw(input.usd, readReceive(input.receive)) };
+  } catch (error) {
+    return { lines: [], error: error instanceof Error ? error.message : "The quote failed." };
+  }
 }

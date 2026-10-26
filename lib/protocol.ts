@@ -35,26 +35,26 @@ export const addresses = {
 
 export const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
 
-const erc20 = parseAbi([
+export const erc20 = parseAbi([
   "function balanceOf(address) view returns (uint256)",
   "function allowance(address owner, address spender) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",
 ]);
 
-const factoryAbi = parseAbi([
+export const factoryAbi = parseAbi([
   "function vaultOf(address) view returns (address)",
   "function allowlist() view returns (address)",
   "function owner() view returns (address)",
   "function createVault() returns (address)",
 ]);
 
-const allowAbi = parseAbi([
+export const allowAbi = parseAbi([
   "function isAllowed(address) view returns (bool)",
   "function paused() view returns (bool)",
   "function owner() view returns (address)",
 ]);
 
-const vaultAbi = parseAbi([
+export const vaultAbi = parseAbi([
   "function owner() view returns (address)",
   "function unallocated(address) view returns (uint256)",
   "function flowCount() view returns (uint256)",
@@ -62,7 +62,9 @@ const vaultAbi = parseAbi([
   "function getFlow(uint256) view returns ((address token, address recipient, address conduit, uint8 kind, uint8 chainMode, uint8 rateMode, uint16 shareBps, uint8 depth, bool allowSubflows, bool keeperGated, bool triggered, bool active, bool settled, bytes32 name, uint64 earliestStart, uint64 duration, uint64 createdAt, uint64 triggeredAt, uint64 start, uint64 end, int96 rate, int96 childRate, int96 liveRate, uint256 parentId, uint256 predecessorId, uint256 goalAmount, uint256 reserved, uint256 buffers, uint256 cushion, bool paused, uint64 remaining, uint64 ran))",
   "function balanceSheet(address) view returns (uint256 idle, uint256 held, uint256 streaming)",
   "function depositSuper(address token, uint256 amount)",
+  "function depositUnderlying(address token, uint256 underlyingAmount)",
   "function withdraw(address token, uint256 amount)",
+  "function withdrawUnderlying(address token, uint256 amount)",
   "function openSavings(address token, uint256 amount, uint64 duration, bytes32 name, uint256 target) returns (uint256)",
   "function createFlow((address token, address recipient, uint8 kind, uint256 amount, uint64 earliestStart, uint64 duration, uint256 goalAmount, bool allowSubflows, uint256 predecessorId, uint8 chainMode, bool keeperGated, bytes32 name)) returns (uint256)",
   "function activate(uint256 id)",
@@ -74,11 +76,11 @@ const vaultAbi = parseAbi([
   "function settle(uint256 id)",
 ]);
 
-const cfaAbi = parseAbi([
+export const cfaAbi = parseAbi([
   "function getBufferAmountByFlowrate(address token, int96 flowrate) view returns (uint256)",
 ]);
 
-const lockAbi = parseAbi([
+export const lockAbi = parseAbi([
   "function owner() view returns (address)",
   "function penaltyBps() view returns (uint16)",
   "function yieldBudget(address) view returns (uint256)",
@@ -93,7 +95,7 @@ const lockAbi = parseAbi([
   "function withdrawMature(uint256 id) returns (uint256 payout, uint256 bonus)",
 ]);
 
-const groupAbi = parseAbi([
+export const groupAbi = parseAbi([
   "function owner() view returns (address)",
   "function nextId() view returns (uint256)",
   "function groupsOf(address) view returns (uint256[])",
@@ -144,6 +146,19 @@ function signer(index: number) {
   return { account, wallet, person: { name: chosen.name, address: chosen.address } };
 }
 
+export async function broadcastCalls(index: number, calls: { to: Address; data: Hex; value: string }[]) {
+  const { wallet } = signer(index);
+  for (const item of calls) {
+    const hash = await wallet.sendTransaction({
+      to: item.to,
+      data: item.data,
+      value: BigInt(item.value || "0"),
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status !== "success") throw new Error("The transaction reverted.");
+  }
+}
+
 async function write(index: number, args: Parameters<ReturnType<typeof signer>["wallet"]["writeContract"]>[0]) {
   const { wallet } = signer(index);
   const hash = await wallet.writeContract(args);
@@ -152,20 +167,26 @@ async function write(index: number, args: Parameters<ReturnType<typeof signer>["
   return hash;
 }
 
-async function ensureAllowance(index: number, owner: Address, spender: Address, amount: bigint) {
+async function ensureAllowance(index: number, owner: Address, spender: Address, amount: bigint, token: Address = addresses.fusdcx) {
   const allowance = await publicClient.readContract({
-    address: addresses.fusdcx,
+    address: token,
     abi: erc20,
     functionName: "allowance",
     args: [owner, spender],
   });
   if (allowance >= amount) return;
   await write(index, {
-    address: addresses.fusdcx,
+    address: token,
     abi: erc20,
     functionName: "approve",
     args: [spender, amount],
   });
+}
+
+export async function depositIdle(index: number, amountRaw: string) {
+  const amount = parseAmount(amountRaw);
+  const vault = await vaultFor(index);
+  await deposit(index, vault, amount);
 }
 
 export function readName(value: Hex): string {
@@ -193,7 +214,7 @@ export function withProtocolFee(amount: bigint): bigint {
 }
 
 export function parseAmount(value: string): bigint {
-  const clean = value.trim();
+  const clean = value.replace(/,/g, "").trim();
   if (!/^\d+(\.\d{1,18})?$/.test(clean) || Number(clean) <= 0) {
     throw new Error("Enter an amount greater than zero.");
   }
@@ -216,6 +237,7 @@ export type FlowRow = {
   end: number;
   earliestStart: number;
   duration: number;
+  createdAt: number;
   rate: string;
   reserved: string;
   goal: string;
@@ -226,6 +248,7 @@ export type FlowRow = {
 export type LockRow = {
   id: string;
   name: string;
+  token: Address;
   principal: string;
   target: string;
   start: number;
@@ -399,6 +422,7 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
           end: Number(flow.end),
           earliestStart: Number(flow.earliestStart),
           duration: Number(flow.duration),
+          createdAt: Number(flow.createdAt),
           rate: flow.rate.toString(),
           reserved: flow.reserved.toString(),
           goal: flow.goalAmount.toString(),
@@ -428,10 +452,12 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
     const mature = lockRecords[i * 3 + 2] as readonly [bigint, bigint];
     const principal = entry[2];
     const settled = entry[7];
-    if (!settled) locked += principal;
+    const token = entry[1];
+    if (!settled && token.toLowerCase() === addresses.fusdcx.toLowerCase()) locked += principal;
     locks.push({
       id: lockIds[i].toString(),
       name: readName(entry[9]) || "Lock",
+      token,
       principal: principal.toString(),
       target: entry[10].toString(),
       start: Number(entry[3]),
@@ -599,7 +625,7 @@ async function deposit(index: number, vault: Address, amount: bigint) {
   });
   const due = withProtocolFee(amount);
   if (balance < due) {
-    throw new Error(`This needs ${money(due)} USDCx in the wallet, including the 0.3% protocol fee. This account has ${money(balance)}.`);
+    throw new Error(`This needs ${money(due)} USD in the wallet, including the 0.3% protocol fee. This account has ${money(balance)}.`);
   }
   await ensureAllowance(index, account.address, vault, due);
   await write(index, {
@@ -755,17 +781,18 @@ export async function vaultCall(index: number, fn: "pause" | "resume" | "cancel"
   await write(index, { address: vault, abi: vaultAbi, functionName: fn, args: [idOrAmount] });
 }
 
-export async function openLock(index: number, input: { name: string; amount: string; target: string; duration: number; earnYield: boolean }) {
+export async function openLock(index: number, input: { name: string; amount: string; target: string; duration: number; earnYield: boolean; token?: Address }) {
   const amount = parseAmount(input.amount);
   if (amount > BigInt("0xffffffffffffffffffffffffffffffff")) throw new Error("That amount is too large for a lock.");
   const target = input.target.trim() ? parseAmount(input.target) : amount;
+  const token = input.token ?? addresses.fusdcx;
   const { account } = signer(index);
-  await ensureAllowance(index, account.address, addresses.locks, withProtocolFee(amount));
+  await ensureAllowance(index, account.address, addresses.locks, withProtocolFee(amount), token);
   await write(index, {
     address: addresses.locks,
     abi: lockAbi,
     functionName: "lockGoal",
-    args: [addresses.fusdcx, amount, BigInt(input.duration), input.earnYield, toName(input.name), target],
+    args: [token, amount, BigInt(input.duration), input.earnYield, toName(input.name), target],
   });
   const ids = await publicClient.readContract({
     address: addresses.locks,
@@ -923,7 +950,7 @@ export async function groupAct(
 export function explain(error: unknown): string {
   const text = error instanceof Error ? error.message : "The transaction failed.";
   const known: Record<string, string> = {
-    Insufficient: "The vault does not have enough USDCx set aside for this.",
+    Insufficient: "The vault does not have enough USD set aside for this.",
     TooEarly: "This is not ready yet.",
     TooLate: "The payment window for this cycle has closed.",
     WindowOutOfRange: "The payment window does not fit inside that cycle.",
@@ -937,7 +964,7 @@ export function explain(error: unknown): string {
     NotActive: "That position is not running.",
     StillActive: "It has not reached its date yet.",
     Paused: "The protocol is paused for new positions.",
-    TokenNotAllowed: "USDCx is not on the allowlist.",
+    TokenNotAllowed: "USD is not on the allowlist.",
   };
   for (const [key, message] of Object.entries(known)) {
     if (text.includes(key)) return message;

@@ -5,8 +5,9 @@ import { BreakLock, MatureLock, TopUpLock } from "@/components/forms";
 import { ProductMark } from "@/components/product";
 import { Fact, Facts, Notice, Page, when } from "@/components/ui-bits";
 import { labeled } from "@/lib/display";
+import { loadPayChoices } from "@/lib/holdings";
 import { loadQuote } from "@/lib/rates";
-import { loadPortfolio } from "@/lib/protocol";
+import { addresses, loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
 export default function LockPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,7 +24,9 @@ async function LockBody({ params }: { params: Promise<{ id: string }> }) {
   const [data, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
   const lock = data.locks.find((item) => item.id === id);
   if (!lock) notFound();
-  const now = Math.floor(Date.now() / 1000);
+  const usdLock = lock.token.toLowerCase() === addresses.fusdcx.toLowerCase();
+  const choices = usdLock ? await loadPayChoices(who.address) : undefined;
+  const now = data.readAt;
   const mature = now >= lock.end;
   return (
     <Page title={lock.name} back="/vaults">
@@ -53,7 +56,7 @@ async function LockBody({ params }: { params: Promise<{ id: string }> }) {
             </>
           ) : (
             <>
-              <TopUpLock id={lock.id} />
+              <TopUpLock id={lock.id} choices={choices} />
               <Notice>Breaking early pays {labeled(lock.breakPayout, quote)} and leaves {labeled(lock.breakPenalty, quote)} in the bonus pool. Yield already streamed is not clawed back.</Notice>
               <BreakLock id={lock.id} />
             </>

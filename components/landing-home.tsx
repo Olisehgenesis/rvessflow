@@ -76,7 +76,7 @@ const links = [
 
 const stats = [
   { value: "Base", label: "The network this beta uses" },
-  { value: "USDCx", label: "The stable token on chain" },
+  { value: "USD", label: "What you see. Wrapped on chain." },
   { value: "Yours", label: "A vault signs with your key" },
 ];
 

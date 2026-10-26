@@ -26,10 +26,10 @@ async function SettingsBody() {
   const [data, quote, directory] = await Promise.all([loadPortfolio(who), loadQuote(), contactIfReady(who.address)]);
   const signedIn =
     who.method === "passkey"
-      ? "Passkey. The signing key stays on this device. This browser keeps an encrypted copy of the public credential."
+      ? "Passkey. You sign on this device. Gas is paid by the smart account through the bundler in NEXT_PUBLIC_BUNDLER_URL."
       : who.method === "wallet"
-        ? "WalletConnect. This app does not keep that wallet's key."
-        : "A funded test account on this machine. The key never leaves this computer.";
+        ? "WalletConnect. Each payment opens in that wallet for you to confirm. This app does not keep the key."
+        : "A funded test account. This machine signs with the key in wallet/testers.json, and that key never leaves the computer.";
   const upgrade = data.protocol.upgradeReadyAt
     ? new Date(data.protocol.upgradeReadyAt * 1000).toLocaleString()
     : "No upgrade is scheduled";
@@ -38,7 +38,7 @@ async function SettingsBody() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">Currency</p>
-          <p className="text-xs text-muted-foreground">USDCx stays on Base. Other countries use the USDC price and that country’s rate.</p>
+          <p className="text-xs text-muted-foreground">Balances are shown in USD. On chain that USD is USDCx, a wrapper of USDC on Base. Other countries add that country’s rate.</p>
         </div>
         <CurrencyPick code={quote.code} />
       </div>
@@ -62,16 +62,22 @@ async function SettingsBody() {
       <div className="mb-6">
         <InstallButton />
       </div>
-      <p className="mb-3 text-sm text-muted-foreground">These four accounts sign from this machine on Base. They need ETH for gas and USDCx before a transaction can send. Their keys never leave this computer.</p>
-      <AccountSwitch people={data.people} current={data.me.address} />
+      {who.method === "tester" ? (
+        <>
+          <p className="mb-3 text-sm text-muted-foreground">These test accounts sign from this machine on Base mainnet. They need ETH for gas. Payments can start from USDC, USDT, or ETH.</p>
+          <AccountSwitch people={data.people} current={data.me.address} />
+        </>
+      ) : (
+        <p className="mb-3 text-sm text-muted-foreground">Payments from this account are signed here. A passkey needs a Base bundler URL. A connected wallet confirms each transaction itself. Test accounts stay available from the sign-in screen.</p>
+      )}
       <div className="mt-6">
       <Facts>
         <Fact label="Network" value="Base" />
         <Fact label="Account" value={shortAddress(data.me.address)} />
         <Fact label="Gas" value={`${Number(data.eth).toFixed(4)} ETH`} />
-        <Fact label="On chain" value={`${money(data.total)} USDCx`} />
+        <Fact label="Savings on chain" value={`${money(data.total)} USD`} />
         <Fact label="Vault" value={data.vault ? shortAddress(data.vault) : "Not created yet"} />
-        <Fact label="USDCx" value={data.protocol.tokenAllowed ? "Allowlisted" : "Not allowlisted"} />
+        <Fact label="USD token" value={data.protocol.tokenAllowed ? "Allowlisted (USDCx)" : "Not allowlisted"} />
         <Fact label="New positions" value={data.protocol.paused ? "Paused" : "Open"} />
         <Fact label="Lock penalty" value={`${(data.protocol.penaltyBps / 100).toFixed(2).replace(/\.00$/, "")}%`} />
         <Fact label="Yield budget" value={labeled(data.protocol.yieldBudget, quote)} />

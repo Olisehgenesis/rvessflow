@@ -18,11 +18,10 @@ export default function VaultsPage() {
 async function VaultsBody() {
   const who = await viewer();
   const [data, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
-  const penalty = `${(data.protocol.penaltyBps / 100).toFixed(2).replace(/\.00$/, "")}%`;
   return (
     <Page title="Vaults">
       <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
-        Lock USDCx until a date. Leaving early costs {penalty} of the principal, copied onto the lock when it is created.
+        Lock your assets and earn more, with a small penalty for early access.
       </p>
       {data.locks.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card px-4 py-6">

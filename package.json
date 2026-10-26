@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint app components lib test",
+    "test": "node --experimental-strip-types --import ./test/register.mjs --test test/pay.test.ts"
   },
   "dependencies": {
     "@dicebear/core": "^9.4.2",

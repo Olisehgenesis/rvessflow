@@ -59,7 +59,7 @@ export async function viewer(): Promise<Viewer> {
 export async function accountIndex(): Promise<number> {
   const who = await viewer();
   if (who.method !== "tester" || who.index < 0) {
-    throw new Error("This account signs with your passkey or wallet. Switch to a funded test account in Settings to send from this machine.");
+    throw new Error("This sign-in does not use a test key. Confirm the payment on this device.");
   }
   return who.index;
 }

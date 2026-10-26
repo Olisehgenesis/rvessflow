@@ -391,8 +391,8 @@ function view(data: World, draft: Draft, who: Viewer): DraftView {
     contribution: draft.contribution,
     cycles: draft.cycles,
     summary: plan
-      ? `${draft.contribution} USDCx each cycle, ${draft.cycles} cycles of ${spanLabel(plan.cycle)}.`
-      : `${draft.contribution} USDCx each cycle.`,
+      ? `${draft.contribution} USD each cycle, ${draft.cycles} cycles of ${spanLabel(plan.cycle)}.`
+      : `${draft.contribution} USD each cycle.`,
     open: draft.open,
     mine,
     member: draft.members.some((item) => same(item, who.address)),
@@ -711,6 +711,35 @@ export async function deleteDraft(id: string) {
   const { bucket } = owned(data, id, who);
   data[bucket].drafts = data[bucket].drafts.filter((item) => item.id !== id);
   await writeBucket(bucket, data[bucket]);
+}
+
+export async function groupCreateIntent(draftId: string) {
+  const who = await viewer();
+  const data = await world();
+  const { draft } = owned(data, draftId, who);
+  if (draft.members.length < 3) throw new Error("Add at least 3 people before the group can start.");
+  const plan = cyclePlan(draft.cycle, Number(draft.days));
+  if (!plan) throw new Error("That cycle length is outside what the contract allows. Use 1 to 366 days.");
+  const members = draft.members.flatMap((item) => {
+    const account = asAddress(item);
+    return account ? [account] : [];
+  });
+  const phones = members.flatMap((account) => {
+    const phone = primaryPhone(data, account);
+    return phone ? [{ account, phone }] : [];
+  });
+  return {
+    kind: "groupCreate" as const,
+    draftId,
+    contribution: draft.contribution,
+    members,
+    cycles: draft.cycles,
+    cycleSeconds: plan.cycle,
+    windowSeconds: plan.window,
+    graceSeconds: plan.grace,
+    phones,
+    ref: "",
+  };
 }
 
 export async function launchDraft(id: string) {

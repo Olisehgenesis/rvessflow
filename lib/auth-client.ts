@@ -9,6 +9,30 @@ const rpc = "https://mainnet.base.org";
 export const walletConnectProjectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "fb48461bfb6043c40729e05706109f1a";
 
+type EthereumProvider = Awaited<ReturnType<(typeof import("@walletconnect/ethereum-provider"))["default"]["init"]>>;
+
+let providerPromise: Promise<EthereumProvider> | null = null;
+
+export function walletProvider() {
+  providerPromise ??= (async () => {
+    const { base } = await import("viem/chains");
+    const { default: EthereumProvider } = await import("@walletconnect/ethereum-provider");
+    return EthereumProvider.init({
+      projectId: walletConnectProjectId,
+      chains: [base.id],
+      showQrModal: true,
+      metadata: {
+        name: "RvessFlow",
+        description: "Your money, in motion.",
+        url: window.location.origin,
+        icons: [`${window.location.origin}/icon-512.png`],
+      },
+      rpcMap: { [base.id]: rpc },
+    });
+  })();
+  return providerPromise;
+}
+
 export async function createPasskeyWallet(label: string): Promise<{ address: string; label: string }> {
   const name = label.trim().slice(0, 32) || "Passkey";
   const [{ createPublicClient, http }, { base }, accountAbstraction, { toKernelSmartAccount }] = await Promise.all([
@@ -52,21 +76,8 @@ export async function unlockPasskey(saved: SavedPasskey) {
 
 export async function connectWallet(label = "") {
   if (!walletConnectProjectId) throw new Error("WalletConnect is not configured.");
-  const { base } = await import("viem/chains");
-  const { default: EthereumProvider } = await import("@walletconnect/ethereum-provider");
-  const provider = await EthereumProvider.init({
-    projectId: walletConnectProjectId,
-    chains: [base.id],
-    showQrModal: true,
-    metadata: {
-      name: "RvessFlow",
-      description: "Your money, in motion.",
-      url: window.location.origin,
-      icons: [`${window.location.origin}/icon-512.png`],
-    },
-    rpcMap: { [base.id]: rpc },
-  });
-  await provider.connect();
+  const provider = await walletProvider();
+  if (!provider.connected) await provider.connect();
   const address = provider.accounts[0];
   if (!address || !isAddress(address)) throw new Error("The wallet did not return an account.");
   await openSession(address, "wallet", label);

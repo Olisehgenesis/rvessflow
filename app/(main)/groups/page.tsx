@@ -54,7 +54,7 @@ async function GroupsBody() {
                 {drafts.map((draft) => (
                   <li key={draft.id} className="py-3 text-sm">
                     <p className="font-medium">
-                      {draft.contribution} USDCx · {draft.cycles} cycles of {draft.cycleLabel}
+                      {draft.contribution} USD · {draft.cycles} cycles of {draft.cycleLabel}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {draft.count} {draft.count === 1 ? "member" : "members"}
