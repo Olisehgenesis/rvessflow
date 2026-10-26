@@ -22,7 +22,7 @@ async function AssetsBody() {
   const holdings = await loadHoldings(who.address, data, quote);
   return (
     <Page title="Your assets" back="/home">
-      <p className="mb-4 text-sm text-muted-foreground">Balances priced on Base. USD stays first. A local currency, including UGX, shows under each amount when you pick one in More.</p>
+      <p className="mb-4 text-sm text-muted-foreground">Balances priced on Base. USD stays first. Pick a currency in More and a real rate shows under each amount.</p>
       <AssetList rows={holdings.rows} localUnit={holdings.localUnit} />
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Link href="/home/add/receive" className="flex h-11 items-center justify-center rounded-full border border-border bg-card text-sm font-medium">

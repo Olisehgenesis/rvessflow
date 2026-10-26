@@ -45,7 +45,8 @@ const lime = "flex h-12 items-center justify-center rounded-full bg-[#D4F06B] te
 export function BalanceSkeleton() {
   return (
     <section aria-busy="true" aria-label="Loading balance" className="mt-5 rounded-3xl border border-border bg-[#E7F4C4] p-4">
-      <div className="h-3 w-24 animate-pulse rounded-full bg-[#141414]/10" />
+      <p className="text-sm">Loading balance</p>
+      <div className="mt-3 h-3 w-24 animate-pulse rounded-full bg-[#141414]/10" />
       <div className="mt-4 h-10 w-40 animate-pulse rounded-xl bg-[#141414]/10" />
       <div className="mt-4 grid grid-cols-3 gap-3">
         <div className="h-8 animate-pulse rounded-lg bg-[#141414]/10" />

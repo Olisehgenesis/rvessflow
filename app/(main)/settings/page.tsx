@@ -88,7 +88,7 @@ async function SettingsBody() {
       <Facts>
         <Fact label="Network" value="Base" />
         <Fact label="Account" value={shortAddress(data.me.address)} />
-        <Fact label="Gas" value={`${Number(data.eth).toFixed(4)} ETH`} />
+        <Fact label="Gas" value={ethLabel(data.eth)} />
         <Fact label="Savings on chain" value={`${money(data.total)} USD`} />
         <Fact label="Vault" value={data.vault ? shortAddress(data.vault) : "Not created yet"} />
         <Fact label="USD token" value={data.protocol.tokenAllowed ? "Allowlisted (USDCx)" : "Not allowlisted"} />
@@ -129,6 +129,13 @@ async function SettingsBody() {
       </ul>
     </Page>
   );
+}
+
+function ethLabel(value: string) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount === 0) return "0 ETH";
+  if (amount >= 0.0001) return `${amount.toFixed(4)} ETH`;
+  return `${amount.toFixed(8).replace(/0+$/, "")} ETH`;
 }
 
 function MoreLink({ href, title, body }: { href: string; title: string; body: string }) {
