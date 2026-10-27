@@ -1,4 +1,5 @@
 import EthereumProvider from "@walletconnect/ethereum-provider";
+import { clearInjectedConnection, peekInjectedConnection, showInjectedWallets, takeInjectedConnection } from "../../lib/wallet-injected";
 import { createPublicClient, createWalletClient, custom, http, type Address, type Hex } from "viem";
 import { chains, type ProtocolChain } from "./chains";
 
@@ -81,8 +82,14 @@ async function walletConnect(chain: ProtocolChain): Promise<Eip1193> {
       explorerRecommendedWalletIds: [baseWalletId],
     },
   });
-  await provider.connect();
-  return provider as Eip1193;
+  clearInjectedConnection();
+  await showInjectedWallets((provider as { modal?: { close: () => void } }).modal);
+  try {
+    await provider.connect();
+  } catch (error) {
+    if (!peekInjectedConnection()) throw error;
+  }
+  return (takeInjectedConnection() ?? provider) as Eip1193;
 }
 
 async function switchOrAddChain(

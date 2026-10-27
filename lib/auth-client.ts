@@ -7,6 +7,7 @@ import { recoverPasskey } from "@/lib/passkey-recover";
 import type { PasskeyProof } from "@/lib/passkey-proof";
 import { samePasskeyId } from "@/lib/passkey-proof";
 import { readPasskeys, savePasskey, type SavedPasskey } from "@/lib/passkey-vault";
+import { clearInjectedConnection, peekInjectedConnection, showInjectedWallets, takeInjectedConnection } from "@/lib/wallet-injected";
 
 const testnet = process.env.NEXT_PUBLIC_RVESS_NETWORK === "sepolia";
 const rpc = testnet
@@ -252,7 +253,7 @@ function rejected(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && Number(error.code) === 4001;
 }
 
-/** Asks the connected wallet, through WalletConnect, to switch to Base or add it. */
+/** Asks the wallet chosen in WalletConnect to switch to Base or add it. */
 async function joinBase(provider: WalletConnection) {
   const current = await provider.request({ method: "eth_chainId" }).catch(() => null);
   if (typeof current === "string" && current.toLowerCase() === baseNetwork.chainId) return;
@@ -277,9 +278,17 @@ export function requestWalletAccount(): Promise<string> {
 async function connectWalletConnect(): Promise<string> {
   if (!walletConnectProjectId) throw new Error("WalletConnect is not configured.");
   const provider = await walletConnectProvider();
-  if (!provider.connected) await provider.connect?.();
-  await joinBase(provider);
-  const address = provider.accounts?.[0];
-  if (!address || !isAddress(address)) throw new Error("The wallet did not return an account.");
-  return rememberConnection(provider, address);
+  clearInjectedConnection();
+  const modal = (provider as { modal?: { close: () => void } }).modal;
+  await showInjectedWallets(modal);
+  try {
+    if (!provider.connected) await provider.connect?.();
+  } catch (error) {
+    if (!peekInjectedConnection()) throw error;
+  }
+  const active: WalletConnection = takeInjectedConnection() ?? provider;
+  await joinBase(active);
+  const address = active.accounts?.[0];
+  if (address && isAddress(address)) return rememberConnection(active, address);
+  return rememberConnection(active, await accountFrom(active));
 }

@@ -318,7 +318,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
               <MethodButton
                 icon={<Wallet className="size-5" />}
                 title="Connect a wallet"
-                body="Base and every other wallet open in WalletConnect. The wallet is switched onto Base."
+                body="Installed wallets, Base, and every other wallet open in WalletConnect. The wallet is switched onto Base."
                 onClick={() => void startWallet()}
               />
 
@@ -473,7 +473,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
           ) : (
             <div className="mt-5 space-y-2.5">
               <MethodButton icon={<Fingerprint className="size-5" />} title="Continue with a passkey" body="Recommended. It stays on this device." recommended tone="accent" onClick={() => setPhase({ name: "name" })} />
-              <MethodButton icon={<Wallet className="size-5" />} title="Connect a wallet" body="Base and every other wallet open in WalletConnect." onClick={() => void startWallet()} />
+              <MethodButton icon={<Wallet className="size-5" />} title="Connect a wallet" body="Installed wallets, Base, and every other wallet open in WalletConnect." onClick={() => void startWallet()} />
             </div>
           )}
           {emailNote ? <p className="mt-3 text-sm leading-relaxed text-[#3A3F47]">{emailNote}</p> : null}
@@ -518,7 +518,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
           </Dialog.Description>
           <div className="mt-5 space-y-2.5">
             <MethodButton icon={<Fingerprint className="size-5" />} title="Create an account" body="Recommended. This makes a new passkey on this device. It does not open an old one." recommended tone="accent" onClick={() => choose("create")} />
-            <MethodButton icon={<Wallet className="size-5" />} title="Connect a wallet" body="Base and every other wallet open in WalletConnect." onClick={() => void startWallet()} />
+            <MethodButton icon={<Wallet className="size-5" />} title="Connect a wallet" body="Installed wallets, Base, and every other wallet open in WalletConnect." onClick={() => void startWallet()} />
           </div>
         </div>
       ) : null}
@@ -532,7 +532,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
           </Dialog.Description>
           <ul className="mt-4 space-y-3 text-sm leading-relaxed text-[#3A3F47]">
             <li>A passkey is the recommended way to create an account. It stays on this device. If the browser forgets the account, sign in with that same passkey and it is restored. One that never sent a payment can only be opened in the browser that created it.</li>
-            <li>Every external wallet opens in WalletConnect. Base is listed there, and the wallet is switched onto Base. The same wallet is the way back in on another device.</li>
+            <li>Installed wallets and every other external wallet open in WalletConnect. Base is listed there, and the wallet is switched onto Base. The same wallet is the way back in on another device.</li>
             <li>An email saved in Settings helps groups find you. It does not replace the passkey or the wallet.</li>
           </ul>
           <form
@@ -560,7 +560,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
       {phase.name === "connecting" ? (
         <Status
           title="Connecting wallet"
-          body="Confirm in WalletConnect. Base and every other wallet are listed there."
+          body="Confirm in WalletConnect. Installed wallets, Base, and every other wallet are listed there."
           mark={<WaitMark icon={<Wallet className="size-6" />} />}
           bar
         />
