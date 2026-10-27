@@ -393,6 +393,9 @@ contract FlowVault is FlowVaultStore, IFlowVaultHooks {
     }
 
     function _activate(uint256 id) internal {
+        // An ended stream does not stop itself. Close it before this one starts,
+        // or both outflow rates run against the same cushion.
+        _protect(_flows[id].token);
         Flow storage root = _flows[id];
         uint64 start = uint64(block.timestamp);
         uint64 end = start + root.duration;

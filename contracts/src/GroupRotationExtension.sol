@@ -30,7 +30,10 @@ contract GroupRotationExtension is GroupRotationStore {
         uint256 amount = _members[id][index].collateral;
         address token = g.token;
         _dropMember(id, index);
-        if (amount != 0) ISuperTokenMini(token).transfer(msg.sender, amount);
+        if (amount != 0) {
+            _releaseCollateral(token, amount);
+            ISuperTokenMini(token).transfer(msg.sender, amount);
+        }
         emit Exited(id, msg.sender, amount);
     }
 
@@ -44,7 +47,10 @@ contract GroupRotationExtension is GroupRotationStore {
         uint256 amount = _members[id][index].collateral;
         address token = g.token;
         _dropMember(id, index);
-        if (amount != 0) ISuperTokenMini(token).transfer(account, amount);
+        if (amount != 0) {
+            _releaseCollateral(token, amount);
+            ISuperTokenMini(token).transfer(account, amount);
+        }
         emit Exited(id, account, amount);
     }
 
@@ -254,12 +260,14 @@ contract GroupRotationExtension is GroupRotationStore {
         emit PayoutOrderSet(id);
     }
 
-    /// @notice Admin fee on each contribution. `mode` 0 is none, 1 is a flat amount, 2 is bps of the contribution.
+    /// @notice Admin fee on each contribution. `mode` 0 is none, 1 is a flat amount up to one contribution, 2 is bps of the contribution up to 10%.
     function setAdminFee(uint256 id, uint8 mode, uint128 flat, uint16 bps) external {
         if (!_isAdmin(id, msg.sender)) revert NotAdmin();
         Group storage g = groups[id];
         if (g.creator == address(0) || g.started || g.cancelled) revert BadState();
-        if (mode > 2 || (mode == 2 && bps > 1_000) || (mode == 1 && flat == 0)) revert BadParams();
+        if (mode > 2 || (mode == 2 && bps > 1_000) || (mode == 1 && (flat == 0 || flat > g.contribution))) {
+            revert BadParams();
+        }
         if (mode != 1) flat = 0;
         if (mode != 2) bps = 0;
         GroupRules storage rules = groupRules[id];
@@ -402,7 +410,7 @@ contract GroupRotationExtension is GroupRotationStore {
             _lumpAdminFee(id, remaining);
             return;
         }
-        uint256 protect = _collateral(id) + rules.lockBalance + protocolFees[g.token];
+        uint256 protect = collateralHeld[g.token] + rules.lockBalance + protocolFees[g.token];
         _setAdminRate(id, int96(int256(perSecond)));
         if (
             ISuperTokenMini(g.token).balanceOf(address(this)) < protect
@@ -419,7 +427,7 @@ contract GroupRotationExtension is GroupRotationStore {
         if (amount > kept[token]) amount = kept[token];
         if (amount == 0) return;
         uint256 bal = ISuperTokenMini(token).balanceOf(address(this));
-        uint256 protect = _collateral(id) + kept[token] - amount;
+        uint256 protect = collateralHeld[token] + openPots[token] + kept[token] - amount;
         uint256 free = bal > protect ? bal - protect : 0;
         if (amount > free) amount = free;
         if (amount == 0) return;

@@ -474,10 +474,9 @@ contract FlowVaultTest is SfBase {
         vault.activate(first);
         FlowVaultStore.Flow memory started = vault.getFlow(first);
         vm.warp(started.end);
-        uint256 nextId = vault.getFlow(first).predecessorId == 0 ? _successor(vault, first) : 0;
-        nextId = _successor(vault, first);
+        uint256 nextId = _successor(vault, first);
         vault.activate(nextId);
-        vault.settle(first);
+        assertTrue(vault.getFlow(first).settled);
         _assertSolvent(address(usdcx), address(vault));
         assertTrue(vault.getFlow(nextId).active);
     }

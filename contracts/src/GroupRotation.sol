@@ -52,7 +52,7 @@ contract GroupRotation is GroupRotationStore {
     }
 
     function contractVersion() public pure virtual returns (uint256) {
-        return 4;
+        return 5;
     }
 
     /// @notice Schedule an upgrade. It can be executed after two days. Members can still exit a group
@@ -100,6 +100,7 @@ contract GroupRotation is GroupRotationStore {
         _pullProtocol(g.token, g.collateralRequired);
         m.collateral = uint128(got);
         m.collateralPosted = true;
+        _holdCollateral(g.token, got);
         emit CollateralPosted(id, msg.sender, got);
     }
 
@@ -146,6 +147,7 @@ contract GroupRotation is GroupRotationStore {
         p.paidAt = uint64(block.timestamp);
         p.status = status;
         pots[id][cycle].funded += g.contribution;
+        _fundPot(g.token, g.contribution);
         address to = g.plain ? _activeRecipient(id, cycle) : (g.streamingTo != address(0) ? g.streamingTo : _activeRecipient(id, cycle));
         _pushLeg(id, msg.sender, to, g.contribution, uint16(cycle), status);
         m.given += g.contribution;
@@ -191,17 +193,15 @@ contract GroupRotation is GroupRotationStore {
         _setRate(id, 0);
         _noteStreamed(id);
         uint256 left = _remainingPot(id);
-        uint256 bal = ISuperTokenMini(g.token).balanceOf(address(this));
-        uint256 reserved = _reserved(id);
-        uint256 free = bal > reserved ? bal - reserved : 0;
+        uint256 free = _liquid(g.token, _backing(id, left));
         if (left > free) left = free;
         if (left == 0) revert NothingToClaim();
         _point(id, msg.sender);
         uint256 beforeBal = ISuperTokenMini(g.token).balanceOf(address(this));
         gda.distribute(g.token, address(this), g.pool, left, "");
         uint256 spent = beforeBal - ISuperTokenMini(g.token).balanceOf(address(this));
-        pots[id][g.streamingCycle].accounted += spent;
-        _creditReceived(id, msg.sender, spent);
+        _bookPaid(id, g.streamingCycle, msg.sender, spent);
+        _slideSnapshot(id);
         emit PayoutClaimed(id, msg.sender, spent);
     }
 
@@ -252,6 +252,7 @@ contract GroupRotation is GroupRotationStore {
         amount = m.collateral;
         if (amount == 0) revert NothingToClaim();
         m.collateral = 0;
+        _releaseCollateral(g.token, amount);
         ISuperTokenMini(g.token).transfer(msg.sender, amount);
         emit Claimed(id, msg.sender, amount);
     }
@@ -363,14 +364,11 @@ contract GroupRotation is GroupRotationStore {
     function _payPlain(uint256 id, uint256 cycle, address to, uint256 amount) internal {
         if (to == address(0) || amount == 0) return;
         Group storage g = groups[id];
-        uint256 bal = ISuperTokenMini(g.token).balanceOf(address(this));
-        uint256 reserved = _reserved(id);
-        uint256 free = bal > reserved ? bal - reserved : 0;
+        uint256 free = _liquid(g.token, _backing(id, amount));
         if (amount > free) amount = free;
         if (amount == 0) return;
         ISuperTokenMini(g.token).transfer(to, amount);
-        pots[id][cycle].accounted += amount;
-        _creditReceived(id, to, amount);
+        _bookPaid(id, cycle, to, amount);
     }
 
     function _finishStreamingCycle(uint256 id) internal {
@@ -393,17 +391,15 @@ contract GroupRotation is GroupRotationStore {
             return;
         }
         _point(id, _activeRecipient(id, cycle));
-        uint256 bal = ISuperTokenMini(g.token).balanceOf(address(this));
-        uint256 reserved = _reserved(id);
-        uint256 free = bal > reserved ? bal - reserved : 0;
+        uint256 free = _liquid(g.token, _backing(id, left));
         if (left > free) left = free;
         // Nothing can move yet. Leave the pot open so the next sync can pay it.
         if (left == 0) return;
         uint256 beforeBal = ISuperTokenMini(g.token).balanceOf(address(this));
         gda.distribute(g.token, address(this), g.pool, left, "");
         uint256 spent = beforeBal - ISuperTokenMini(g.token).balanceOf(address(this));
-        pot.accounted += spent;
-        _creditReceived(id, g.streamingTo, spent);
+        _bookPaid(id, cycle, g.streamingTo, spent);
+        _slideSnapshot(id);
         if (pot.accounted >= pot.funded) pot.closed = true;
     }
 
@@ -416,7 +412,10 @@ contract GroupRotation is GroupRotationStore {
         g.streamingTo = recipient;
     }
 
-    /// @dev Count what the pool actually delivered this cycle, not the nominal rate.
+    /// @dev Count what the pool actually delivered since the last snapshot, and add it.
+    ///      A miss moves the stream to the next member and starts a new snapshot. The
+    ///      previous member's tokens stay in `accounted`. Replacing it would pay that
+    ///      stream again at the end of the cycle.
     ///      GDA may stream a hair under the requested rate. The gap is paid by
     ///      `_distributePot` at the end of the cycle.
     function _noteStreamed(uint256 id) internal {
@@ -425,10 +424,26 @@ contract GroupRotation is GroupRotationStore {
         uint256 received = ISuperfluidPool(g.pool).getTotalAmountReceivedByMember(g.streamingTo);
         uint256 delta = received > g.receivedSnapshot ? received - g.receivedSnapshot : 0;
         Cycle storage pot = pots[id][g.streamingCycle];
-        if (delta > pot.funded) delta = pot.funded;
-        uint256 before = pot.accounted;
-        if (delta > pot.accounted) pot.accounted = delta;
-        if (pot.accounted > before) _creditReceived(id, g.streamingTo, pot.accounted - before);
+        uint256 room = pot.funded > pot.accounted ? pot.funded - pot.accounted : 0;
+        if (delta > room) delta = room;
+        if (delta != 0) _bookPaid(id, g.streamingCycle, g.streamingTo, delta);
+        // Move past tokens that already left, including any hair above this pot,
+        // so a later top-up is not charged for them.
+        if (received > g.receivedSnapshot) g.receivedSnapshot = received;
+    }
+
+    function _bookPaid(uint256 id, uint256 cycle, address to, uint256 amount) internal {
+        if (amount == 0) return;
+        pots[id][cycle].accounted += amount;
+        _accountPot(groups[id].token, amount);
+        _creditReceived(id, to, amount);
+    }
+
+    function _slideSnapshot(uint256 id) internal {
+        Group storage g = groups[id];
+        if (g.pool == address(0) || g.streamingTo == address(0)) return;
+        uint256 received = ISuperfluidPool(g.pool).getTotalAmountReceivedByMember(g.streamingTo);
+        if (received > g.receivedSnapshot) g.receivedSnapshot = received;
     }
 
     function _setSnapshot(uint256 id) internal {
@@ -444,7 +459,7 @@ contract GroupRotation is GroupRotationStore {
         uint64 cycleEnd = _cycleStart(g, g.streamingCycle) + g.cycleDuration;
         uint64 nowT = _now(id);
         if (nowT >= cycleEnd) return 0;
-        return _capRate(g.token, remaining, cycleEnd - nowT, _reserved(id));
+        return _capRate(g.token, remaining, cycleEnd - nowT, _backing(id, remaining));
     }
 
     function _remainingPot(uint256 id) internal view returns (uint256) {
@@ -494,11 +509,13 @@ contract GroupRotation is GroupRotationStore {
         uint128 slash = g.contribution;
         if (slash > m.collateral) slash = m.collateral;
         m.collateral -= slash;
+        _releaseCollateral(g.token, slash);
         if (m.collateral < g.contribution) m.defaulted = true;
         p.amount = slash;
         p.paidAt = uint64(block.timestamp);
         p.status = PayStatus.Slashed;
         pots[id][cycle].funded += slash;
+        _fundPot(g.token, slash);
         m.owed += g.contribution;
         m.missed += 1;
         _pushLeg(id, m.account, address(0), g.contribution, uint16(cycle), PayStatus.Slashed);
@@ -580,14 +597,23 @@ contract GroupRotation is GroupRotationStore {
 
     function _bind(uint256 id, uint16 cycle) internal {
         address payee = _activeRecipient(id, cycle);
+        if (payee == address(0)) return;
         Leg[] storage legs = _legs[id];
         uint256 n = legs.length;
         for (uint256 i; i < n; ++i) {
             Leg storage leg = legs[i];
-            if (leg.cycle != cycle || leg.to != address(0) || leg.kind != PayStatus.Slashed) continue;
-            leg.to = payee;
-            owedFromTo[id][leg.from][payee] += leg.amount;
-            emit Paid(id, leg.from, payee, cycle, PayStatus.Slashed, leg.amount);
+            if (leg.cycle != cycle || leg.to != address(0)) continue;
+            if (leg.kind == PayStatus.Slashed) {
+                uint256 openAmount = uint256(leg.amount) - uint256(leg.repaid);
+                leg.to = payee;
+                if (openAmount == 0) continue;
+                owedFromTo[id][leg.from][payee] += openAmount;
+                emit Paid(id, leg.from, payee, cycle, PayStatus.Slashed, openAmount);
+            } else if (leg.kind == PayStatus.Repaid) {
+                leg.to = payee;
+                paidFromTo[id][leg.from][payee] += leg.amount;
+                emit Paid(id, leg.from, payee, cycle, PayStatus.Repaid, leg.amount);
+            }
         }
     }
 
@@ -603,8 +629,18 @@ contract GroupRotation is GroupRotationStore {
         return _members[id][_memberSeat(id, origin)].account;
     }
 
-    function _reserved(uint256 id) internal view returns (uint256) {
-        return collateralOwed(id) + kept[groups[id].token];
+    /// @dev Collateral, fees, locks, and unpaid pots of every group on this token.
+    ///      `releasable` is the slice of `openPots` this call is allowed to spend.
+    function _backing(uint256 id, uint256 releasable) internal view returns (uint256 reserved) {
+        address token = groups[id].token;
+        uint256 potsOpen = openPots[token];
+        if (releasable > potsOpen) releasable = potsOpen;
+        reserved = collateralHeld[token] + kept[token] + potsOpen - releasable;
+    }
+
+    function _liquid(address token, uint256 reserved) internal view returns (uint256) {
+        uint256 bal = ISuperTokenMini(token).balanceOf(address(this));
+        return bal > reserved ? bal - reserved : 0;
     }
 
     function _pullProtocol(address token, uint256 base) internal {
@@ -680,6 +716,7 @@ contract GroupRotation is GroupRotationStore {
         uint256 room = uint256(groups[id].collateralRequired) - uint256(m.collateral);
         uint256 restore = amount < room ? amount : room;
         m.collateral += uint128(restore);
+        _holdCollateral(groups[id].token, restore);
         if (m.collateral >= groups[id].contribution) m.defaulted = false;
         m.owed -= amount;
         m.given += amount;
@@ -696,7 +733,9 @@ contract GroupRotation is GroupRotationStore {
             if (openAmount == 0) continue;
             uint256 take = amount < openAmount ? amount : openAmount;
             debt.repaid += uint128(take);
-            owedFromTo[id][from][debt.to] -= take;
+            // A slash is bound to its payee only after the whole window is settled.
+            // Repaying before that must not touch `owedFromTo[from][address(0)]`.
+            if (debt.to != address(0)) owedFromTo[id][from][debt.to] -= take;
             amount -= take;
             _pushLeg(id, from, debt.to, take, debt.cycle, PayStatus.Repaid);
         }

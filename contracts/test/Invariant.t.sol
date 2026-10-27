@@ -216,6 +216,7 @@ contract RvessInvariantTest is SfBase {
         if (id == 0) return;
         (int256 available, uint256 deposit,,) = ISuperTokenMini(address(usdcx)).realtimeBalanceOfNow(address(groups));
         assertGe(available, 0);
-        assertGe(uint256(available) + deposit, groups.collateralOwed(id));
+        assertGe(groups.collateralHeld(address(usdcx)), groups.collateralOwed(id));
+        assertGe(uint256(available) + deposit, groups.collateralHeld(address(usdcx)));
     }
 }

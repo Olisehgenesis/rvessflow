@@ -200,6 +200,10 @@ abstract contract GroupRotationStore is Initializable, Ownable2Step, UUPSUpgrade
     uint256 internal adminFeeGate;
     /// @dev Per-member contribution window. Zero means the group's window.
     mapping(uint256 id => mapping(uint256 index => uint64 window)) public memberWindow;
+    /// @dev Collateral still held for every group that uses this token. A payout may not spend it.
+    mapping(address token => uint256 amount) public collateralHeld;
+    /// @dev Pot that is funded and not yet streamed or paid, across every group on this token.
+    mapping(address token => uint256 amount) public openPots;
 
     event AdminAdded(uint256 indexed id, address indexed account);
     event AdminRemoved(uint256 indexed id, address indexed account);
@@ -212,7 +216,24 @@ abstract contract GroupRotationStore is Initializable, Ownable2Step, UUPSUpgrade
     event ProtocolFeeWithdrawn(address indexed token, address indexed to, uint256 amount);
     event AdminFeePaid(uint256 indexed id, uint256 amount);
 
-    uint256[28] private __gap;
+    /// @dev Two slots were taken for {collateralHeld} and {openPots}. Append new fields above this.
+    uint256[26] private __gap;
+
+    function _holdCollateral(address token, uint256 amount) internal {
+        if (amount != 0) collateralHeld[token] += amount;
+    }
+
+    function _releaseCollateral(address token, uint256 amount) internal {
+        if (amount != 0) collateralHeld[token] -= amount;
+    }
+
+    function _fundPot(address token, uint256 amount) internal {
+        if (amount != 0) openPots[token] += amount;
+    }
+
+    function _accountPot(address token, uint256 amount) internal {
+        if (amount != 0) openPots[token] -= amount;
+    }
 
     function _isAdmin(uint256 id, address account) internal view returns (bool) {
         if (_indexOf[id][account] == 0) return false;

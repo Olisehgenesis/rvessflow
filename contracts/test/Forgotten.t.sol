@@ -6,7 +6,7 @@ import {GroupRotation, IGroupCalls} from "../src/GroupRotation.sol";
 import {GroupRotationStore} from "../src/GroupRotationStore.sol";
 import {FlowVault} from "../src/FlowVault.sol";
 import {FlowVaultStore} from "../src/FlowVaultStore.sol";
-import {ISuperfluidPool} from "../src/interfaces/ISuperfluidMini.sol";
+import {ISuperfluidPool, ISuperTokenMini} from "../src/interfaces/ISuperfluidMini.sol";
 import {SfBase} from "./SfBase.sol";
 
 /// @notice The cases that used to stall, mis-count, or trap funds.
@@ -395,6 +395,130 @@ contract ForgottenTest is SfBase {
         vm.prank(alice);
         vm.expectRevert(SavingsPool.BadParams.selector);
         pool.setPledge(id, 1);
+    }
+
+    function test_missedTurnDoesNotSpendAnotherGroupsCollateral() public {
+        address[] memory members = _members(3, "retarget");
+        uint64[] memory offsets = new uint64[](3);
+        offsets[1] = 20 minutes;
+        offsets[2] = 3 hours;
+        uint256 id = _start(members, 100e18, 4 hours, 10 minutes, 5 minutes, 2, offsets, true);
+        uint256 t0 = vm.getBlockTimestamp();
+
+        _pay(id, members[0], t0);
+        _pay(id, members[1], t0 + 20 minutes);
+        _pay(id, members[2], t0 + 3 hours);
+
+        uint256 c1 = t0 + 4 hours;
+        _pay(id, members[0], c1);
+        assertEq(_streamingTo(id), members[1]);
+
+        vm.warp(c1 + 36 minutes);
+        groups.settleMissed(id, 1, 1);
+        assertEq(_streamingTo(id), members[2]);
+        (, uint256 accountedBefore,) = groups.pots(id, 1);
+        uint256 receivedBefore = ISuperfluidPool(groups.poolOf(id)).getTotalAmountReceivedByMember(members[2]);
+        assertGt(accountedBefore, 0, "first leg was not counted");
+
+        vm.warp(c1 + 2 hours);
+        groups.sync(id);
+        uint256 receivedAfter = ISuperfluidPool(groups.poolOf(id)).getTotalAmountReceivedByMember(members[2]);
+        (, uint256 accountedAfter,) = groups.pots(id, 1);
+        assertGt(receivedAfter, receivedBefore, "second member received nothing");
+        assertEq(accountedAfter, accountedBefore + (receivedAfter - receivedBefore), "retarget replaced the pot");
+
+        address[] memory other = _members(3, "parked");
+        for (uint256 i; i < 3; ++i) {
+            _giveUsdcx(other[i], 1_000e6);
+            _approveToken(other[i], address(usdcx), address(groups));
+        }
+        vm.prank(other[0]);
+        uint256 parked = groups.createGroup(address(usdcx), 100e18, 4 hours, 10 minutes, 5 minutes, 1, other, _zeroOffsets(3));
+        for (uint256 i; i < 3; ++i) {
+            vm.prank(other[i]);
+            groups.postCollateral(parked);
+        }
+
+        vm.warp(t0 + 8 hours);
+        groups.finalize(id);
+        (int256 available, uint256 deposit,,) = ISuperTokenMini(address(usdcx)).realtimeBalanceOfNow(address(groups));
+        assertGe(available, 0);
+        assertGe(
+            uint256(available) + deposit,
+            groups.collateralHeld(address(usdcx)) + groups.kept(address(usdcx)) + groups.openPots(address(usdcx)),
+            "another group's collateral was spent"
+        );
+    }
+
+    function test_flatAdminFeeCannotExceedTheContribution() public {
+        address[] memory members = _members(3, "flatfee");
+        for (uint256 i; i < 3; ++i) {
+            _giveUsdcx(members[i], 1_000e6);
+            _approveToken(members[i], address(usdcx), address(groups));
+        }
+        vm.prank(members[0]);
+        uint256 id = groups.createGroup(address(usdcx), 10e18, 1 hours, 20 minutes, 5 minutes, 1, members, _zeroOffsets(3));
+        vm.prank(members[0]);
+        vm.expectRevert(GroupRotationStore.BadParams.selector);
+        IGroupCalls(address(groups)).setAdminFee(id, 1, 10e18 + 1, 0);
+        vm.prank(members[0]);
+        IGroupCalls(address(groups)).setAdminFee(id, 1, 10e18, 0);
+        (uint8 mode,, uint128 flat,,,,,,,) = groups.groupRules(id);
+        assertEq(mode, 1);
+        assertEq(flat, 10e18);
+    }
+
+    function test_repayBeforeTheSlashIsBound() public {
+        address[] memory members = _members(40, "repay");
+        for (uint256 i; i < members.length; ++i) {
+            _giveUsdcx(members[i], 100e6);
+            _approveToken(members[i], address(usdcx), address(groups));
+        }
+        vm.prank(members[0]);
+        uint256 id = groups.createPlainGroup(
+            address(usdcx), 1e18, 1 hours, 20 minutes, 5 minutes, 2, members, _zeroOffsets(members.length)
+        );
+        for (uint256 i; i < members.length; ++i) {
+            vm.prank(members[i]);
+            groups.postCollateral(id);
+        }
+        vm.prank(members[0]);
+        groups.start(id);
+        uint256 t0 = vm.getBlockTimestamp();
+        vm.warp(t0 + 2 hours);
+        vm.prank(members[0]);
+        groups.repay(id, 2e18);
+        GroupRotationStore.Member memory member = IGroupCalls(address(groups)).getMember(id, 0);
+        assertEq(member.owed, 0);
+        assertEq(member.collateral, 2e18);
+        groups.catchUp(id);
+        assertEq(groups.owedFromTo(id, members[0], members[1]), 0);
+        assertEq(groups.owedFromTo(id, members[1], members[0]), 1e18);
+    }
+
+    function test_activateClosesAnExpiredStream() public {
+        FlowVault vault = _open(alice);
+        _depositUnderlying(vault, alice, usdc, usdcx, 20_000e6);
+        uint256 first = _create(
+            vault,
+            alice,
+            _params(address(usdcx), bob, FlowVaultStore.FlowKind.Expense, 100e18, 0, 1 hours, 0, false, 0, FlowVaultStore.ChainMode.None, false)
+        );
+        uint256 second = _create(
+            vault,
+            alice,
+            _params(address(usdcx), carol, FlowVaultStore.FlowKind.Expense, 100e18, 0, 1 hours, 0, false, 0, FlowVaultStore.ChainMode.None, false)
+        );
+        vm.prank(alice);
+        vault.activate(first);
+        vm.warp(vault.getFlow(first).end);
+        assertGt(cfaFwd.getAccountFlowrate(address(usdcx), bob), 0);
+        vault.activate(second);
+        assertTrue(vault.getFlow(first).settled);
+        assertEq(vault.getFlow(first).conduit, address(0));
+        assertEq(cfaFwd.getAccountFlowrate(address(usdcx), bob), 0);
+        assertTrue(vault.getFlow(second).active);
+        _assertSolvent(address(usdcx), address(vault));
     }
 
     function _start(
