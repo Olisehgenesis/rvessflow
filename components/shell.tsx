@@ -26,7 +26,9 @@ const desk = [
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="rvess-desk min-h-dvh bg-background text-foreground lg:grid lg:grid-cols-[15.5rem_minmax(0,1fr)] lg:bg-[#F3F6EE]">
-      <DesktopSide />
+      <Suspense fallback={<DesktopSideView pathname="" />}>
+        <DesktopSide />
+      </Suspense>
       <div className="relative mx-auto flex h-dvh w-full max-w-lg flex-col bg-background lg:mx-0 lg:h-dvh lg:max-w-none lg:bg-transparent">
         <div id="main" className="min-h-0 flex-1 overflow-y-auto lg:px-8 lg:py-7 xl:px-10">{children}</div>
         <div className="lg:hidden">
@@ -40,7 +42,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function DesktopSide() {
-  const pathname = usePathname();
+  return <DesktopSideView pathname={usePathname()} />;
+}
+
+function DesktopSideView({ pathname }: { pathname: string }) {
   return (
     <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-r lg:border-[#E3EAD4] lg:bg-[#F7FAF2] lg:px-3 lg:py-5">
       <Link href="/home" className="flex items-center gap-2.5 rounded-2xl px-2 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]">

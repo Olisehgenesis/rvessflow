@@ -6,6 +6,7 @@ import { walletProvider } from "@/lib/auth-client";
 import type { PreparedCall, SignPayload } from "@/lib/intent";
 import { readPasskeys } from "@/lib/passkey-vault";
 import { estimationSkipped, passkeyPaysWith, usdcCanPayFee, userOpCost } from "@/lib/passkey-fee";
+import { batchId, batchOutcome, batchUnsupported, walletSendCallsParam } from "@/lib/wallet-batch";
 
 const testnet = process.env.NEXT_PUBLIC_RVESS_NETWORK === "sepolia";
 const chain = testnet ? baseSepolia : base;
@@ -23,6 +24,17 @@ const permitAbi = [
 ] as const;
 
 const client = createPublicClient({ chain, transport: http(rpc) });
+
+async function waitForBatch(provider: Awaited<ReturnType<typeof walletProvider>>, id: string): Promise<Hash> {
+  const started = Date.now();
+  while (Date.now() - started < 120_000) {
+    const outcome = batchOutcome(await provider.request({ method: "wallet_getCallsStatus", params: [id] }));
+    if (outcome.error) throw new Error(outcome.error);
+    if (outcome.hash) return outcome.hash;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  throw new Error("The wallet accepted the transaction, but it has not confirmed yet. Refresh in a moment.");
+}
 
 async function wait(hash: Hash) {
   const receipt = await client.waitForTransactionReceipt({ hash, timeout: 120_000 });
@@ -75,6 +87,25 @@ async function sendWallet(calls: PreparedCall[], from: Address, onHash?: (hash: 
   const found = listed || accounts?.[0] || "";
   if (!found || found.toLowerCase() !== from.toLowerCase()) {
     throw new Error("Reconnect the wallet for this account.");
+  }
+  if (calls.length > 1) {
+    let id: string | null = null;
+    try {
+      id = batchId(
+        await provider.request({
+          method: "wallet_sendCalls",
+          params: [walletSendCallsParam(from, chain.id, calls)],
+        }),
+      );
+    } catch (error) {
+      if (!batchUnsupported(error)) throw error;
+    }
+    if (id) {
+      const hash = await waitForBatch(provider, id);
+      onHash?.(hash);
+      await wait(hash);
+      return hash;
+    }
   }
   let last: Hash | undefined;
   for (let index = 0; index < calls.length; index += 1) {

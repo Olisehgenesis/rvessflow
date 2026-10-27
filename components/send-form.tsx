@@ -1,7 +1,9 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { ProfileAvatar } from "@/components/profile-avatar";
+import { isAddress } from "viem";
+import { RecipientField } from "@/components/recipient-field";
+import { useWalletIdentity, WalletFace, walletLines } from "@/components/wallet-identity";
 import { TokenIcon } from "@/components/token-icon";
 import { useSignedAction } from "@/components/sign-action";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,7 @@ export function SendForm({ mode, choices }: { mode: "address" | "friend"; choice
   const [asset, setAsset] = useState(choices[0]?.asset ?? "");
   const [amount, setAmount] = useState("");
   const [who, setWho] = useState("");
+  const [to, setTo] = useState("");
   const [lookup, find, finding] = useActionState(lookupAccount, null as LookupState);
   const [state, send, pending] = useSignedAction(sendFunds);
   const picked = choices.find((choice) => choice.asset === asset) ?? choices[0];
@@ -54,18 +57,9 @@ export function SendForm({ mode, choices }: { mode: "address" | "friend"; choice
         {mode === "friend" ? <input type="hidden" name="who" value={match ? who.trim() : ""} /> : null}
         <input type="hidden" name="asset" value={picked?.asset ?? ""} />
         {mode === "address" ? (
-          <label className="block space-y-1.5">
-            <Label htmlFor="to">Wallet address</Label>
-            <Input id="to" name="to" autoComplete="off" spellCheck={false} placeholder="0x…" className={field} />
-          </label>
+          <RecipientField name="to" value={to} onValue={setTo} />
         ) : match?.address ? (
-          <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3">
-            <ProfileAvatar seed={match.address} className="size-11" />
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold">{match.name}</span>
-              <span className="block text-xs text-muted-foreground">{shortAddress(match.address)}</span>
-            </span>
-          </div>
+          <KnownWallet address={match.address} name={match.name || "Wallet"} />
         ) : (
           <p className="text-sm text-muted-foreground">Find their account before you send.</p>
         )}
@@ -120,10 +114,20 @@ export function SendForm({ mode, choices }: { mode: "address" | "friend"; choice
         </label>
 
         <ErrorNote error={state?.error} />
-        <Button type="submit" disabled={pending || (mode === "friend" && !match)} className="h-12 w-full rounded-full text-base">
+        <Button type="submit" disabled={pending || (mode === "address" && !isAddress(to)) || (mode === "friend" && !match)} className="h-12 w-full rounded-full text-base">
           {pending ? "Sending…" : "Send"}
         </Button>
       </form>
+    </div>
+  );
+}
+
+function KnownWallet({ address, name }: { address: string; name: string }) {
+  const lookup = useWalletIdentity(address);
+  const lines = walletLines(lookup.identity, name, address);
+  return (
+    <div className="flex items-center rounded-2xl border border-[#E7EFE0] bg-[#F7FBF3] px-3 py-3">
+      <WalletFace address={address} title={lines.title} subtitle={lines.subtitle || shortAddress(address)} avatar={lines.avatar} />
     </div>
   );
 }

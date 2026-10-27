@@ -1,12 +1,13 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import { isAddress } from "viem";
-import { IconChevron, IconInfo } from "@/components/icons";
+import { IconInfo } from "@/components/icons";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { TokenIcon } from "@/components/token-icon";
 import { useGoalName } from "@/components/goal-name";
 import { PayWith, ReceiveWith, type PayChoice } from "@/components/pay-with";
+import { RecipientField } from "@/components/recipient-field";
 import { useSignedAction } from "@/components/sign-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,68 +75,6 @@ export function AccountSwitch({ people, current }: { people: Person[]; current: 
   );
 }
 
-function othersOf(people: Person[], me: string) {
-  return people.filter((person) => person.address.toLowerCase() !== me.toLowerCase());
-}
-
-function recipientIssue(value: string, me: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "Paste any wallet address.";
-  if (!isAddress(trimmed)) return "Enter a wallet address.";
-  if (trimmed.toLowerCase() === me.toLowerCase()) return "That address is this account. A stream to you is a Flow.";
-  return "";
-}
-
-function SendToFields({ people, me, id, onId }: { people: Person[]; me: string; id: string; onId: (next: string) => void }) {
-  const fieldId = useId();
-  const others = othersOf(people, me);
-  const trimmed = id.trim();
-  const known = others.find((person) => person.address.toLowerCase() === trimmed.toLowerCase());
-  const issue = recipientIssue(id, me);
-  return (
-    <div className="space-y-3">
-      <label className="block space-y-1.5">
-        <Label>Send to</Label>
-        <span className="relative block">
-          <select
-            className={`${field} w-full appearance-none pr-10`}
-            value={known?.address ?? "other"}
-            onChange={(event) => onId(event.target.value === "other" ? "" : event.target.value)}
-          >
-            <option value="other">Another address</option>
-            {others.map((person) => (
-              <option key={person.address} value={person.address}>
-                {person.name}
-              </option>
-            ))}
-          </select>
-          <IconChevron className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted-foreground" />
-        </span>
-      </label>
-      <label className="block space-y-1.5">
-        <Label htmlFor={fieldId}>Wallet address</Label>
-        <Input
-          id={fieldId}
-          name="recipient"
-          value={id}
-          onChange={(event) => onId(event.target.value)}
-          placeholder="0x…"
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          className={field}
-          aria-invalid={trimmed !== "" && Boolean(issue)}
-        />
-      </label>
-      {trimmed !== "" && issue ? (
-        <p className="text-sm text-destructive">{issue}</p>
-      ) : (
-        <p className="text-sm text-muted-foreground">Any wallet. Pick someone on this device, or paste an address.</p>
-      )}
-    </div>
-  );
-}
-
 function When({ start, end, onStart, onEnd }: { start: Date; end: Date; onStart: (next: Date) => void; onEnd: (next: Date) => void }) {
   const today = startOfDay(new Date());
   const latest = addDays(today, 30 * 365 - 1);
@@ -178,7 +117,7 @@ export function StreamForm({ kind, people, me, choices }: { kind: "flow" | "expe
   const window = streamWindow(start, end);
   const problem = startOfDay(end) < startOfDay(start) ? "The end date has to be on or after the start date." : dateProblem(window.duration, FLOW_MIN);
   const [recipient, setRecipient] = useState("");
-  const whoProblem = kind === "expense" ? recipientIssue(recipient, me) : "";
+  const whoProblem = kind === "expense" && !isAddress(recipient);
   const draftName = useGoalName();
   return (
     <form action={action} className="space-y-4">
@@ -186,13 +125,13 @@ export function StreamForm({ kind, people, me, choices }: { kind: "flow" | "expe
       <input type="hidden" name="name" value={draftName} />
       {kind === "flow" ? <input type="hidden" name="recipient" value={me} /> : null}
       <PayWith choices={choices} mode="stream" duration={problem ? undefined : window.duration} />
-      {kind === "expense" ? <SendToFields people={people} me={me} id={recipient} onId={setRecipient} /> : null}
+      {kind === "expense" ? <RecipientField name="recipient" people={people} me={me} value={recipient} onValue={setRecipient} /> : null}
       <When start={start} end={end} onStart={setStart} onEnd={setEnd} />
       <input type="hidden" name="startAt" value={problem ? "" : window.startAt} />
       <input type="hidden" name="duration" value={problem ? "" : window.duration} />
       {problem ? <p className="text-sm text-destructive">{problem}</p> : null}
       <ErrorNote error={state?.error} />
-      <Submit pending={pending || Boolean(problem)} hold={Boolean(whoProblem)}>{kind === "expense" ? "Start stream" : "Start flow"}</Submit>
+      <Submit pending={pending || Boolean(problem)} hold={whoProblem}>{kind === "expense" ? "Start stream" : "Start flow"}</Submit>
     </form>
   );
 }

@@ -11,6 +11,9 @@ function explain(error: unknown): string {
   if (/gas required exceeds allowance \(0\)|insufficient funds/i.test(message)) {
     return "This wallet has no ETH for the network fee. On this local app, that fee is paid on Base Sepolia.";
   }
+  if (/transfer amount exceeds balance|insufficient balance/i.test(message)) {
+    return "This account does not have enough for that amount. The swap and the stream are checked together.";
+  }
   const line = message.split("\n").find((item) => item.trim()) ?? message;
   return line.replace(/^Error:\s*/, "").slice(0, 220);
 }
