@@ -15,6 +15,7 @@ import {
   protocolFeeOf,
   slippageCeiling,
   slippageFloor,
+  spendableProblem,
   wrapForSuper,
   type PayAsset,
   type ReceiveAsset,
@@ -48,6 +49,10 @@ const scales: Record<PayAsset, number> = { usdc: 6, usdt: 6, eth: 18, usdcx: 18 
 
 async function allowance(owner: Address, token: Address, spender: Address) {
   return publicClient.readContract({ address: token, abi: erc20, functionName: "allowance", args: [owner, spender] });
+}
+
+async function balanceOf(owner: Address, token: Address) {
+  return publicClient.readContract({ address: token, abi: erc20, functionName: "balanceOf", args: [owner] });
 }
 
 async function quoteOutput(pay: "usdt" | "eth", usdcOut: bigint): Promise<{ amountIn: bigint; feeTier: number; gasEstimate: bigint }> {
@@ -150,15 +155,28 @@ export async function quoteFund(pay: PayAsset, needed: bigint, mode: "vault" | "
   };
 }
 
+async function requireSpendable(owner: Address, pay: PayAsset, needed: bigint) {
+  const balance =
+    pay === "eth"
+      ? await publicClient.getBalance({ address: owner })
+      : await balanceOf(owner, pay === "usdt" ? baseMarket.usdt : pay === "usdc" ? baseMarket.usdc : addresses.fusdcx);
+  const problem = spendableProblem({
+    symbol: symbols[pay],
+    balance,
+    needed,
+    scale: scales[pay],
+    digits: pay === "eth" ? 6 : pay === "usdcx" ? 4 : 2,
+    leaveFee: pay === "eth",
+  });
+  if (problem) throw new Error(problem);
+}
+
 export async function fundingCalls(owner: Address, vault: Address, pay: PayAsset, needed: bigint, mode: "vault" | "wallet"): Promise<PreparedCall[]> {
   if (needed <= 0n) return [];
   const quote = await quoteFund(pay, needed, mode);
+  await requireSpendable(owner, pay, quote.amountInMax);
   if (pay === "usdcx") {
-    if (mode === "wallet") {
-      const held = await walletSuper(owner);
-      if (held < quote.amountInMax) throw new Error(`Not enough ${stableLabel} in this wallet.`);
-      return [];
-    }
+    if (mode === "wallet") return [];
     const allowanceNow = await allowance(owner, addresses.fusdcx, vault);
     return buildFundCalls({
       payer: owner,

@@ -5,7 +5,7 @@ import { Dialog } from "radix-ui";
 import { Check, ChevronLeft, ChevronRight, Fingerprint, Lock, Mail, Shield, Wallet, X } from "lucide-react";
 import { IconMark } from "@/components/icons";
 import { enterApp, lookUpEmail, noteTerms, openSession } from "@/lib/actions";
-import { connectBase, connectWallet, createPasskeyWallet, unlockPasskey } from "@/lib/auth-client";
+import { createPasskeyWallet, finishPasskey, prepareSignIn, requestBaseAccount, requestPasskey, requestWalletAccount } from "@/lib/auth-client";
 import { shortAddress } from "@/lib/display";
 import { readPasskeys, type SavedPasskey } from "@/lib/passkey-vault";
 
@@ -23,13 +23,25 @@ type Phase =
   | { name: "connecting"; via: "base" | "wallet" }
   | { name: "confirming"; label: string }
   | { name: "cancelled"; kind: Kind; attempt: Attempt }
-  | { name: "failed"; kind: Kind; attempt: Attempt };
+  | { name: "failed"; kind: Kind; attempt: Attempt; detail?: string };
 
 function cancelled(error: unknown): boolean {
   if (typeof error === "object" && error !== null && "code" in error && Number(error.code) === 4001) return true;
   if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "AbortError")) return true;
   const text = error instanceof Error ? `${error.name} ${error.message}` : "";
   return /reject|reset|closed|cancel|dismiss|not allowed|timed out/i.test(text);
+}
+
+function failureDetail(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const message = error.message.trim();
+  if (!message || message.length > 180 || message.includes("\n")) return undefined;
+  return message;
+}
+
+function missingPasskey(error: unknown): boolean {
+  const text = error instanceof Error ? `${error.name} ${error.message}` : "";
+  return /NotSupportedError|NotFoundError|no available|not supported/i.test(text);
 }
 
 function redirectError(error: unknown): boolean {
@@ -66,21 +78,22 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
   useEffect(() => {
     setCanPasskey(typeof window.PublicKeyCredential !== "undefined");
     let live = true;
-    readPasskeys()
-      .then((rows) => {
-        if (!live) return;
-        setSaved(rows);
-        if (rows.length > 0) {
+    Promise.allSettled([readPasskeys(), prepareSignIn()]).then(([rows, prepared]) => {
+      if (!live) return;
+      if (rows.status === "fulfilled") {
+        setSaved(rows.value);
+        if (rows.value.length > 0) {
           setOnDevice(true);
           if (!picked.current) setMode("signin");
         }
-        setChecked(true);
-      })
-      .catch(() => {
-        if (!live) return;
-        setVaultNote("A passkey saved in this browser could not be opened. Create it again on this device.");
-        setChecked(true);
-      });
+      }
+      if (rows.status === "rejected") {
+        setVaultNote("A passkey saved in this browser could not be opened. You can still try the passkey prompt, or use Connect Base if it is a Coinbase passkey.");
+      } else if (prepared.status === "rejected") {
+        setVaultNote("Sign-in is still loading. Wait a moment, then try the passkey again.");
+      }
+      setChecked(true);
+    });
     return () => {
       live = false;
     };
@@ -102,65 +115,100 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
     setPhase({ name: "choose" });
   }
 
-  async function agreeFirst() {
-    if (!agreed) {
-      setTermsError("Accept the terms before you sign.");
-      return false;
-    }
-    setTermsError("");
-    await noteTerms();
-    return true;
-  }
-
-  async function startPasskey() {
+  function startPasskey() {
     const label = name.trim().slice(0, 32);
     if (!label) {
       setNameError("Enter a name to continue.");
       setPhase({ name: "name" });
       return;
     }
-    if (!(await agreeFirst())) return;
+    if (!agreed) {
+      setTermsError("Accept the terms before you sign.");
+      return;
+    }
+    setTermsError("");
     setPhase({ name: "creating" });
-    try {
-      const made = await createPasskeyWallet(label);
-      setPhase({ name: "created", address: made.address, label: made.label });
-    } catch (error) {
-      if (redirectError(error)) throw error;
-      setPhase(cancelled(error) ? { name: "cancelled", kind: "passkey", attempt: "create" } : { name: "failed", kind: "passkey", attempt: "create" });
-    }
+    const creating = createPasskeyWallet(label);
+    void (async () => {
+      try {
+        const made = await creating;
+        await noteTerms();
+        setPhase({ name: "created", address: made.address, label: made.label });
+      } catch (error) {
+        if (redirectError(error)) throw error;
+        setPhase(cancelled(error) ? { name: "cancelled", kind: "passkey", attempt: "create" } : { name: "failed", kind: "passkey", attempt: "create", detail: failureDetail(error) });
+      }
+    })();
   }
 
-  async function startBase() {
-    if (!(await agreeFirst())) return;
+  function startBase() {
+    if (!agreed) {
+      setTermsError("Accept the terms before you sign.");
+      return;
+    }
+    setTermsError("");
     setPhase({ name: "connecting", via: "base" });
-    try {
-      await connectBase(name.trim());
-    } catch (error) {
-      if (redirectError(error)) throw error;
-      setPhase(cancelled(error) ? { name: "cancelled", kind: "wallet", attempt: "connect" } : { name: "failed", kind: "wallet", attempt: "connect" });
-    }
+    const connecting = requestBaseAccount();
+    void (async () => {
+      try {
+        const address = await connecting;
+        await noteTerms();
+        await openSession(address, "wallet", name.trim());
+      } catch (error) {
+        if (redirectError(error)) throw error;
+        setPhase(cancelled(error) ? { name: "cancelled", kind: "wallet", attempt: "connect" } : { name: "failed", kind: "wallet", attempt: "connect", detail: failureDetail(error) });
+      }
+    })();
   }
 
-  async function startWallet() {
-    if (!(await agreeFirst())) return;
+  function startWallet() {
+    if (!agreed) {
+      setTermsError("Accept the terms before you sign.");
+      return;
+    }
+    setTermsError("");
     setPhase({ name: "connecting", via: "wallet" });
-    try {
-      await connectWallet(name.trim());
-    } catch (error) {
-      if (redirectError(error)) throw error;
-      setPhase(cancelled(error) ? { name: "cancelled", kind: "wallet", attempt: "connect" } : { name: "failed", kind: "wallet", attempt: "connect" });
-    }
+    const connecting = requestWalletAccount();
+    void (async () => {
+      try {
+        const address = await connecting;
+        await noteTerms();
+        await openSession(address, "wallet", name.trim());
+      } catch (error) {
+        if (redirectError(error)) throw error;
+        setPhase(cancelled(error) ? { name: "cancelled", kind: "wallet", attempt: "connect" } : { name: "failed", kind: "wallet", attempt: "connect", detail: failureDetail(error) });
+      }
+    })();
   }
 
-  async function startUnlock(passkey: SavedPasskey) {
-    if (!(await agreeFirst())) return;
-    setPhase({ name: "confirming", label: passkey.label });
-    try {
-      await unlockPasskey(passkey);
-    } catch (error) {
-      if (redirectError(error)) throw error;
-      setPhase(cancelled(error) ? { name: "cancelled", kind: "passkey", attempt: "unlock" } : { name: "failed", kind: "passkey", attempt: "unlock" });
+  function startUnlock(passkeys: SavedPasskey[]) {
+    if (!agreed) {
+      setTermsError("Accept the terms before you sign.");
+      return;
     }
+    setTermsError("");
+    setPhase({ name: "confirming", label: passkeys.length === 1 ? passkeys[0].label : "your passkey" });
+    let confirming: Promise<string>;
+    try {
+      confirming = requestPasskey(passkeys.map((passkey) => passkey.id));
+    } catch (error) {
+      setPhase({ name: "failed", kind: "passkey", attempt: "unlock", detail: failureDetail(error) });
+      return;
+    }
+    void (async () => {
+      try {
+        const id = await confirming;
+        await noteTerms();
+        await finishPasskey(passkeys, id);
+      } catch (error) {
+        if (redirectError(error)) throw error;
+        if (passkeys.length === 0 && missingPasskey(error)) {
+          setPhase({ name: "absent" });
+          return;
+        }
+        setPhase(cancelled(error) ? { name: "cancelled", kind: "passkey", attempt: "unlock" } : { name: "failed", kind: "passkey", attempt: "unlock", detail: failureDetail(error) });
+      }
+    })();
   }
 
   async function finish(address: string, label: string) {
@@ -201,8 +249,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
   function onPasskey() {
     if (!canPasskey) return;
     if (mode === "signin") {
-      if (saved.length === 1) void startUnlock(saved[0]);
-      else if (saved.length === 0) setPhase({ name: "absent" });
+      startUnlock(saved);
       return;
     }
     setPhase({ name: "name" });
@@ -277,7 +324,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
                     title={`Continue as ${passkey.label}`}
                     body={`${shortAddress(passkey.address)}. Face ID, Touch ID, or the saved passkey on this device.`}
                     tone="plain"
-                    onClick={() => void startUnlock(passkey)}
+                    onClick={() => startUnlock([passkey])}
                   />
                 ))
               ) : (
@@ -456,7 +503,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
           {emailMatch ? (
             <button
               type="button"
-              onClick={() => void startUnlock(emailMatch)}
+              onClick={() => startUnlock([emailMatch])}
               className="mt-3 h-11 w-full rounded-full bg-[#171717] text-sm font-medium text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
             >
               Unlock {emailMatch.label}
@@ -577,11 +624,13 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
         <Status
           title="Something went wrong"
           body={
-            phase.attempt === "connect"
-              ? "We couldn't connect your wallet. Please try again."
-              : phase.attempt === "unlock"
-                ? "We couldn't open your passkey. Please try again."
-                : "We couldn't create your passkey. Please try again."
+            phase.detail
+              ? phase.detail
+              : phase.attempt === "connect"
+                ? "We couldn't connect your wallet. Please try again."
+                : phase.attempt === "unlock"
+                  ? "We couldn't open your passkey. Please try again."
+                  : "We couldn't create your passkey. Please try again."
           }
           mark={
             <span className="grid size-14 place-items-center rounded-full border border-[#F3C7C3] text-[#D64545]">

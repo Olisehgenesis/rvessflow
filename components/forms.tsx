@@ -109,7 +109,7 @@ export function SavingForm({ me, choices }: { me: string; choices: PayChoice[] }
   );
 }
 
-export function StreamForm({ kind, people, me, choices }: { kind: "flow" | "expense"; people: Person[]; me: string; choices: PayChoice[] }) {
+export function StreamForm({ kind, me, choices }: { kind: "flow" | "expense"; me: string; choices: PayChoice[] }) {
   const [state, action, pending] = useSignedAction(createStream);
   const today = startOfDay(new Date());
   const [start, setStart] = useState(today);
@@ -125,7 +125,7 @@ export function StreamForm({ kind, people, me, choices }: { kind: "flow" | "expe
       <input type="hidden" name="name" value={draftName} />
       {kind === "flow" ? <input type="hidden" name="recipient" value={me} /> : null}
       <PayWith choices={choices} mode="stream" duration={problem ? undefined : window.duration} />
-      {kind === "expense" ? <RecipientField name="recipient" people={people} me={me} value={recipient} onValue={setRecipient} /> : null}
+      {kind === "expense" ? <RecipientField name="recipient" me={me} value={recipient} onValue={setRecipient} /> : null}
       <When start={start} end={end} onStart={setStart} onEnd={setEnd} />
       <input type="hidden" name="startAt" value={problem ? "" : window.startAt} />
       <input type="hidden" name="duration" value={problem ? "" : window.duration} />

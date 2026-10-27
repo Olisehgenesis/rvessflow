@@ -3,7 +3,7 @@ import "server-only";
 import { zeroAddress, type Address } from "viem";
 import { baseMarket } from "@/lib/base-market";
 import { maxUsdInput } from "@/lib/deposit-math";
-import { balanceColumns } from "@/lib/home-math";
+import { balanceColumns, holdingCaption } from "@/lib/home-math";
 import { formatAmount, formatUsd8, type PayAsset } from "@/lib/pay-math";
 import { loadPrices } from "@/lib/prices";
 import { addresses, erc20, factoryAbi, networkName, publicClient, stableLabel, vaultAbi, type Portfolio } from "@/lib/protocol";
@@ -101,8 +101,9 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
     publicClient.getBalance({ address: owner }),
     tokenBalance(addresses.ethx, owner),
   ]);
-  const usdSuper =
-    BigInt(portfolio.wallet) + BigInt(portfolio.idle) + BigInt(portfolio.held) + BigInt(portfolio.streaming) + BigInt(portfolio.locked);
+  const spendableSuper = BigInt(portfolio.wallet) + BigInt(portfolio.idle);
+  const streamingSuper = BigInt(portfolio.streaming);
+  const usdSuper = spendableSuper + BigInt(portfolio.held) + streamingSuper + BigInt(portfolio.locked);
   let ethxLocked = 0n;
   for (const lock of portfolio.locks) {
     if (!lock.settled && lock.token.toLowerCase() === addresses.ethx.toLowerCase()) ethxLocked += BigInt(lock.principal);
@@ -135,7 +136,7 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
     rows: priced.map((row) => ({
       key: row.key,
       label: row.label,
-      network: networkName,
+      network: row.key === "usdcx" ? holdingCaption(networkName, spendableSuper, streamingSuper) : networkName,
       amount: row.amount,
       usd: money(row.value),
       local: localText(row.value, quote, prices.usdcUsd8),

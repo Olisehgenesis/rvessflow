@@ -100,6 +100,23 @@ export function formatGrouped(value: bigint): string {
 }
 
 /** `scale` is the number of decimals in `amount`. `digits` is how many to show. */
+/** Null when `balance` can cover `needed`. ETH must keep something for the network fee. */
+export function spendableProblem(input: {
+  symbol: string;
+  balance: bigint;
+  needed: bigint;
+  scale: number;
+  digits: number;
+  leaveFee?: boolean;
+}): string | null {
+  const covered = input.leaveFee ? input.balance > input.needed : input.balance >= input.needed;
+  if (covered) return null;
+  const have = formatAmount(input.balance, input.scale, input.digits);
+  const need = formatAmount(input.needed, input.scale, input.digits);
+  const fee = input.leaveFee ? " A little more has to stay for the network fee." : "";
+  return `This account has ${have} ${input.symbol}. This needs ${need} ${input.symbol}.${fee}`;
+}
+
 export function formatAmount(amount: bigint, scale: number, digits: number): string {
   const negative = amount < 0n;
   const value = negative ? -amount : amount;

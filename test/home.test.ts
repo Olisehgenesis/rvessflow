@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { balanceColumns, hasTokenAmount, showGettingStarted, usdcEquivalent } from "@/lib/home-math";
+import { balanceColumns, hasTokenAmount, holdingCaption, showGettingStarted, usdcEquivalent } from "@/lib/home-math";
 
 describe("home balance columns", () => {
   it("splits a total into available, streaming, and locked that add back up", () => {
@@ -29,6 +29,14 @@ describe("home balance columns", () => {
   it("converts a dollar value into USDC at the Chainlink price", () => {
     assert.equal(usdcEquivalent(10_000_000_000n, 99_980_000n), "100.02");
     assert.equal(usdcEquivalent(0n, 100_000_000n), "0.00");
+  });
+});
+
+describe("holding caption", () => {
+  it("does not describe a fully streaming balance as loose money on the network", () => {
+    assert.equal(holdingCaption("Base", 0n, 1n), "Streaming out");
+    assert.equal(holdingCaption("Base", 5n, 1n), "Base · streaming out");
+    assert.equal(holdingCaption("Base", 5n, 0n), "Base");
   });
 });
 

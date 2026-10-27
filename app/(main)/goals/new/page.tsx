@@ -32,7 +32,7 @@ async function NewGoalBody({ searchParams }: { searchParams: Promise<{ kind?: st
         {kind === "saving" ? (
           <SavingForm me={data.me.address} choices={choices} />
         ) : (
-          <StreamForm kind={kind} people={data.people} me={data.me.address} choices={choices} />
+          <StreamForm kind={kind} me={data.me.address} choices={choices} />
         )}
       </GoalName>
     </Page>

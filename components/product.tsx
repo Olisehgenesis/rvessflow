@@ -165,13 +165,13 @@ export function GoalLink({
           </div>
         </div>
       </div>
-      <div className="mt-3 flex items-baseline justify-between gap-3">
-        <p className="font-display text-sm font-semibold tabular-nums">
+      <div className="mt-3 flex flex-nowrap items-baseline justify-between gap-3">
+        <p className="min-w-0 flex-1 truncate font-display text-sm font-semibold tabular-nums whitespace-nowrap">
           {quote.unit}{" "}
-          {live ? <FlowingText readAt={readAt} base={part} perSecond={flow.rate} ceiling={flow.reserved} fine quote={quote} /> : show(part, quote)}
+          {live ? <FlowingText readAt={readAt} base={part} perSecond={flow.rate} ceiling={flow.reserved} fine plain quote={quote} /> : show(part, quote)}
           <span className="font-medium text-muted-foreground"> / {show(whole, quote)}</span>
         </p>
-        <p className="shrink-0 text-xs font-medium tabular-nums">{progress}%</p>
+        <p className="shrink-0 text-xs font-medium tabular-nums whitespace-nowrap">{progress === 0 && BigInt(part || "0") > 0n ? "<1%" : `${progress}%`}</p>
       </div>
       <Progress value={progress} indicatorClassName="bg-foreground" className="mt-2 h-1.5 bg-muted" />
       <div className="mt-3 flex items-center justify-between gap-3 text-xs">

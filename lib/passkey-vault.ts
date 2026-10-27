@@ -13,6 +13,7 @@ const DB = "rvess-passkeys";
 const STORE = "crypto";
 const SEAL = "seal";
 const LOCAL = "rvess-passkey-vault";
+const PLAIN = "rvess-passkey-records";
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -51,12 +52,6 @@ async function sealKey(): Promise<CryptoKey> {
   return key;
 }
 
-function bytesToB64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
 function b64ToBytes(value: string): Uint8Array {
   const binary = atob(value);
   const bytes = new Uint8Array(binary.length);
@@ -64,7 +59,35 @@ function b64ToBytes(value: string): Uint8Array {
   return bytes;
 }
 
+function readable(value: unknown): SavedPasskey[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is SavedPasskey => {
+    if (!item || typeof item !== "object") return false;
+    const record = item as SavedPasskey;
+    return typeof record.id === "string" && record.id.length > 0
+      && typeof record.publicKey === "string" && record.publicKey.length > 10
+      && typeof record.address === "string" && /^0x[a-fA-F0-9]{40}$/.test(record.address)
+      && typeof record.label === "string";
+  });
+}
+
+function readPlain(): SavedPasskey[] {
+  try {
+    const raw = localStorage.getItem(PLAIN);
+    if (!raw) return [];
+    return readable(JSON.parse(raw) as unknown);
+  } catch {
+    return [];
+  }
+}
+
+function writePlain(records: SavedPasskey[]) {
+  localStorage.setItem(PLAIN, JSON.stringify(records));
+}
+
 export async function readPasskeys(): Promise<SavedPasskey[]> {
+  const plain = readPlain();
+  if (plain.length > 0) return plain;
   const raw = localStorage.getItem(LOCAL);
   if (!raw) return [];
   const parsed = JSON.parse(raw) as { iv?: string; data?: string };
@@ -72,27 +95,18 @@ export async function readPasskeys(): Promise<SavedPasskey[]> {
   const key = await sealKey();
   const iv = b64ToBytes(parsed.iv);
   const data = b64ToBytes(parsed.data);
-  const plain = await crypto.subtle.decrypt(
+  const opened = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: iv as BufferSource },
     key,
     data as BufferSource,
   );
-  const records = JSON.parse(new TextDecoder().decode(plain)) as SavedPasskey[];
-  return Array.isArray(records) ? records : [];
+  const records = readable(JSON.parse(new TextDecoder().decode(opened)) as unknown);
+  if (records.length > 0) writePlain(records);
+  return records;
 }
 
 async function writePasskeys(records: SavedPasskey[]) {
-  const key = await sealKey();
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const cipher = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    new TextEncoder().encode(JSON.stringify(records)),
-  );
-  localStorage.setItem(
-    LOCAL,
-    JSON.stringify({ iv: bytesToB64(iv), data: bytesToB64(new Uint8Array(cipher)) }),
-  );
+  writePlain(records);
 }
 
 export async function savePasskey(record: SavedPasskey) {

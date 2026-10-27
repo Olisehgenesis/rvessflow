@@ -26,7 +26,17 @@ type WalletSource = "base" | "wallet";
 
 let providerPromise: Promise<EthereumProvider> | null = null;
 let basePromise: Promise<WalletConnection> | null = null;
+let baseReady: WalletConnection | null = null;
 let chosen: WalletConnection | null = null;
+let passkeyLibs: PasskeyLibs | null = null;
+
+type PasskeyLibs = {
+  createPublicClient: typeof import("viem").createPublicClient;
+  http: typeof import("viem").http;
+  chains: typeof import("viem/chains");
+  accountAbstraction: typeof import("viem/account-abstraction");
+  toKernelSmartAccount: typeof import("permissionless/accounts").toKernelSmartAccount;
+};
 
 function rememberSource(source: WalletSource) {
   try {
@@ -87,6 +97,7 @@ function walletConnectProvider(): Promise<WalletConnection> {
 }
 
 function baseAccountProvider(): Promise<WalletConnection> {
+  if (baseReady) return Promise.resolve(baseReady);
   if (!basePromise) {
     basePromise = (async () => {
       const { createBaseAccountSDK } = await import("@base-org/account/browser");
@@ -98,12 +109,38 @@ function baseAccountProvider(): Promise<WalletConnection> {
         appChainIds: [chain.id],
       });
       const provider = sdk.getProvider();
-      return {
-        request: (args) => provider.request({ method: args.method, params: Array.isArray(args.params) || (args.params !== null && typeof args.params === "object") ? args.params : undefined }),
+      const connection = {
+        request: (args: { method: string; params?: unknown }) => provider.request({ method: args.method, params: Array.isArray(args.params) || (args.params !== null && typeof args.params === "object") ? args.params : undefined }),
       };
+      baseReady = connection;
+      return connection;
     })();
   }
   return basePromise;
+}
+
+function loadPasskeyLibs(): Promise<PasskeyLibs> {
+  if (passkeyLibs) return Promise.resolve(passkeyLibs);
+  return Promise.all([
+    import("viem"),
+    import("viem/chains"),
+    import("viem/account-abstraction"),
+    import("permissionless/accounts"),
+  ]).then(([viem, chains, accountAbstraction, accounts]) => {
+    passkeyLibs = {
+      createPublicClient: viem.createPublicClient,
+      http: viem.http,
+      chains,
+      accountAbstraction,
+      toKernelSmartAccount: accounts.toKernelSmartAccount,
+    };
+    return passkeyLibs;
+  });
+}
+
+/** Loads the passkey and Coinbase sign-in code before the click, so the prompt can open immediately. */
+export function prepareSignIn(): Promise<void> {
+  return Promise.all([loadPasskeyLibs(), baseAccountProvider()]).then(() => undefined);
 }
 
 export function walletProvider(): Promise<WalletConnection> {
@@ -120,45 +157,72 @@ export function walletProvider(): Promise<WalletConnection> {
   });
 }
 
-export async function createPasskeyWallet(label: string): Promise<{ address: string; label: string }> {
+export function createPasskeyWallet(label: string): Promise<{ address: string; label: string }> {
   const name = label.trim().slice(0, 32) || "Passkey";
-  const [{ createPublicClient, http }, chains, accountAbstraction, { toKernelSmartAccount }] = await Promise.all([
-    import("viem"),
-    import("viem/chains"),
-    import("viem/account-abstraction"),
-    import("permissionless/accounts"),
-  ]);
-  const credential = await accountAbstraction.createWebAuthnCredential({
+  const ready = passkeyLibs;
+  if (!ready) return Promise.reject(new Error("Passkey setup is still loading. Try again in a moment."));
+  const credentialPromise = ready.accountAbstraction.createWebAuthnCredential({
     name,
     rp: { name: "RvessFlow", id: window.location.hostname },
   });
-  const owner = accountAbstraction.toWebAuthnAccount({
-    credential,
-    rpId: window.location.hostname,
+  return credentialPromise.then(async (credential) => {
+    const owner = ready.accountAbstraction.toWebAuthnAccount({
+      credential,
+      rpId: window.location.hostname,
+    });
+    const account = await ready.toKernelSmartAccount({
+      client: ready.createPublicClient({ chain: testnet ? ready.chains.baseSepolia : ready.chains.base, transport: ready.http(rpc) }),
+      owners: [owner],
+      version: "0.3.1",
+      entryPoint: { address: ready.accountAbstraction.entryPoint07Address, version: "0.7" },
+    });
+    await savePasskey({
+      id: credential.id,
+      publicKey: credential.publicKey,
+      address: account.address,
+      label: name,
+    });
+    return { address: account.address, label: name };
   });
-  const account = await toKernelSmartAccount({
-    client: createPublicClient({ chain: testnet ? chains.baseSepolia : chains.base, transport: http(rpc) }),
-    owners: [owner],
-    version: "0.3.1",
-    entryPoint: { address: accountAbstraction.entryPoint07Address, version: "0.7" },
-  });
-  await savePasskey({
-    id: credential.id,
-    publicKey: credential.publicKey,
-    address: account.address,
-    label: name,
-  });
-  return { address: account.address, label: name };
 }
 
-export async function unlockPasskey(saved: SavedPasskey) {
-  const accountAbstraction = await import("viem/account-abstraction");
-  const owner = accountAbstraction.toWebAuthnAccount({
-    credential: { id: saved.id, publicKey: saved.publicKey },
+function bytesFromId(id: string): ArrayBuffer {
+  const padded = id.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (id.length % 4)) % 4);
+  const binary = atob(padded);
+  const buffer = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buffer);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return buffer;
+}
+
+/** Starts the passkey prompt. Call this directly from the click, before any await. */
+export function requestPasskey(ids: string[]): Promise<string> {
+  if (typeof window.PublicKeyCredential === "undefined") throw new Error("This browser cannot use a passkey.");
+  const challenge = new ArrayBuffer(32);
+  crypto.getRandomValues(new Uint8Array(challenge));
+  const publicKey: PublicKeyCredentialRequestOptions = {
+    challenge,
     rpId: window.location.hostname,
+    timeout: 60_000,
+    userVerification: "required",
+  };
+  if (ids.length > 0) publicKey.allowCredentials = ids.map((id) => ({ type: "public-key", id: bytesFromId(id) }));
+  return Promise.resolve(navigator.credentials.get({ publicKey })).then((credential) => {
+    if (!credential || credential.type !== "public-key") throw new Error("The passkey prompt closed before an account was chosen.");
+    return credential.id;
   });
-  await owner.signMessage({ message: "Sign in to RvessFlow" });
-  await openSession(saved.address, "passkey", saved.label);
+}
+
+export async function finishPasskey(saved: SavedPasskey[], id: string) {
+  const match = saved.find((item) => item.id === id);
+  if (!match) {
+    throw new Error(
+      saved.length === 0
+        ? "That passkey is on this device, but this browser does not have the account saved with it. Use the browser where you created it, or Connect Base if it is a Coinbase passkey."
+        : "That passkey does not match an account saved in this browser.",
+    );
+  }
+  await openSession(match.address, "passkey", match.label);
 }
 
 async function accountFrom(provider: WalletConnection): Promise<string> {
@@ -170,29 +234,33 @@ async function accountFrom(provider: WalletConnection): Promise<string> {
   return address;
 }
 
-export async function connectBase(label = "") {
-  const provider = await baseAccountProvider();
-  const address = await accountFrom(provider);
+function rememberConnection(provider: WalletConnection, source: WalletSource, address: string) {
   chosen = provider;
-  rememberSource("base");
-  await openSession(address, "wallet", label);
+  rememberSource(source);
+  return address;
 }
 
-export async function connectWallet(label = "") {
+/** Starts the Coinbase prompt. Call this directly from the click, before any await. */
+export function requestBaseAccount(): Promise<string> {
+  const ready = baseReady;
+  if (ready) return accountFrom(ready).then((address) => rememberConnection(ready, "base", address));
+  return baseAccountProvider().then((provider) => accountFrom(provider).then((address) => rememberConnection(provider, "base", address)));
+}
+
+/** Starts the wallet prompt. Call this directly from the click, before any await. */
+export function requestWalletAccount(): Promise<string> {
   const injected = injectedProvider();
   if (injected) {
-    const address = await accountFrom(injected);
-    chosen = injected;
-    rememberSource("wallet");
-    await openSession(address, "wallet", label);
-    return;
+    return accountFrom(injected).then((address) => rememberConnection(injected, "wallet", address));
   }
+  return connectWalletConnect();
+}
+
+async function connectWalletConnect(): Promise<string> {
   if (!walletConnectProjectId) throw new Error("WalletConnect is not configured.");
   const provider = await walletConnectProvider();
   if (!provider.connected) await provider.connect?.();
   const address = provider.accounts?.[0];
   if (!address || !isAddress(address)) throw new Error("The wallet did not return an account.");
-  chosen = provider;
-  rememberSource("wallet");
-  await openSession(address, "wallet", label);
+  return rememberConnection(provider, "wallet", address);
 }

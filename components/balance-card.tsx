@@ -205,7 +205,7 @@ export function HomeBalance({
           {columns.map((column, index) => (
             <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#141414]/10 px-3"}>
               <dt className="text-xs text-[#3C4A2E]">{column.label}</dt>
-              <dd className="mt-1 text-base font-semibold tabular-nums">
+              <dd className="mt-1 text-base font-semibold whitespace-nowrap tabular-nums">
                 {figure(column.prefix, column.value, column.live)}
                 {preferLocal && column.usd ? <span className="mt-0.5 block text-[11px] font-medium text-[#3C4A2E]">{figure("$", column.usd, column.usdLive)}</span> : null}
               </dd>
@@ -248,7 +248,7 @@ export function HomeBalance({
         {columns.map((column, index) => (
           <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#141414]/10 px-3"}>
             <dt className="text-xs text-[#3C4A2E]">{column.label}</dt>
-            <dd className="mt-1 text-sm font-semibold tabular-nums">{figure(column.prefix, column.value, column.live)}</dd>
+            <dd className="mt-1 text-sm font-semibold whitespace-nowrap tabular-nums">{figure(column.prefix, column.value, column.live)}</dd>
           </div>
         ))}
       </dl>

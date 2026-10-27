@@ -12,7 +12,7 @@ export function useFlowingValue(readAt: number, base: string, perSecond: string,
 
 export function RollingText({ text }: { text: string }) {
   return (
-    <span className="inline-flex tabular-nums" aria-label={text}>
+    <span className="inline-flex w-max max-w-full flex-row flex-nowrap whitespace-nowrap tabular-nums" aria-label={text}>
       {text.split("").map((char, index) => (
         <RollChar key={`${index}-${text.length}`} char={char} />
       ))}
@@ -55,7 +55,7 @@ function moved(readAt: number, now: number, base: string, perSecond: string, flo
 function RollingMoney({ value, quote, digits }: { value: bigint; quote: Quote; digits?: number }) {
   const text = show(value, quote, digits);
   return (
-    <span className="inline-flex tabular-nums" aria-label={text}>
+    <span className="inline-flex w-max max-w-full flex-row flex-nowrap whitespace-nowrap tabular-nums" aria-label={text}>
       {text.split("").map((char, index) => (
         <RollChar key={index} char={char} />
       ))}
@@ -206,6 +206,7 @@ export function FlowingText({
   floor = "0",
   ceiling,
   fine = false,
+  plain = false,
   quote = chainQuote(),
 }: {
   readAt: number;
@@ -214,12 +215,15 @@ export function FlowingText({
   floor?: string;
   ceiling?: string;
   fine?: boolean;
+  /** One text node. Compact rows must not split the amount into a character per line. */
+  plain?: boolean;
   quote?: Quote;
 }) {
   const now = useNow(readAt);
   const value = moved(readAt, now, base, perSecond, floor, ceiling);
   const digits = fine ? streamDigits(BigInt(perSecond.startsWith("-") ? perSecond.slice(1) : perSecond), quote) : quote.digits;
-  return <>{fine ? <RollingMoney value={value} quote={quote} digits={digits} /> : show(value, quote)}</>;
+  if (plain || !fine) return show(value, quote, fine ? digits : undefined);
+  return <RollingMoney value={value} quote={quote} digits={digits} />;
 }
 
 export function FlowingAmount({

@@ -11,6 +11,7 @@ import {
   protocolFeeOf,
   slippageCeiling,
   slippageFloor,
+  spendableProblem,
   wrapForSuper,
 } from "@/lib/pay-math";
 
@@ -85,6 +86,16 @@ test("USDC funding is approve plus depositUnderlying, with no swap", () => {
   assert.equal(approval.functionName, "approve");
   assert.equal(approval.args[0], vault);
   assert.equal(calls[1].to, vault);
+});
+
+test("a payment that needs more than the wallet holds is refused before the wallet opens", () => {
+  const usdc = spendableProblem({ symbol: "USDC", balance: 297_781n, needed: 1_000_000n, scale: 6, digits: 2 });
+  assert.match(usdc ?? "", /0\.29 USDC/);
+  assert.match(usdc ?? "", /1 USDC/);
+  assert.equal(spendableProblem({ symbol: "USDC", balance: 1_000_000n, needed: 1_000_000n, scale: 6, digits: 2 }), null);
+  const eth = spendableProblem({ symbol: "ETH", balance: 60_836_392_943_412n, needed: 60_836_392_943_412n, scale: 18, digits: 6, leaveFee: true });
+  assert.match(eth ?? "", /network fee/);
+  assert.equal(spendableProblem({ symbol: "ETH", balance: 2n, needed: 1n, scale: 18, digits: 6, leaveFee: true }), null);
 });
 
 test("ETH funding batches the swap, the refund, the USDC approval, and the wrap", () => {

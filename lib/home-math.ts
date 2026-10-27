@@ -17,6 +17,16 @@ export function usdcEquivalent(usd8: bigint, usdcUsd8: bigint): string {
   return formatUsd8(cents * 1_000_000n);
 }
 
+/**
+ * Subtitle for a token row. Money already committed to an open outgoing stream
+ * is not spendable, so it must not read like the loose USDC or ETH balance.
+ */
+export function holdingCaption(network: string, spendable: bigint, streaming: bigint): string {
+  if (streaming <= 0n) return network;
+  if (spendable <= 0n) return "Streaming out";
+  return `${network} · streaming out`;
+}
+
 export function hasTokenAmount(amount: string): boolean {
   const value = Number(amount.replace(/,/g, ""));
   return Number.isFinite(value) && value > 0;
