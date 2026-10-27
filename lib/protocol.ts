@@ -177,6 +177,13 @@ export function personName(address: Address): string {
   return found?.name ?? shortAddress(address);
 }
 
+/** The key for this test account, only when the address matches that slot. */
+export function accountKey(index: number, address: Address): Hex | null {
+  const chosen = storedAccounts()[index];
+  if (!chosen || chosen.address.toLowerCase() !== address.toLowerCase()) return null;
+  return chosen.privateKey;
+}
+
 function signer(index: number) {
   const accounts = storedAccounts();
   const chosen = accounts[index];
@@ -428,7 +435,7 @@ function streamRemaining(flow: {
   return flow.reserved > streamed ? flow.reserved - streamed : 0n;
 }
 
-export const loadPortfolio = cache(async (who: { address: Address; name: string; index: number }): Promise<Portfolio> => {
+export const loadPortfolio = cache(async (who: { address: Address; name: string; index: number }, scope: "full" | "home" = "full"): Promise<Portfolio> => {
   const roster = people();
   const me = { name: who.name, address: who.address };
   const index = who.index;
@@ -532,95 +539,11 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
     });
   }
 
-  const groupRows: GroupRow[] = [];
-  for (const id of groupIds) {
-    const group = await readGroup(id);
-    const creator = group[0];
-    const contribution = group[3];
-    const collateralRequired = group[4];
-    const count = Number(group[10]);
-    const members = count
-      ? await publicClient.multicall({
-          contracts: Array.from({ length: count }, (_, index) => ({
-            address: addresses.groups,
-            abi: groupAbi,
-            functionName: "getMember" as const,
-            args: [id, BigInt(index)] as const,
-          })),
-          allowFailure: false,
-        })
-      : [];
-    const phoneRows = count
-      ? await publicClient.multicall({
-          contracts: members.map((member) => ({
-            address: addresses.groups,
-            abi: groupAbi,
-            functionName: "memberPhone" as const,
-            args: [id, member[0]] as const,
-          })),
-          allowFailure: true,
-        })
-      : [];
-    const phonesLive = phoneRows.some((row) => row.status === "success");
-    const seating = await readPayout(id, count);
-    let cycle = 0n;
-    let cycleOpen = false;
-    if (group[11] && !group[13]) {
-      const current = await publicClient.readContract({
-        address: addresses.groups,
-        abi: groupAbi,
-        functionName: "currentCycle",
-        args: [id],
-      });
-      cycle = current[0];
-      cycleOpen = current[1];
-    }
-    groupRows.push({
-      id: id.toString(),
-      creator,
-      creatorName: personName(creator),
-      contribution: contribution.toString(),
-      collateral: collateralRequired.toString(),
-      cycleSeconds: Number(group[5]),
-      windowSeconds: Number(group[6]),
-      graceSeconds: Number(group[7]),
-      cycles: Number(group[9]),
-      started: group[11],
-      cancelled: group[12],
-      finalized: group[13],
-      startTime: Number(group[8]),
-      cycle: cycle.toString(),
-      cycleOpen,
-      members: members.map((member, index) => ({
-        account: member[0],
-        name: personName(member[0]),
-        phone: phonesLive && phoneRows[index]?.status === "success" ? quietName(phoneRows[index].result) : "",
-        posted: member[3],
-        collateral: member[2].toString(),
-        given: member[5].toString(),
-        received: member[6].toString(),
-        owed: member[7].toString(),
-        missed: Number(member[8]),
-      })),
-      payout: seating.order,
-      canArrange: seating.known,
-      canPhone: phonesLive,
-    });
-  }
-
   const total = walletBal + idle + held + streaming + locked;
-  let upgradeReadyAt = 0;
-  try {
-    upgradeReadyAt = Number(
-      await publicClient.readContract({
-        address: addresses.locks,
-        abi: parseAbi(["function upgradeReadyAt() view returns (uint64)"]),
-        functionName: "upgradeReadyAt",
-      }),
-    );
-  } catch {
-    upgradeReadyAt = 0;
-  }
+  const [groupRows, upgradeReadyAt] = await Promise.all([
+    scope === "home" ? Promise.resolve(groupIds.map(homeGroup)) : Promise.all(groupIds.map((id) => readGroupRow(id))),
+    readUpgradeReady(),
+  ]);
 
   return {
     me,
@@ -667,37 +590,40 @@ export const loadIncoming = cache(async (me: Address): Promise<IncomingItem[]> =
   });
   const now = BigInt(Math.floor(Date.now() / 1000));
   const mine = me.toLowerCase();
-  const items: IncomingItem[] = [];
-  for (let i = 0; i < others.length; i++) {
-    const vault = vaults[i];
-    if (vault === zeroAddress) continue;
-    const count = Number(await publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "flowCount" }));
-    if (count === 0) continue;
-    const ids = await publicClient.multicall({
-      contracts: Array.from({ length: count }, (_, index) => ({
-        address: vault,
-        abi: vaultAbi,
-        functionName: "flowIdAt" as const,
-        args: [BigInt(index)] as const,
-      })),
-      allowFailure: false,
-    });
-    const records = await publicClient.multicall({
-      contracts: ids.map((id) => ({
-        address: vault,
-        abi: vaultAbi,
-        functionName: "getFlow" as const,
-        args: [id] as const,
-      })),
-      allowFailure: false,
-    });
-    records.forEach((record, index) => {
-      const flow = toFlowRow(ids[index], record, now);
-      if (flow.settled || flow.recipient.toLowerCase() !== mine) return;
-      items.push({ flow, vault, from: others[i].name });
-    });
-  }
-  return items;
+  const found = await Promise.all(
+    others.map(async (person, index) => {
+      const vault = vaults[index];
+      if (vault === zeroAddress) return [];
+      const count = Number(await publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "flowCount" }));
+      if (count === 0) return [];
+      const ids = await publicClient.multicall({
+        contracts: Array.from({ length: count }, (_, position) => ({
+          address: vault,
+          abi: vaultAbi,
+          functionName: "flowIdAt" as const,
+          args: [BigInt(position)] as const,
+        })),
+        allowFailure: false,
+      });
+      const records = await publicClient.multicall({
+        contracts: ids.map((id) => ({
+          address: vault,
+          abi: vaultAbi,
+          functionName: "getFlow" as const,
+          args: [id] as const,
+        })),
+        allowFailure: false,
+      });
+      const items: IncomingItem[] = [];
+      records.forEach((record, position) => {
+        const flow = toFlowRow(ids[position], record, now);
+        if (flow.settled || flow.recipient.toLowerCase() !== mine) return;
+        items.push({ flow, vault, from: person.name });
+      });
+      return items;
+    }),
+  );
+  return found.flat();
 });
 
 async function vaultFor(index: number): Promise<Address> {
@@ -996,6 +922,118 @@ export async function openGroup(
   });
   const fresh = after.find((item) => !before.some((old) => old === item));
   return (fresh ?? after[after.length - 1])?.toString() ?? "";
+}
+
+function homeGroup(id: bigint): GroupRow {
+  return {
+    id: id.toString(),
+    creator: zeroAddress,
+    creatorName: "",
+    contribution: "0",
+    collateral: "0",
+    cycleSeconds: 0,
+    windowSeconds: 0,
+    graceSeconds: 0,
+    cycles: 0,
+    members: [],
+    payout: [],
+    canArrange: false,
+    canPhone: false,
+    started: false,
+    cancelled: false,
+    finalized: false,
+    startTime: 0,
+    cycle: "0",
+    cycleOpen: false,
+  };
+}
+
+async function readUpgradeReady(): Promise<number> {
+  try {
+    return Number(
+      await publicClient.readContract({
+        address: addresses.locks,
+        abi: parseAbi(["function upgradeReadyAt() view returns (uint64)"]),
+        functionName: "upgradeReadyAt",
+      }),
+    );
+  } catch {
+    return 0;
+  }
+}
+
+async function readGroupRow(id: bigint): Promise<GroupRow> {
+  const group = await readGroup(id);
+  const creator = group[0];
+  const contribution = group[3];
+  const collateralRequired = group[4];
+  const count = Number(group[10]);
+  const running = group[11] && !group[13];
+  const [members, seating, current] = await Promise.all([
+    count
+      ? publicClient.multicall({
+          contracts: Array.from({ length: count }, (_, index) => ({
+            address: addresses.groups,
+            abi: groupAbi,
+            functionName: "getMember" as const,
+            args: [id, BigInt(index)] as const,
+          })),
+          allowFailure: false as const,
+        })
+      : Promise.resolve([]),
+    readPayout(id, count),
+    running
+      ? publicClient.readContract({
+          address: addresses.groups,
+          abi: groupAbi,
+          functionName: "currentCycle",
+          args: [id],
+        })
+      : Promise.resolve(null),
+  ]);
+  const phoneRows = count
+    ? await publicClient.multicall({
+        contracts: members.map((member) => ({
+          address: addresses.groups,
+          abi: groupAbi,
+          functionName: "memberPhone" as const,
+          args: [id, member[0]] as const,
+        })),
+        allowFailure: true as const,
+      })
+    : [];
+  const phonesLive = phoneRows.some((row) => row.status === "success");
+  return {
+    id: id.toString(),
+    creator,
+    creatorName: personName(creator),
+    contribution: contribution.toString(),
+    collateral: collateralRequired.toString(),
+    cycleSeconds: Number(group[5]),
+    windowSeconds: Number(group[6]),
+    graceSeconds: Number(group[7]),
+    cycles: Number(group[9]),
+    started: group[11],
+    cancelled: group[12],
+    finalized: group[13],
+    startTime: Number(group[8]),
+    cycle: (current?.[0] ?? 0n).toString(),
+    cycleOpen: current?.[1] ?? false,
+    members: members.map((member, index) => ({
+      account: member[0],
+      name: personName(member[0]),
+      phone: phonesLive && phoneRows[index]?.status === "success" ? quietName(phoneRows[index].result) : "",
+      posted: member[3],
+      collateral: member[2].toString(),
+      given: member[5].toString(),
+      received: member[6].toString(),
+      owed: member[7].toString(),
+      missed: Number(member[8]),
+    })),
+    payout: seating.order,
+    canArrange: seating.known,
+    canPhone: phonesLive,
+  };
 }
 
 async function readPayout(id: bigint, count: number): Promise<{ order: number[]; known: boolean }> {

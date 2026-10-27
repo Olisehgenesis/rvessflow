@@ -479,7 +479,7 @@ async function planGroup(owner: Address, intent: Extract<Intent, { kind: "group"
   }
   if (mine < 0) throw new Error("You are not a member of this group.");
   if (intent.fn === "postCollateral") {
-    if (members[mine][3]) return done(intent, { href });
+    if (members[mine][3]) return done(intent, { href: `/groups/${intent.id}/paid` });
     if (intent.submitted) return pending(intent);
     const calls: PreparedCall[] = [];
     const due = withProtocolFee(group[4]);
@@ -494,7 +494,7 @@ async function planGroup(owner: Address, intent: Extract<Intent, { kind: "group"
     return { calls: [encode(addresses.groups, groupAbi, "claimCollateral", [id])], intent: { ...intent, submitted: true }, done: false };
   }
   const given = members[mine][5];
-  if (intent.seen && given > BigInt(intent.seen)) return done(intent, { href });
+  if (intent.seen && given > BigInt(intent.seen)) return done(intent, { href: `/groups/${intent.id}/paid` });
   if (intent.submitted) return pending(intent);
   const calls: PreparedCall[] = [];
   const due = withProtocolFee(group[3]);

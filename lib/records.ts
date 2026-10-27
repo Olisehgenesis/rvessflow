@@ -51,6 +51,10 @@ async function applySchema() {
     await rows(sql.raw(`ALTER TABLE ${profiles} ADD COLUMN IF NOT EXISTS kin_name VARCHAR DEFAULT ''`));
     await rows(sql.raw(`ALTER TABLE ${profiles} ADD COLUMN IF NOT EXISTS kin_contact VARCHAR DEFAULT ''`));
     await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS plain BOOLEAN NOT NULL DEFAULT false`));
+    await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS name VARCHAR NOT NULL DEFAULT ''`));
+    await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS description VARCHAR NOT NULL DEFAULT ''`));
+    await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS code VARCHAR NOT NULL DEFAULT ''`));
+    await rows(sql.raw(`CREATE TABLE IF NOT EXISTS ${bucket}.group_labels (ref VARCHAR PRIMARY KEY, name VARCHAR NOT NULL, description VARCHAR NOT NULL, code VARCHAR NOT NULL)`));
     await rows(
       sql.raw(
         `CREATE TABLE IF NOT EXISTS ${raw(bucket, "group_profiles")} (ref VARCHAR PRIMARY KEY, creator VARCHAR NOT NULL, name VARCHAR NOT NULL, purpose VARCHAR NOT NULL, rules VARCHAR NOT NULL, require_id BOOLEAN NOT NULL)`,

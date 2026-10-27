@@ -39,6 +39,15 @@ function Submit({ pending, children, quiet = false }: { pending: boolean; childr
   );
 }
 
+function Saved({ saved }: { saved?: boolean }) {
+  if (!saved) return null;
+  return (
+    <p role="status" className="text-sm font-medium">
+      Saved
+    </p>
+  );
+}
+
 export function DraftTerms() {
   const [state, action, pending] = useActionState(createDraft, null);
   const [choice, setChoice] = useState<CycleChoice>("hour");
@@ -296,17 +305,9 @@ export function LinkPhone({ id, address }: { id: string; address: string }) {
   );
 }
 
-export function ProfileForm({ contact, demo = false }: { contact: Contact; demo?: boolean }) {
+export function ProfileForm({ contact }: { contact: Contact; demo?: boolean }) {
   return (
-    <section className="mb-6 space-y-4">
-      <div>
-        <h2 className="text-sm font-semibold">How people add you</h2>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          {demo
-            ? "This preview account is stored in the demo tables. Phone, email, and password point back to this wallet."
-            : "This wallet is stored in the real tables. Phone, email, and password point back to it, and an organizer can add you with any of them."}
-        </p>
-      </div>
+    <section className="space-y-4 pt-1 pb-4">
       <IdentityField contact={contact} />
       <PhoneList phones={contact.phones} />
       <EmailField email={contact.email} />
@@ -344,6 +345,7 @@ function IdentityField({ contact }: { contact: Contact }) {
         <Label htmlFor="kinContact">How to reach them</Label>
         <Input id="kinContact" name="kinContact" defaultValue={contact.kinContact} placeholder="Phone or note" className={field} />
       </label>
+      <Saved saved={state?.saved} />
       <ErrorNote error={state?.error} />
       <Submit pending={pending} quiet>
         Save profile
@@ -377,8 +379,11 @@ function PhoneList({ phones }: { phones: string[] }) {
           <Input id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="256700000001" className={field} aria-invalid={Boolean(state?.error)} />
           <span className="block text-xs leading-relaxed text-muted-foreground">Include the country code. The first number is the one written onto a group.</span>
         </label>
+        <Saved saved={state?.saved} />
         <ErrorNote error={state?.error} />
-        <Submit pending={pending}>Add number</Submit>
+        <Submit pending={pending} quiet>
+          Add number
+        </Submit>
       </form>
     </div>
   );
@@ -406,6 +411,7 @@ function EmailField({ email }: { email: string }) {
         <Input id="email" name="email" type="email" autoComplete="email" defaultValue={email} placeholder="you@example.com" className={field} aria-invalid={Boolean(state?.error)} />
         <span className="block text-xs leading-relaxed text-muted-foreground">Leave it blank and save to remove it.</span>
       </label>
+      <Saved saved={state?.saved} />
       <ErrorNote error={state?.error} />
       <Submit pending={pending} quiet>
         Save email
@@ -433,6 +439,7 @@ function PasswordField({ passwordSet }: { passwordSet: boolean }) {
           Anyone who knows it can add this wallet to a group. It is not your sign-in. Leave it blank and save to remove it.
         </span>
       </label>
+      <Saved saved={state?.saved} />
       <ErrorNote error={state?.error} />
       <Submit pending={pending} quiet>
         Save password

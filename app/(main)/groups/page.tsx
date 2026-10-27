@@ -1,104 +1,109 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import Loading from "../loading";
-import { ApplyLink } from "@/components/circle";
+import { EmptyGroups } from "@/components/group-bits";
 import { GroupUpgradeNote } from "@/components/group-upgrade";
-import { GroupLink, ProductMark } from "@/components/product";
+import { GroupLink } from "@/components/product";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
-import { draftsIfReady } from "@/lib/circle";
+import { allLabels, draftsIfReady } from "@/lib/circle";
 import { loadQuote } from "@/lib/rates";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
-export default function GroupsPage() {
+export default function GroupsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   return (
     <Suspense fallback={<Loading />}>
-      <GroupsBody />
+      <GroupsBody searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function GroupsBody() {
+async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab } = await searchParams;
+  const joined = tab === "joined";
   const who = await viewer();
-  const [data, quote, directory] = await Promise.all([loadPortfolio(who), loadQuote(), draftsIfReady(who.address)]);
-  const drafts = directory.drafts;
+  const [data, quote, directory, labels] = await Promise.all([loadPortfolio(who), loadQuote(), draftsIfReady(who.address), allLabels().catch(() => [])]);
+  const nameFor = (id: string, fallback: string) => labels.find((item) => item.ref === id)?.name || fallback;
+  const drafts = directory.drafts.filter((draft) => (joined ? draft.role === "member" || draft.role === "applied" : draft.role === "organizer"));
+  const groups = data.groups.filter((group) => (joined ? group.creator.toLowerCase() !== data.me.address.toLowerCase() : group.creator.toLowerCase() === data.me.address.toLowerCase()));
+  const empty = drafts.length === 0 && groups.length === 0;
   return (
     <Page
       title="Groups"
       action={
-        <Link href="/groups/new" className="text-sm font-medium text-foreground">
-          New group
+        <Link href="/groups/join" className="text-sm font-medium text-foreground">
+          Join
         </Link>
       }
     >
+      <div className="mb-4 flex gap-2">
+        <Tab href="/groups" pressed={!joined}>
+          My groups
+        </Tab>
+        <Tab href="/groups?tab=joined" pressed={joined}>
+          Joined
+        </Tab>
+      </div>
       <div className="mb-4">
         <GroupUpgradeNote />
       </div>
       {directory.down ? <p className="mb-4 text-sm text-muted-foreground">The member directory is unavailable, so drafts cannot load. Groups already on Base still show here.</p> : null}
-      {drafts.length === 0 && data.groups.length === 0 ? (
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <ProductMark kind="group" size="lg" />
-            <h2 className="text-lg font-semibold">A rotating pot</h2>
-          </div>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Create a group, add people by wallet address, or by the email, phone, or password linked to their wallet, arrange the order, then start it. People can also apply to join.
-          </p>
-          <Link href="/groups/new" className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground">
-            Start a group
-          </Link>
-        </div>
+      {empty ? (
+        <EmptyGroups joined={joined} />
       ) : (
         <div className="space-y-6">
           {drafts.length > 0 ? (
             <section>
               <h2 className="mb-2 text-sm font-semibold">Getting ready</h2>
-              <ul className="divide-y divide-border border-y border-border">
+              <ul className="space-y-3">
                 {drafts.map((draft) => (
-                  <li key={draft.id} className="py-3 text-sm">
-                    <p className="font-medium">
-                      {draft.contribution} USD · {draft.cycles} cycles of {draft.cycleLabel}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {draft.count} {draft.count === 1 ? "member" : "members"}
-                      {draft.role === "organizer" ? " · You organize this" : ""}
-                      {draft.role === "member" ? " · You are in" : ""}
-                      {draft.role === "applied" ? " · Applied" : ""}
-                      {draft.role === "open" ? " · Open to apply" : ""}
-                    </p>
-                    <div className="mt-2">
-                      {draft.role === "open" ? (
-                        <ApplyLink id={draft.id} />
-                      ) : (
-                        <Link href={`/groups/draft/${draft.id}`} className="text-sm font-medium text-foreground">
-                          {draft.role === "organizer" ? "Arrange members" : "View group"}
-                        </Link>
-                      )}
-                    </div>
+                  <li key={draft.id}>
+                    <Link href={`/groups/draft/${draft.id}`} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
+                      <img src="/marks/group.png" alt="" className="size-12 shrink-0 object-contain" />
+                      <span className="min-w-0">
+                        <span className="block font-medium">{draft.name}</span>
+                        <span className="mt-0.5 block text-sm leading-snug text-muted-foreground">
+                          {draft.contribution} USD · {draft.cycles} cycles of {draft.cycleLabel}
+                          {draft.role === "applied" ? " · Applied" : ""}
+                        </span>
+                      </span>
+                    </Link>
                   </li>
                 ))}
               </ul>
             </section>
           ) : null}
-          {data.groups.length > 0 ? (
+          {groups.length > 0 ? (
             <ul className="space-y-3">
-              {data.groups.map((group) => (
+              {groups.map((group) => (
                 <li key={group.id}>
                   <GroupLink
                     id={group.id}
                     status={group.finalized ? "Finished" : group.started ? "Active" : group.cancelled ? "Cancelled" : "Not started"}
                     contribution={group.contribution}
                     members={group.members.length}
-                    detail={`${group.cycles} cycles, ${spanLabel(group.cycleSeconds)} each. Created by ${group.creatorName}.`}
+                    title={nameFor(group.id, `Group ${group.id}`)}
+                    detail={`${group.cycles} cycles, ${spanLabel(group.cycleSeconds)} each.`}
                     quote={quote}
                   />
                 </li>
               ))}
             </ul>
           ) : null}
+          <Link href="/groups/new" className="inline-flex h-12 w-full items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
+            Create group
+          </Link>
         </div>
       )}
     </Page>
+  );
+}
+
+function Tab({ href, pressed, children }: { href: string; pressed: boolean; children: string }) {
+  return (
+    <Link href={href} aria-current={pressed ? "page" : undefined} className={`rounded-full px-4 py-2 text-sm font-medium ${pressed ? "bg-foreground text-background" : "border border-border"}`}>
+      {children}
+    </Link>
   );
 }

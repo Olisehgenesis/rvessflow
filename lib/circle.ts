@@ -24,6 +24,9 @@ export type Contact = {
 
 export type DraftCard = {
   id: string;
+  name: string;
+  description: string;
+  code: string;
   contribution: string;
   cycles: number;
   cycleLabel: string;
@@ -41,8 +44,15 @@ export type DraftMember = {
 
 export type DraftView = {
   id: string;
+  name: string;
+  description: string;
+  code: string;
   contribution: string;
   cycles: number;
+  cycle: string;
+  days: string;
+  cycleLabel: string;
+  plain: boolean;
   summary: string;
   open: boolean;
   mine: boolean;
@@ -67,6 +77,9 @@ type Profile = {
 type Draft = {
   id: string;
   creator: Address;
+  name: string;
+  description: string;
+  code: string;
   contribution: string;
   cycles: number;
   cycle: string;
@@ -77,7 +90,9 @@ type Draft = {
   applications: { address: Address; name: string }[];
 };
 
-type Store = { profiles: Profile[]; drafts: Draft[] };
+export type GroupLabel = { ref: string; name: string; description: string; code: string };
+
+type Store = { profiles: Profile[]; drafts: Draft[]; labels: GroupLabel[] };
 type Bucket = "demo" | "app";
 type World = Record<Bucket, Store>;
 
@@ -85,7 +100,27 @@ const MAX_MEMBERS = 50;
 const buckets: Bucket[] = ["demo", "app"];
 
 function empty(): Store {
-  return { profiles: [], drafts: [] };
+  return { profiles: [], drafts: [], labels: [] };
+}
+
+const codeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function makeCode(taken: Set<string>) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const bytes = randomBytes(6);
+    const code = Array.from(bytes, (byte) => codeAlphabet[byte % codeAlphabet.length]).join("");
+    if (!taken.has(code)) return code;
+  }
+  return randomBytes(4).toString("hex").toUpperCase();
+}
+
+function knownCodes(data: World) {
+  const taken = new Set<string>();
+  for (const bucket of buckets) {
+    for (const draft of data[bucket].drafts) if (draft.code) taken.add(draft.code.toUpperCase());
+    for (const label of data[bucket].labels) if (label.code) taken.add(label.code.toUpperCase());
+  }
+  return taken;
 }
 
 function bucketFor(address: string): Bucket {
@@ -117,8 +152,11 @@ async function readBucket(bucket: Bucket): Promise<Store> {
   const phones = await rows<{ address: string; phone: string; position: unknown }>(
     sql`SELECT address, phone, position FROM ${table(bucket, "phones")} ORDER BY position`,
   );
-  const drafts = await rows<{ id: string; creator: string; contribution: string; cycles: unknown; cycle: string; days: string; is_open: boolean; plain: boolean }>(
-    sql`SELECT id, creator, contribution, cycles, cycle, days, is_open, plain FROM ${table(bucket, "drafts")}`,
+  const drafts = await rows<{ id: string; creator: string; contribution: string; cycles: unknown; cycle: string; days: string; is_open: boolean; plain: boolean; name: string; description: string; code: string }>(
+    sql`SELECT id, creator, contribution, cycles, cycle, days, is_open, plain, name, description, code FROM ${table(bucket, "drafts")}`,
+  );
+  const labels = await rows<{ ref: string; name: string; description: string; code: string }>(
+    sql`SELECT ref, name, description, code FROM ${sql.raw(`${bucket}.group_labels`)}`,
   );
   const members = await rows<{ draft_id: string; position: unknown; address: string }>(
     sql`SELECT draft_id, position, address FROM ${table(bucket, "draft_members")} ORDER BY position`,
@@ -158,6 +196,9 @@ async function readBucket(bucket: Bucket): Promise<Store> {
           cycles: num(draft.cycles),
           cycle: draft.cycle,
           days: draft.days,
+          name: draft.name ?? "",
+          description: draft.description ?? "",
+          code: draft.code ?? "",
           open: Boolean(draft.is_open),
           plain: Boolean(draft.plain),
           members: members.flatMap((item) => {
@@ -173,6 +214,12 @@ async function readBucket(bucket: Bucket): Promise<Store> {
         },
       ];
     }),
+    labels: labels.map((label) => ({
+      ref: label.ref,
+      name: label.name ?? "",
+      description: label.description ?? "",
+      code: label.code ?? "",
+    })),
   };
 }
 
@@ -184,6 +231,7 @@ async function writeBucket(bucket: Bucket, store: Store) {
     return;
   }
   await transaction(async (query) => {
+    await query(sql`DELETE FROM ${sql.raw(`${bucket}.group_labels`)}`);
     await query(sql`DELETE FROM ${table(bucket, "applications")}`);
     await query(sql`DELETE FROM ${table(bucket, "draft_members")}`);
     await query(sql`DELETE FROM ${table(bucket, "drafts")}`);
@@ -201,7 +249,7 @@ async function writeBucket(bucket: Bucket, store: Store) {
     }
     for (const draft of store.drafts) {
       await query(
-        sql`INSERT INTO ${table(bucket, "drafts")} (id, creator, contribution, cycles, cycle, days, is_open, plain) VALUES (${draft.id}, ${draft.creator}, ${draft.contribution}, ${draft.cycles}, ${draft.cycle}, ${draft.days}, ${draft.open}, ${Boolean(draft.plain)})`,
+        sql`INSERT INTO ${table(bucket, "drafts")} (id, creator, contribution, cycles, cycle, days, is_open, plain, name, description, code) VALUES (${draft.id}, ${draft.creator}, ${draft.contribution}, ${draft.cycles}, ${draft.cycle}, ${draft.days}, ${draft.open}, ${Boolean(draft.plain)}, ${draft.name}, ${draft.description}, ${draft.code})`,
       );
       for (let index = 0; index < draft.members.length; index += 1) {
         await query(
@@ -214,6 +262,11 @@ async function writeBucket(bucket: Bucket, store: Store) {
         );
       }
     }
+    for (const label of store.labels ?? []) {
+      await query(
+        sql`INSERT INTO ${sql.raw(`${bucket}.group_labels`)} (ref, name, description, code) VALUES (${label.ref}, ${label.name}, ${label.description}, ${label.code})`,
+      );
+    }
   });
 }
 
@@ -223,6 +276,7 @@ function localFile(): Store {
     return {
       profiles: Array.isArray(parsed.profiles) ? parsed.profiles : [],
       drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
+      labels: Array.isArray(parsed.labels) ? parsed.labels : [],
     };
   } catch {
     return empty();
@@ -282,11 +336,15 @@ function loadFileWorld(): World {
         const address = asAddress(item.address);
         return address ? [{ address, name: item.name }] : [];
       }),
+      name: draft.name ?? "",
+      description: draft.description ?? "",
+      code: draft.code ?? "",
       open: Boolean(draft.open),
       plain: Boolean(draft.plain),
       cycles: num(draft.cycles),
     });
   }
+  loaded.app.labels = (file.labels ?? []).filter((label) => label && label.ref);
   fileCache = loaded;
   return loaded;
 }
@@ -299,6 +357,7 @@ function persistFile() {
     JSON.stringify({
       profiles: [...fileCache.demo.profiles, ...fileCache.app.profiles],
       drafts: [...fileCache.demo.drafts, ...fileCache.app.drafts],
+      labels: [...fileCache.demo.labels, ...fileCache.app.labels],
     }),
   );
 }
@@ -456,8 +515,15 @@ function view(data: World, draft: Draft, who: Viewer): DraftView {
   const plan = cyclePlan(draft.cycle, Number(draft.days));
   return {
     id: draft.id,
+    name: draft.name || "Untitled group",
+    description: draft.description,
+    code: draft.code,
     contribution: draft.contribution,
     cycles: draft.cycles,
+    cycle: draft.cycle,
+    days: draft.days,
+    cycleLabel: plan ? spanLabel(plan.cycle) : "a custom cycle",
+    plain: draft.plain,
     summary: `${plan ? `${draft.contribution} USD each cycle, ${draft.cycles} cycles of ${spanLabel(plan.cycle)}.` : `${draft.contribution} USD each cycle.`} ${draft.plain ? "Each contribution is paid to the person whose turn it is." : "The pot streams to the person whose turn it is."}`,
     open: draft.open,
     mine,
@@ -639,6 +705,9 @@ export async function visibleDrafts(address: Address): Promise<DraftCard[]> {
     return [
       {
         id: draft.id,
+        name: draft.name || "Untitled group",
+        description: draft.description,
+        code: draft.code,
         contribution: draft.contribution,
         cycles: draft.cycles,
         cycleLabel: plan ? spanLabel(plan.cycle) : "a custom cycle",
@@ -728,7 +797,19 @@ export async function savePassword(raw: string) {
   await writeBucket(bucket, data[bucket]);
 }
 
-export async function openDraft(input: { contribution: string; cycles: number; cycle: string; days: string; plain: boolean }) {
+function cleanName(value: string) {
+  const name = value.trim();
+  if (!name || name.length > 48) throw new Error("Give the group a name, up to 48 characters.");
+  return name;
+}
+
+function cleanDescription(value: string) {
+  const description = value.trim();
+  if (description.length > 280) throw new Error("Keep the description to 280 characters.");
+  return description;
+}
+
+export async function openDraft(input: { name: string; description: string; contribution: string; cycles: number; cycle: string; days: string; plain: boolean }) {
   const contribution = input.contribution.trim();
   if (!/^\d+(\.\d{1,18})?$/.test(contribution) || Number(contribution) <= 0) {
     throw new Error("Enter a contribution greater than zero.");
@@ -745,6 +826,9 @@ export async function openDraft(input: { contribution: string; cycles: number; c
   store.drafts.push({
     id,
     creator: who.address,
+    name: cleanName(input.name),
+    description: cleanDescription(input.description),
+    code: makeCode(knownCodes(data)),
     contribution,
     cycles: input.cycles,
     cycle: input.cycle,
@@ -756,6 +840,82 @@ export async function openDraft(input: { contribution: string; cycles: number; c
   });
   await writeBucket(bucket, store);
   return id;
+}
+
+export async function updateDraft(id: string, input: { name: string; description: string; contribution: string; cycles: number; cycle: string; days: string; plain: boolean }) {
+  const contribution = input.contribution.trim();
+  if (!/^\d+(\.\d{1,18})?$/.test(contribution) || Number(contribution) <= 0) {
+    throw new Error("Enter a contribution greater than zero.");
+  }
+  if (![4, 8, 12].includes(input.cycles)) throw new Error("Choose 4, 8, or 12 cycles.");
+  if (!cyclePlan(input.cycle, Number(input.days))) {
+    throw new Error("That cycle length is outside what the contract allows. Use 1 to 366 days.");
+  }
+  const who = await viewer();
+  const data = await world();
+  const { bucket, draft } = owned(data, id, who);
+  draft.name = cleanName(input.name);
+  draft.description = cleanDescription(input.description);
+  draft.contribution = contribution;
+  draft.cycles = input.cycles;
+  draft.cycle = input.cycle;
+  draft.days = String(Number.isInteger(Number(input.days)) ? Number(input.days) : 14);
+  draft.plain = input.plain;
+  if (!draft.code) draft.code = makeCode(knownCodes(data));
+  await writeBucket(bucket, data[bucket]);
+}
+
+export async function findGroupCode(raw: string): Promise<{ href: string } | null> {
+  const code = raw.trim().toUpperCase().replace(/\s/g, "");
+  if (!code) return null;
+  const data = await world();
+  for (const bucket of buckets) {
+    const draft = data[bucket].drafts.find((item) => item.code.toUpperCase() === code || item.id.toLowerCase() === code.toLowerCase());
+    if (draft) return { href: `/groups/draft/${draft.id}` };
+    const label = data[bucket].labels.find((item) => item.code.toUpperCase() === code);
+    if (label) return { href: `/groups/${label.ref}` };
+  }
+  return null;
+}
+
+export async function allLabels(): Promise<GroupLabel[]> {
+  const data = await world();
+  return buckets.flatMap((bucket) => data[bucket].labels);
+}
+
+export async function groupLabel(ref: string): Promise<GroupLabel | null> {
+  const data = await world();
+  for (const bucket of buckets) {
+    const found = data[bucket].labels.find((item) => item.ref === ref);
+    if (found) return found;
+  }
+  return null;
+}
+
+export async function ensureGroupCode(ref: string, fallbackName: string): Promise<GroupLabel> {
+  const who = await viewer();
+  const data = await world();
+  for (const bucket of buckets) {
+    const found = data[bucket].labels.find((item) => item.ref === ref && item.code);
+    if (found) return found;
+  }
+  const bucket = bucketFor(who.address);
+  const current = data[bucket].labels.find((item) => item.ref === ref);
+  const name = (current?.name || fallbackName || `Group ${ref}`).trim().slice(0, 48) || `Group ${ref}`;
+  const next: GroupLabel = { ref, name, description: current?.description ?? "", code: makeCode(knownCodes(data)) };
+  data[bucket].labels = [...data[bucket].labels.filter((item) => item.ref !== ref), next];
+  await writeBucket(bucket, data[bucket]);
+  return next;
+}
+
+export async function renameGroup(ref: string, name: string, description: string) {
+  const who = await viewer();
+  const data = await world();
+  const bucket = bucketFor(who.address);
+  const next = { ref, name: cleanName(name), description: cleanDescription(description), code: "" };
+  const current = data[bucket].labels.find((item) => item.ref === ref);
+  data[bucket].labels = [...data[bucket].labels.filter((item) => item.ref !== ref), { ...next, code: current?.code ?? "" }];
+  await writeBucket(bucket, data[bucket]);
 }
 
 function place(store: Store, draft: Draft, address: Address) {
@@ -927,6 +1087,15 @@ export async function launchDraft(id: string) {
   const fresh = await world();
   const current = locate(fresh, id);
   if (current) {
+    if (chainId) {
+      const label = {
+        ref: chainId,
+        name: current.draft.name,
+        description: current.draft.description,
+        code: current.draft.code,
+      };
+      fresh[current.bucket].labels = [...fresh[current.bucket].labels.filter((item) => item.ref !== chainId), label];
+    }
     fresh[current.bucket].drafts = fresh[current.bucket].drafts.filter((item) => item.id !== id);
     await writeBucket(current.bucket, fresh[current.bucket]);
   }

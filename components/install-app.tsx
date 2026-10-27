@@ -16,7 +16,7 @@ function subscribeInstall() {
   return () => undefined;
 }
 
-export function InstallButton({ className = "" }: { className?: string }) {
+export function InstallButton({ className = "", row = false }: { className?: string; row?: boolean }) {
   const [prompt, setPrompt] = useState<InstallEvent | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [help, setHelp] = useState(false);
@@ -50,18 +50,37 @@ export function InstallButton({ className = "" }: { className?: string }) {
     if (choice.outcome === "accepted") setDismissed(true);
   }
 
+  if (row) {
+    return (
+      <button
+        type="button"
+        onClick={() => void install()}
+        className="block w-full py-3 text-left text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+      >
+        Install the app
+        {help ? (
+          <span className="mt-1 block text-sm font-normal leading-snug text-muted-foreground">
+            {ios
+              ? "In Safari, tap Share, then Add to Home Screen."
+              : "Open the browser menu and choose Install RvessFlow."}
+          </span>
+        ) : null}
+      </button>
+    );
+  }
+
   return (
     <div className={className}>
       <button
         type="button"
         onClick={() => void install()}
-        className="inline-flex h-11 items-center gap-2 rounded-full border border-[#E4E2DC] bg-white px-3.5 text-sm font-medium text-[#141414] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414] active:scale-[0.98]"
+        className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
       >
         <img src="/icon-192.png" alt="" width={22} height={22} className="size-[22px] rounded-md" />
         Install
       </button>
       {help ? (
-        <p className="mt-2 max-w-xs text-[13px] leading-snug text-[#5C6572]">
+        <p className="mt-2 text-sm leading-snug text-muted-foreground">
           {ios
             ? "In Safari, tap Share, then Add to Home Screen. The icon is the RvessFlow mark."
             : "Open the browser menu and choose Install RvessFlow. It opens on its own, with the same mark."}

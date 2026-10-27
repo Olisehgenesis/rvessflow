@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { getAddress, isAddress, type Address } from "viem";
 import { assetKind } from "@/lib/assets";
 import type { DepositPreview } from "@/lib/deposit-math";
-import { asTokenAmount } from "@/lib/display";
+import { asTokenAmount, shortAddress } from "@/lib/display";
 import { idleSuper, previewLines, previewWithdraw, walletSuper } from "@/lib/funding";
 import type { Intent, SignPayload } from "@/lib/intent";
 import { inferFrequency } from "@/lib/intent";
@@ -41,8 +41,11 @@ import {
   deleteDraft,
   dropPhone,
   groupCreateIntent,
+  findGroupCode,
   hintForEmail,
   launchDraft,
+  renameGroup,
+  updateDraft,
   moveDraftMember,
   openDraft,
   phoneFor,
@@ -55,7 +58,7 @@ import {
 } from "@/lib/circle";
 import { acceptedTerms, accountIndex, clearSession, currencyChoice, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet, viewer, type Viewer } from "@/lib/session";
 
-export type ActionState = { error?: string; sign?: SignPayload } | null;
+export type ActionState = { error?: string; sign?: SignPayload; saved?: boolean } | null;
 
 function refIntent<T extends Intent>(intent: T): T {
   return { ...intent, ref: intent.ref || randomUUID() };
@@ -488,6 +491,8 @@ export async function createDraft(_prev: ActionState, formData: FormData): Promi
   let id = "";
   try {
     id = await openDraft({
+      name: String(formData.get("name") ?? ""),
+      description: String(formData.get("description") ?? ""),
       contribution: String(formData.get("contribution") ?? ""),
       cycles: Number(formData.get("cycles") ?? "4"),
       cycle: String(formData.get("cycle") ?? ""),
@@ -499,6 +504,47 @@ export async function createDraft(_prev: ActionState, formData: FormData): Promi
   }
   refresh();
   redirect(`/groups/draft/${id}`);
+}
+
+export async function saveDraft(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get("id") ?? "");
+  try {
+    await updateDraft(id, {
+      name: String(formData.get("name") ?? ""),
+      description: String(formData.get("description") ?? ""),
+      contribution: String(formData.get("contribution") ?? ""),
+      cycles: Number(formData.get("cycles") ?? "4"),
+      cycle: String(formData.get("cycle") ?? ""),
+      days: String(formData.get("days") ?? ""),
+      plain: String(formData.get("payout") ?? "") === "plain",
+    });
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  redirect(`/groups/draft/${id}`);
+}
+
+export async function saveGroupName(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const id = String(formData.get("id") ?? "");
+  try {
+    await renameGroup(id, String(formData.get("name") ?? ""), String(formData.get("description") ?? ""));
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  redirect(`/groups/${id}`);
+}
+
+export async function joinGroup(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const found = await findGroupCode(String(formData.get("code") ?? ""));
+    if (!found) return { error: "No group uses that code." };
+    redirect(found.href);
+  } catch (error) {
+    rethrowRedirect(error);
+    return spoken(error);
+  }
 }
 
 export async function addMember(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -641,7 +687,7 @@ export async function addPhone(_prev: ActionState, formData: FormData): Promise<
     return spoken(error);
   }
   refresh();
-  return null;
+  return { saved: true };
 }
 
 export async function removePhone(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -651,7 +697,7 @@ export async function removePhone(_prev: ActionState, formData: FormData): Promi
     return spoken(error);
   }
   refresh();
-  return null;
+  return { saved: true };
 }
 
 export async function keepEmail(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -661,7 +707,7 @@ export async function keepEmail(_prev: ActionState, formData: FormData): Promise
     return spoken(error);
   }
   refresh();
-  return null;
+  return { saved: true };
 }
 
 export async function keepIdentity(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -676,7 +722,7 @@ export async function keepIdentity(_prev: ActionState, formData: FormData): Prom
     return spoken(error);
   }
   refresh();
-  return null;
+  return { saved: true };
 }
 
 export async function keepPassword(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -686,7 +732,7 @@ export async function keepPassword(_prev: ActionState, formData: FormData): Prom
     return spoken(error);
   }
   refresh();
-  return null;
+  return { saved: true };
 }
 
 export async function doAddFunds(_prev: ActionState, formData: FormData): Promise<ActionState> {

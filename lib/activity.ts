@@ -29,15 +29,8 @@ let fromBlock: bigint | null = null;
 async function historyStart(): Promise<bigint> {
   if (fromBlock !== null) return fromBlock;
   const latest = await publicClient.getBlockNumber();
-  let lo = latest > 8_000_000n ? latest - 8_000_000n : 0n;
-  let hi = latest;
-  while (lo < hi) {
-    const mid = (lo + hi) / 2n;
-    const code = await publicClient.getCode({ address: addresses.factory, blockNumber: mid });
-    if (code && code !== "0x") hi = mid;
-    else lo = mid + 1n;
-  }
-  fromBlock = lo > 0n ? lo - 1n : 0n;
+  const span = 400_000n;
+  fromBlock = latest > span ? latest - span : 0n;
   return fromBlock;
 }
 

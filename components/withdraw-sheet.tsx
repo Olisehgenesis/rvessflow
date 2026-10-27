@@ -56,8 +56,9 @@ export function WithdrawSheet({ savings, unit, conceal = false }: { savings: Sav
     <SlideSheet label="Withdraw" className={withdrawButton} title="Withdraw" description="Choose a saving. Each one has its own withdraw.">
       {(close) =>
         savings.length === 0 ? (
-          <div className="px-1 pb-2">
-            <p className="text-sm leading-relaxed text-muted-foreground">No savings yet. Open a goal, then withdraw from that saving.</p>
+          <div className="px-1 pb-2 text-center">
+            <img src="/marks/saving.png" alt="" className="mx-auto size-24 object-contain" />
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">No savings yet. Open a goal, then withdraw from that saving.</p>
             <Link href="/goals/new" onClick={close} className="mt-4 flex h-12 items-center justify-center rounded-full bg-[#D4F06B] text-sm font-semibold text-[#141414]">
               Create a saving
             </Link>

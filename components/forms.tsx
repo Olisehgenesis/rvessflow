@@ -30,6 +30,7 @@ import {
   withdrawUsd,
   type ActionState,
 } from "@/lib/actions";
+import { shortAddress } from "@/lib/display";
 import type { Person } from "@/lib/protocol";
 import { DateField, addDays, dateProblem, formatDay, secondsUntilEnd, spanText, startOfDay, streamWindow } from "@/components/date-field";
 
@@ -55,13 +56,13 @@ export function AccountSwitch({ people, current }: { people: Person[]; current: 
           <input type="hidden" name="index" value={index} />
           <button
             type="submit"
-            className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left ${on ? "border-foreground bg-muted" : "border-border bg-card"}`}
+            className={`flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left ${on ? "border-[#C5E36A] bg-[#F3FBD8]" : "border-border bg-card"}`}
           >
             <span className="flex min-w-0 items-center gap-3">
               <ProfileAvatar seed={person.address} className="size-10" />
               <span className="min-w-0">
                 <span className="block font-medium">{person.name}</span>
-                <span className="block truncate text-xs text-muted-foreground">{person.address}</span>
+                <span className="block truncate text-xs text-muted-foreground">{shortAddress(person.address)}</span>
               </span>
             </span>
             {on ? <span className="text-xs font-semibold text-foreground">Using</span> : null}

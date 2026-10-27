@@ -234,6 +234,7 @@ export function GroupLink({
   contribution,
   members,
   detail,
+  title,
   quote,
 }: {
   id: string;
@@ -241,6 +242,7 @@ export function GroupLink({
   contribution: string;
   members: number;
   detail: string;
+  title?: string;
   quote: Quote;
 }) {
   return (
@@ -249,7 +251,7 @@ export function GroupLink({
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="font-medium">Group {id}</p>
+            <p className="font-medium">{title || `Group ${id}`}</p>
             <p className="text-xs text-muted-foreground">{members} members</p>
           </div>
           <p className="font-display text-sm font-semibold tabular-nums">{show(contribution, quote)}</p>

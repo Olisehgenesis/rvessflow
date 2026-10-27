@@ -11,7 +11,7 @@ import { percent, show } from "@/lib/display";
 import { hasTokenAmount, showGettingStarted } from "@/lib/home-math";
 import { loadActivity, type ActivityView } from "@/lib/activity";
 import { loadHoldings, type HoldingRow, type HoldingsView } from "@/lib/holdings";
-import { loadIncoming, loadPortfolio, networkName, type Portfolio } from "@/lib/protocol";
+import { loadIncoming, loadPortfolio, networkName, type IncomingItem, type Portfolio } from "@/lib/protocol";
 import { loadQuote } from "@/lib/rates";
 import type { Quote } from "@/lib/quote";
 import type { Address } from "viem";
@@ -48,15 +48,17 @@ function HomeTools({ alert = false }: { alert?: boolean }) {
 async function HomeFigures({ who }: { who: { address: Address; name: string; index: number } }) {
   const loaded = await readHome(who);
   if (!loaded.ok) return <BalanceError message={loaded.message} />;
-  return <HomeReady who={who} portfolio={loaded.portfolio} holdings={loaded.holdings} quote={loaded.quote} />;
+  return <HomeReady who={who} portfolio={loaded.portfolio} holdings={loaded.holdings} quote={loaded.quote} incoming={loaded.incoming} />;
 }
 
 async function readHome(who: { address: Address; name: string; index: number }) {
   try {
-    const portfolio = await loadPortfolio(who);
-    const quote = await loadQuote();
+    const portfolioPromise = loadPortfolio(who, "home");
+    const quotePromise = loadQuote();
+    const incomingPromise = loadIncoming(who.address);
+    const [portfolio, quote, incoming] = await Promise.all([portfolioPromise, quotePromise, incomingPromise]);
     const holdings = await loadHoldings(who.address, portfolio, quote);
-    return { ok: true as const, portfolio, quote, holdings };
+    return { ok: true as const, portfolio, quote, holdings, incoming };
   } catch (error) {
     const message = error instanceof Error ? error.message : `${networkName} did not return a balance.`;
     return { ok: false as const, message };
@@ -68,20 +70,14 @@ async function HomeReady({
   portfolio,
   holdings,
   quote,
+  incoming,
 }: {
   who: { address: Address; name: string; index: number };
   portfolio: Portfolio;
   holdings: HoldingsView;
   quote: Quote;
+  incoming: IncomingItem[];
 }) {
-  let activity: ActivityView[] = [];
-  let activityError = "";
-  try {
-    activity = await loadActivity(who.address, portfolio);
-  } catch (error) {
-    activityError = error instanceof Error ? error.message : "Activity could not be loaded.";
-  }
-  const incoming = await loadIncoming(who.address);
   const liveIn = incoming.filter((item) => item.flow.active && !item.flow.paused && !item.flow.settled && BigInt(item.flow.rate) > 0n);
   const inflow = liveIn.reduce((sum, item) => sum + BigInt(item.flow.rate), 0n);
   const stillDue = liveIn.reduce((sum, item) => sum + BigInt(item.flow.remaining), 0n);
@@ -172,24 +168,46 @@ async function HomeReady({
         </section>
       ) : null}
       <QuickActions />
-      {activityError || activity.length > 0 ? (
-        <section className="mt-6">
-          <div className="mb-2 flex items-end justify-between">
-            <h2 className="text-base font-semibold">Recent activity</h2>
-            <Link href="/home/activity" className="text-sm font-medium text-muted-foreground">
-              View all
-            </Link>
-          </div>
-          {activityError ? (
-            <p className="rounded-2xl border border-border bg-card px-4 py-4 text-sm text-muted-foreground" role="alert">
-              Activity did not load. {activityError}
-            </p>
-          ) : (
-            <ActivityList items={activity.slice(0, 4)} quote={quote} />
-          )}
-        </section>
-      ) : null}
+      <Suspense fallback={<p className="mt-6 text-sm text-muted-foreground">Loading activity…</p>}>
+        <RecentActivity who={who} portfolio={portfolio} quote={quote} />
+      </Suspense>
     </>
+  );
+}
+
+async function RecentActivity({
+  who,
+  portfolio,
+  quote,
+}: {
+  who: { address: Address; name: string; index: number };
+  portfolio: Portfolio;
+  quote: Quote;
+}) {
+  let activity: ActivityView[] = [];
+  let activityError = "";
+  try {
+    activity = await loadActivity(who.address, portfolio);
+  } catch (error) {
+    activityError = error instanceof Error ? error.message : "Activity could not be loaded.";
+  }
+  if (!activityError && activity.length === 0) return null;
+  return (
+    <section className="mt-6">
+      <div className="mb-2 flex items-end justify-between">
+        <h2 className="text-base font-semibold">Recent activity</h2>
+        <Link href="/home/activity" className="text-sm font-medium text-muted-foreground">
+          View all
+        </Link>
+      </div>
+      {activityError ? (
+        <p className="rounded-2xl border border-border bg-card px-4 py-4 text-sm text-muted-foreground" role="alert">
+          Activity did not load. {activityError}
+        </p>
+      ) : (
+        <ActivityList items={activity.slice(0, 4)} quote={quote} />
+      )}
+    </section>
   );
 }
 
