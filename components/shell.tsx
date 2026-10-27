@@ -50,7 +50,7 @@ function DesktopSideView({ pathname }: { pathname: string }) {
     <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-r lg:border-[#E3EAD4] lg:bg-[#F7FAF2] lg:px-3 lg:py-5">
       <Link href="/home" className="flex items-center gap-2.5 rounded-2xl px-2 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]">
         <img src="/mark.jpg" alt="" className="size-9 rounded-xl object-cover" />
-        <span className="font-[family-name:var(--font-manrope)] text-lg font-semibold tracking-[-0.03em] text-[#141414]">RvessFlow</span>
+        <span className="font-[family-name:var(--font-manrope)] text-lg font-semibold tracking-[-0.03em] text-[#141414]">Rvess</span>
       </Link>
       <nav className="mt-7" aria-label="Main">
         <ul className="space-y-1">

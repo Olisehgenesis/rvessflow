@@ -1,6 +1,6 @@
 import EthereumProvider from "@walletconnect/ethereum-provider";
 import { createPublicClient, createWalletClient, custom, http, type Address, type Hex } from "viem";
-import type { ProtocolChain } from "./chains";
+import { chains, type ProtocolChain } from "./chains";
 
 const projectId =
   import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "fb48461bfb6043c40729e05706109f1a";
@@ -9,11 +9,7 @@ type Eip1193 = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
 };
 
-declare global {
-  interface Window {
-    ethereum?: Eip1193;
-  }
-}
+const baseWalletId = "fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa";
 
 export type ConnectedWallet = {
   address: Address;
@@ -44,8 +40,7 @@ export type ConnectedWallet = {
 };
 
 export async function connectWallet(chain: ProtocolChain): Promise<ConnectedWallet> {
-  const injected = window.ethereum;
-  const source: Eip1193 = injected ?? (await walletConnect(chain));
+  const source = await walletConnect(chain);
   const wallet = createWalletClient({ chain: chain.chain, transport: custom(source) });
   const [address] = await wallet.requestAddresses();
   if (!address) throw new Error("The wallet did not return an account.");
@@ -56,7 +51,7 @@ export async function connectWallet(chain: ProtocolChain): Promise<ConnectedWall
     address,
     chainId,
     getChainId: () => wallet.getChainId(),
-    switchChain: (id) => wallet.switchChain({ id }),
+    switchChain: (id) => switchOrAddChain(source, wallet, id),
     send: (args) => wallet.sendTransaction({ account: address, to: args.to, data: args.data, chain: args.chain.chain }),
     signTypedData: (parameters) => wallet.signTypedData({ account: address, ...parameters }),
     getBytecode: (account, selected) => reader(selected).getBytecode({ address: account }),
@@ -74,15 +69,48 @@ async function walletConnect(chain: ProtocolChain): Promise<Eip1193> {
     chains: [chain.id],
     showQrModal: true,
     metadata: {
-      name: "RvessFlow Protocol",
+      name: "Rvess Protocol",
       description: "Sign a deployment from your wallet",
       url: window.location.origin,
       icons: [`${window.location.origin}/icon.svg`],
     },
     rpcMap: { [chain.id]: chain.rpc },
+    qrModalOptions: {
+      themeMode: "light",
+      enableExplorer: true,
+      explorerRecommendedWalletIds: [baseWalletId],
+    },
   });
   await provider.connect();
   return provider as Eip1193;
+}
+
+async function switchOrAddChain(
+  source: Eip1193,
+  wallet: ReturnType<typeof createWalletClient>,
+  id: number,
+): Promise<void> {
+  try {
+    await wallet.switchChain({ id });
+  } catch (error) {
+    const code = typeof error === "object" && error !== null && "code" in error ? Number(error.code) : 0;
+    if (code === 4001) throw error;
+    if (code !== 4902) throw error;
+    const selected = id === 84532 || id === 8453 ? chains[id] : null;
+    if (!selected) throw error;
+    await source.request({
+      method: "wallet_addEthereumChain",
+      params: [
+        {
+          chainId: `0x${id.toString(16)}`,
+          chainName: selected.name,
+          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+          rpcUrls: [selected.rpc],
+          blockExplorerUrls: [selected.chain.blockExplorers?.default.url ?? "https://basescan.org"],
+        },
+      ],
+    });
+  }
 }
 
 export async function ensureChain(current: ConnectedWallet, chain: ProtocolChain): Promise<void> {

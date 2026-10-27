@@ -32,21 +32,21 @@ const site = "https://rvessflow.vercel.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(site),
-  title: "RvessFlow",
+  title: "Rvess",
   description: "Beta. Your money, in motion on Base.",
-  applicationName: "RvessFlow",
+  applicationName: "Rvess",
   alternates: { canonical: "/" },
   openGraph: {
-    title: "RvessFlow",
+    title: "Rvess",
     description: "Beta. Savings, streams, locks, and groups on Base.",
     url: site,
-    siteName: "RvessFlow",
+    siteName: "Rvess",
     type: "website",
-    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "RvessFlow" }],
+    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "Rvess" }],
   },
   appleWebApp: {
     capable: true,
-    title: "RvessFlow",
+    title: "Rvess",
     statusBarStyle: "default",
     startupImage: [
       { url: "/splash/iphone-se.png", media: "(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" },
@@ -91,7 +91,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              name: "RvessFlow",
+              name: "Rvess",
               applicationCategory: "FinanceApplication",
               operatingSystem: "Web",
               url: site,

@@ -4,8 +4,8 @@ export default function manifest(): MetadataRoute.Manifest {
   const icon = { src: "/icon-192.png", sizes: "192x192", type: "image/png" };
   return {
     id: "/",
-    name: "RvessFlow",
-    short_name: "RvessFlow",
+    name: "Rvess",
+    short_name: "Rvess",
     description: "Beta. Savings, streams, locks, and groups on Base.",
     lang: "en",
     dir: "ltr",

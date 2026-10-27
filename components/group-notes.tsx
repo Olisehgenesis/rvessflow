@@ -36,7 +36,7 @@ export function GroupNotes({ id }: { id: string }) {
     <div className="space-y-4">
       <div className="mb-4 flex items-center gap-3">
         <img src="/marks/bell.png" alt="" className="size-12 shrink-0 object-contain" />
-        <p className="text-sm leading-snug text-muted-foreground">These switches are saved on this phone. RvessFlow does not send alerts yet.</p>
+        <p className="text-sm leading-snug text-muted-foreground">These switches are saved on this phone. Rvess does not send alerts yet.</p>
       </div>
       <ul className="divide-y divide-border border-y border-border">
         {items.map(([name, title, body]) => (

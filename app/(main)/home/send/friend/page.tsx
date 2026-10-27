@@ -8,7 +8,7 @@ export default function SendFriendPage() {
       <SendScreen
         mode="friend"
         title="To a friend"
-        lead="Find someone by the email, phone, or member code they saved on their RvessFlow account."
+        lead="Find someone by the email, phone, or member code they saved on their Rvess account."
       />
     </Suspense>
   );

@@ -1,7 +1,7 @@
 export const terms = [
   {
     title: "Your signature",
-    body: "You sign for your own vault, lock, and group. RvessFlow does not keep your key. A passkey stays on your device. A connected wallet signs in the wallet.",
+    body: "You sign for your own vault, lock, and group. Rvess does not keep your key. A passkey stays on your device. A connected wallet signs in the wallet.",
   },
   {
     title: "Unaudited contracts",

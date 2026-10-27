@@ -168,7 +168,7 @@ export function App() {
         if (fresh.saved?.addresses) {
           setPlan({ deployer: fresh.saved.deployer, calls: [], pieces: [], addresses: fresh.saved.addresses });
         }
-        setStatus("This wallet already deployed the RvessFlow Protocol on this chain.");
+        setStatus("This wallet already deployed the Rvess Protocol on this chain.");
         return;
       }
       if (!fresh.deployment) throw new Error("The deployment could not be prepared.");
@@ -216,7 +216,7 @@ export function App() {
     <main className="page">
       <h1>Sign the deployment</h1>
       <p className="lede">
-        Any two of these three wallets can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. You connect one of them and sign. The first signature creates a small contract. The protocol takes a few more signatures, because a wallet cannot fit every contract into one transaction. The addresses stay the same. People using RvessFlow do not sign here. This page stores no key. A fresh deployment does not change contracts already on Base. The section below upgrades the group contract that is already live.
+        Any two of these three wallets can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. You connect one of them and sign. The first signature creates a small contract. The protocol takes a few more signatures, because a wallet cannot fit every contract into one transaction. The addresses stay the same. People using Rvess do not sign here. This page stores no key. A fresh deployment does not change contracts already on Base. The section below upgrades the group contract that is already live.
       </p>
 
       <div className="choices" role="group" aria-label="Network">

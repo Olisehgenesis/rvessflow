@@ -7,7 +7,7 @@ export function SignOutForm({ className }: { className: string }) {
     <form
       action={signOut}
       onSubmit={(event) => {
-        if (window.matchMedia("(min-width: 64rem)").matches && !window.confirm("Sign out of RvessFlow on this browser?")) {
+        if (window.matchMedia("(min-width: 64rem)").matches && !window.confirm("Sign out of Rvess on this browser?")) {
           event.preventDefault();
         }
       }}

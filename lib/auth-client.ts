@@ -1,8 +1,12 @@
 "use client";
 
-import { isAddress } from "viem";
+import { isAddress, toHex } from "viem";
 import { openSession } from "@/lib/actions";
-import { savePasskey, type SavedPasskey } from "@/lib/passkey-vault";
+import { passkeySignedByHex, publicKeyHex, recoverSigningKey } from "@/lib/passkey-match";
+import { recoverPasskey } from "@/lib/passkey-recover";
+import type { PasskeyProof } from "@/lib/passkey-proof";
+import { samePasskeyId } from "@/lib/passkey-proof";
+import { readPasskeys, savePasskey, type SavedPasskey } from "@/lib/passkey-vault";
 
 const testnet = process.env.NEXT_PUBLIC_RVESS_NETWORK === "sepolia";
 const rpc = testnet
@@ -13,7 +17,6 @@ export const walletConnectProjectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "fb48461bfb6043c40729e05706109f1a";
 
 const baseWalletId = "fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa";
-const walletSourceKey = "rvess-wallet-source";
 
 type EthereumProvider = Awaited<ReturnType<(typeof import("@walletconnect/ethereum-provider"))["default"]["init"]>>;
 type WalletConnection = {
@@ -22,11 +25,8 @@ type WalletConnection = {
   connected?: boolean;
   accounts?: readonly string[];
 };
-type WalletSource = "base" | "wallet";
 
 let providerPromise: Promise<EthereumProvider> | null = null;
-let basePromise: Promise<WalletConnection> | null = null;
-let baseReady: WalletConnection | null = null;
 let chosen: WalletConnection | null = null;
 let passkeyLibs: PasskeyLibs | null = null;
 
@@ -38,30 +38,6 @@ type PasskeyLibs = {
   toKernelSmartAccount: typeof import("permissionless/accounts").toKernelSmartAccount;
 };
 
-function rememberSource(source: WalletSource) {
-  try {
-    localStorage.setItem(walletSourceKey, source);
-  } catch {
-    // A private browser can block storage. The connection still works until the page reloads.
-  }
-}
-
-function rememberedSource(): WalletSource | null {
-  try {
-    const value = localStorage.getItem(walletSourceKey);
-    return value === "base" || value === "wallet" ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function injectedProvider(): WalletConnection | null {
-  const ethereum = (window as Window & { ethereum?: WalletConnection & { providers?: WalletConnection[]; isCoinbaseWallet?: boolean } }).ethereum;
-  if (!ethereum) return null;
-  const list = ethereum.providers ?? [ethereum];
-  return list.find((provider) => "isCoinbaseWallet" in provider && provider.isCoinbaseWallet) ?? ethereum;
-}
-
 function walletConnectProvider(): Promise<WalletConnection> {
   providerPromise ??= (async () => {
     const { base, baseSepolia } = await import("viem/chains");
@@ -72,7 +48,7 @@ function walletConnectProvider(): Promise<WalletConnection> {
       chains: [chain.id],
       showQrModal: true,
       metadata: {
-        name: "RvessFlow",
+        name: "Rvess",
         description: "Your money, in motion.",
         url: window.location.origin,
         icons: [`${window.location.origin}/icon-512.png`],
@@ -90,33 +66,17 @@ function walletConnectProvider(): Promise<WalletConnection> {
             links: { native: "cbwallet://wc", universal: "https://go.cb-w.com/wc" },
           },
         ],
+        desktopWallets: [
+          {
+            id: "rvess-base",
+            name: "Base",
+            links: { native: "cbwallet://wc", universal: "https://go.cb-w.com/wc" },
+          },
+        ],
       },
     });
   })();
   return providerPromise as Promise<WalletConnection>;
-}
-
-function baseAccountProvider(): Promise<WalletConnection> {
-  if (baseReady) return Promise.resolve(baseReady);
-  if (!basePromise) {
-    basePromise = (async () => {
-      const { createBaseAccountSDK } = await import("@base-org/account/browser");
-      const { base, baseSepolia } = await import("viem/chains");
-      const chain = testnet ? baseSepolia : base;
-      const sdk = createBaseAccountSDK({
-        appName: "RvessFlow",
-        appLogoUrl: `${window.location.origin}/icon-512.png`,
-        appChainIds: [chain.id],
-      });
-      const provider = sdk.getProvider();
-      const connection = {
-        request: (args: { method: string; params?: unknown }) => provider.request({ method: args.method, params: Array.isArray(args.params) || (args.params !== null && typeof args.params === "object") ? args.params : undefined }),
-      };
-      baseReady = connection;
-      return connection;
-    })();
-  }
-  return basePromise;
 }
 
 function loadPasskeyLibs(): Promise<PasskeyLibs> {
@@ -138,19 +98,14 @@ function loadPasskeyLibs(): Promise<PasskeyLibs> {
   });
 }
 
-/** Loads the passkey and Coinbase sign-in code before the click, so the prompt can open immediately. */
+/** Loads the passkey code and the WalletConnect provider before the click, so the prompt can open immediately. */
 export function prepareSignIn(): Promise<void> {
-  return Promise.all([loadPasskeyLibs(), baseAccountProvider()]).then(() => undefined);
+  return Promise.all([loadPasskeyLibs(), walletConnectProvider()]).then(() => undefined);
 }
 
+/** The WalletConnect provider. External wallets are reached only through it. */
 export function walletProvider(): Promise<WalletConnection> {
   if (chosen) return Promise.resolve(chosen);
-  if (rememberedSource() === "base") {
-    return baseAccountProvider().then((provider) => {
-      chosen = provider;
-      return provider;
-    });
-  }
   return walletConnectProvider().then((provider) => {
     chosen = provider;
     return provider;
@@ -163,7 +118,7 @@ export function createPasskeyWallet(label: string): Promise<{ address: string; l
   if (!ready) return Promise.reject(new Error("Passkey setup is still loading. Try again in a moment."));
   const credentialPromise = ready.accountAbstraction.createWebAuthnCredential({
     name,
-    rp: { name: "RvessFlow", id: window.location.hostname },
+    rp: { name: "Rvess", id: window.location.hostname },
   });
   return credentialPromise.then(async (credential) => {
     const owner = ready.accountAbstraction.toWebAuthnAccount({
@@ -196,7 +151,7 @@ function bytesFromId(id: string): ArrayBuffer {
 }
 
 /** Starts the passkey prompt. Call this directly from the click, before any await. */
-export function requestPasskey(ids: string[]): Promise<string> {
+export function requestPasskey(ids: string[]): Promise<PasskeyProof> {
   if (typeof window.PublicKeyCredential === "undefined") throw new Error("This browser cannot use a passkey.");
   const challenge = new ArrayBuffer(32);
   crypto.getRandomValues(new Uint8Array(challenge));
@@ -209,20 +164,58 @@ export function requestPasskey(ids: string[]): Promise<string> {
   if (ids.length > 0) publicKey.allowCredentials = ids.map((id) => ({ type: "public-key", id: bytesFromId(id) }));
   return Promise.resolve(navigator.credentials.get({ publicKey })).then((credential) => {
     if (!credential || credential.type !== "public-key") throw new Error("The passkey prompt closed before an account was chosen.");
-    return credential.id;
+    const passkey = credential as PublicKeyCredential;
+    const response = passkey.response as AuthenticatorAssertionResponse;
+    return {
+      id: passkey.id,
+      authenticatorData: toHex(new Uint8Array(response.authenticatorData)),
+      clientDataJSON: new TextDecoder().decode(response.clientDataJSON),
+      signature: toHex(new Uint8Array(response.signature)),
+    };
   });
 }
 
-export async function finishPasskey(saved: SavedPasskey[], id: string) {
-  const match = saved.find((item) => item.id === id);
-  if (!match) {
-    throw new Error(
-      saved.length === 0
-        ? "That passkey is on this device, but this browser does not have the account saved with it. Use the browser where you created it, or Connect Base if it is a Coinbase passkey."
-        : "That passkey does not match an account saved in this browser.",
-    );
+async function accountFromKey(id: string, publicKey: SavedPasskey["publicKey"], label: string): Promise<SavedPasskey> {
+  const ready = passkeyLibs ?? (await loadPasskeyLibs());
+  const owner = ready.accountAbstraction.toWebAuthnAccount({
+    credential: { id, publicKey },
+    rpId: window.location.hostname,
+  });
+  const account = await ready.toKernelSmartAccount({
+    client: ready.createPublicClient({
+      chain: testnet ? ready.chains.baseSepolia : ready.chains.base,
+      transport: ready.http(rpc),
+    }),
+    owners: [owner],
+    version: "0.3.1",
+    entryPoint: { address: ready.accountAbstraction.entryPoint07Address, version: "0.7" },
+  });
+  return { id, publicKey, address: account.address, label };
+}
+
+export async function finishPasskey(saved: SavedPasskey[], proof: PasskeyProof) {
+  const fresh = await readPasskeys().catch(() => [] as SavedPasskey[]);
+  const known = [...fresh, ...saved];
+  const rpId = window.location.hostname;
+  const byId = known.find((item) => samePasskeyId(item.id, proof.id));
+  let record = byId ?? null;
+  if (!record) {
+    const key = recoverSigningKey(proof, rpId);
+    if (key) {
+      const publicKey = publicKeyHex(key.x, key.y);
+      const named = known.find((item) => item.publicKey.toLowerCase() === publicKey.toLowerCase());
+      record = await accountFromKey(proof.id, publicKey, named?.label || "Passkey");
+    }
   }
-  await openSession(match.address, "passkey", match.label);
+  if (!record) {
+    const restored = await recoverPasskey(proof);
+    if (restored && (passkeySignedByHex(restored.publicKey, proof, rpId) || samePasskeyId(restored.id, proof.id))) record = restored;
+  }
+  if (!record) {
+    throw new Error("This passkey is on this device, but the account could not be opened. Try again, or connect the wallet through WalletConnect.");
+  }
+  await savePasskey(record);
+  await openSession(record.address, "passkey", record.label);
 }
 
 async function accountFrom(provider: WalletConnection): Promise<string> {
@@ -234,25 +227,50 @@ async function accountFrom(provider: WalletConnection): Promise<string> {
   return address;
 }
 
-function rememberConnection(provider: WalletConnection, source: WalletSource, address: string) {
+function rememberConnection(provider: WalletConnection, address: string) {
   chosen = provider;
-  rememberSource(source);
   return address;
 }
 
-/** Starts the Coinbase prompt. Call this directly from the click, before any await. */
-export function requestBaseAccount(): Promise<string> {
-  const ready = baseReady;
-  if (ready) return accountFrom(ready).then((address) => rememberConnection(ready, "base", address));
-  return baseAccountProvider().then((provider) => accountFrom(provider).then((address) => rememberConnection(provider, "base", address)));
+const baseNetwork = testnet
+  ? {
+      chainId: "0x14a34",
+      chainName: "Base Sepolia",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcUrls: ["https://sepolia.base.org"],
+      blockExplorerUrls: ["https://sepolia.basescan.org"],
+    }
+  : {
+      chainId: "0x2105",
+      chainName: "Base",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcUrls: ["https://mainnet.base.org"],
+      blockExplorerUrls: ["https://basescan.org"],
+    };
+
+function rejected(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && Number(error.code) === 4001;
 }
 
-/** Starts the wallet prompt. Call this directly from the click, before any await. */
-export function requestWalletAccount(): Promise<string> {
-  const injected = injectedProvider();
-  if (injected) {
-    return accountFrom(injected).then((address) => rememberConnection(injected, "wallet", address));
+/** Asks the connected wallet, through WalletConnect, to switch to Base or add it. */
+async function joinBase(provider: WalletConnection) {
+  const current = await provider.request({ method: "eth_chainId" }).catch(() => null);
+  if (typeof current === "string" && current.toLowerCase() === baseNetwork.chainId) return;
+  try {
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: baseNetwork.chainId }] });
+    return;
+  } catch (error) {
+    if (rejected(error)) throw error;
   }
+  try {
+    await provider.request({ method: "wallet_addEthereumChain", params: [baseNetwork] });
+  } catch (error) {
+    if (rejected(error)) throw error;
+  }
+}
+
+/** Opens WalletConnect. Every external wallet, including Base, is chosen there. */
+export function requestWalletAccount(): Promise<string> {
   return connectWalletConnect();
 }
 
@@ -260,7 +278,8 @@ async function connectWalletConnect(): Promise<string> {
   if (!walletConnectProjectId) throw new Error("WalletConnect is not configured.");
   const provider = await walletConnectProvider();
   if (!provider.connected) await provider.connect?.();
+  await joinBase(provider);
   const address = provider.accounts?.[0];
   if (!address || !isAddress(address)) throw new Error("The wallet did not return an account.");
-  return rememberConnection(provider, "wallet", address);
+  return rememberConnection(provider, address);
 }

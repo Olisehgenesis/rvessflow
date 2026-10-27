@@ -1,19 +1,16 @@
 "use client";
 
-import type { Address, Hex } from "viem";
+import { rememberPasskey } from "@/lib/passkey-cookie";
+import type { PasskeyRecord } from "@/lib/passkey-proof";
 
-export type SavedPasskey = {
-  id: string;
-  publicKey: Hex;
-  address: Address;
-  label: string;
-};
+export type SavedPasskey = PasskeyRecord;
 
 const DB = "rvess-passkeys";
 const STORE = "crypto";
 const SEAL = "seal";
 const LOCAL = "rvess-passkey-vault";
 const PLAIN = "rvess-passkey-records";
+const RECORDS = "records";
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -26,30 +23,30 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-function idbGet(db: IDBDatabase): Promise<CryptoKey | undefined> {
+function idbGet<T>(db: IDBDatabase, key: string): Promise<T | undefined> {
   return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE, "readonly").objectStore(STORE).get(SEAL);
-    request.onsuccess = () => resolve(request.result as CryptoKey | undefined);
+    const request = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
+    request.onsuccess = () => resolve(request.result as T | undefined);
     request.onerror = () => reject(request.error ?? new Error("Could not read the passkey store."));
   });
 }
 
-function idbSet(db: IDBDatabase, key: CryptoKey): Promise<void> {
+function idbSet(db: IDBDatabase, key: string, value: unknown): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(key, SEAL);
+    tx.objectStore(STORE).put(value, key);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error ?? new Error("Could not write the passkey store."));
   });
 }
 
-async function sealKey(): Promise<CryptoKey> {
-  const db = await openDb();
-  const existing = await idbGet(db);
-  if (existing) return existing;
-  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
-  await idbSet(db, key);
-  return key;
+async function existingSeal(): Promise<CryptoKey | null> {
+  try {
+    const db = await openDb();
+    return (await idbGet<CryptoKey>(db, SEAL)) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function b64ToBytes(value: string): Uint8Array {
@@ -85,14 +82,24 @@ function writePlain(records: SavedPasskey[]) {
   localStorage.setItem(PLAIN, JSON.stringify(records));
 }
 
-export async function readPasskeys(): Promise<SavedPasskey[]> {
-  const plain = readPlain();
-  if (plain.length > 0) return plain;
+async function readIndexed(): Promise<SavedPasskey[]> {
+  try {
+    const db = await openDb();
+    const raw = await idbGet<string>(db, RECORDS);
+    if (typeof raw !== "string") return [];
+    return readable(JSON.parse(raw) as unknown);
+  } catch {
+    return [];
+  }
+}
+
+async function readEncrypted(): Promise<SavedPasskey[]> {
   const raw = localStorage.getItem(LOCAL);
   if (!raw) return [];
   const parsed = JSON.parse(raw) as { iv?: string; data?: string };
   if (!parsed.iv || !parsed.data) return [];
-  const key = await sealKey();
+  const key = await existingSeal();
+  if (!key) return [];
   const iv = b64ToBytes(parsed.iv);
   const data = b64ToBytes(parsed.data);
   const opened = await crypto.subtle.decrypt(
@@ -100,13 +107,48 @@ export async function readPasskeys(): Promise<SavedPasskey[]> {
     key,
     data as BufferSource,
   );
-  const records = readable(JSON.parse(new TextDecoder().decode(opened)) as unknown);
-  if (records.length > 0) writePlain(records);
+  return readable(JSON.parse(new TextDecoder().decode(opened)) as unknown);
+}
+
+function merge(groups: SavedPasskey[][]): SavedPasskey[] {
+  const byAddress = new Map<string, SavedPasskey>();
+  for (const group of groups) {
+    for (const record of group) byAddress.set(record.address.toLowerCase(), record);
+  }
+  return [...byAddress.values()];
+}
+
+export async function readPasskeys(): Promise<SavedPasskey[]> {
+  const plain = readPlain();
+  const indexed = await readIndexed();
+  let encrypted: SavedPasskey[] = [];
+  if (plain.length === 0 && indexed.length === 0) {
+    try {
+      encrypted = await readEncrypted();
+    } catch {
+      encrypted = [];
+    }
+  }
+  const records = merge([plain, indexed, encrypted]);
+  if (records.length > 0 && (plain.length === 0 || indexed.length === 0)) {
+    writePlain(records);
+    await writeIndexed(records);
+  }
   return records;
+}
+
+async function writeIndexed(records: SavedPasskey[]) {
+  try {
+    const db = await openDb();
+    await idbSet(db, RECORDS, JSON.stringify(records));
+  } catch {
+    // Site storage can be blocked. The cookie copy is written separately.
+  }
 }
 
 async function writePasskeys(records: SavedPasskey[]) {
   writePlain(records);
+  await writeIndexed(records);
 }
 
 export async function savePasskey(record: SavedPasskey) {
@@ -114,4 +156,5 @@ export async function savePasskey(record: SavedPasskey) {
   const next = current.filter((item) => item.address.toLowerCase() !== record.address.toLowerCase());
   next.push(record);
   await writePasskeys(next);
+  await rememberPasskey(record).catch(() => undefined);
 }

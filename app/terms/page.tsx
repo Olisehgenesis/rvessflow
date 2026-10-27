@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { terms } from "@/lib/terms";
 
-export const metadata = { title: "Terms · RvessFlow" };
+export const metadata = { title: "Terms · Rvess" };
 
 export default function TermsPage() {
   return (
     <main className="mx-auto min-h-full max-w-xl px-5 py-10">
       <Link href="/" className="text-sm font-medium text-[#4E5560]">
-        RvessFlow
+        Rvess
       </Link>
       <h1 className="mt-6 text-[2rem] leading-none font-semibold tracking-[-0.04em]">Terms</h1>
       <p className="mt-3 text-sm leading-relaxed text-[#6B7280]">

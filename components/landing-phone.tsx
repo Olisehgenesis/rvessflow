@@ -149,7 +149,7 @@ function Device({ quote, readAt, still, hold }: { quote: Quote; readAt: number |
           <div className="flex items-center justify-between">
             <p className="flex items-center gap-1.5 text-[13px] font-semibold tracking-tight">
               <IconMark className="size-5 [--background:#ffffff]" />
-              RvessFlow
+              Rvess
             </p>
             <span className="grid size-6 place-items-center rounded-full bg-[#F4F3EF]">
               <ProductGlyph name="lock" className="size-3.5" />

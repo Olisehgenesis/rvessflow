@@ -5,7 +5,7 @@ import { Dialog } from "radix-ui";
 import { Check, ChevronLeft, ChevronRight, Fingerprint, Lock, Mail, Shield, Wallet, X } from "lucide-react";
 import { IconMark } from "@/components/icons";
 import { enterApp, lookUpEmail, noteTerms, openSession } from "@/lib/actions";
-import { createPasskeyWallet, finishPasskey, prepareSignIn, requestBaseAccount, requestPasskey, requestWalletAccount } from "@/lib/auth-client";
+import { createPasskeyWallet, finishPasskey, prepareSignIn, requestPasskey, requestWalletAccount } from "@/lib/auth-client";
 import { shortAddress } from "@/lib/display";
 import { readPasskeys, type SavedPasskey } from "@/lib/passkey-vault";
 
@@ -20,8 +20,9 @@ type Phase =
   | { name: "absent" }
   | { name: "creating" }
   | { name: "created"; address: string; label: string }
-  | { name: "connecting"; via: "base" | "wallet" }
+  | { name: "connecting"; via: "wallet" }
   | { name: "confirming"; label: string }
+  | { name: "restoring" }
   | { name: "cancelled"; kind: Kind; attempt: Attempt }
   | { name: "failed"; kind: Kind; attempt: Attempt; detail?: string };
 
@@ -68,6 +69,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
   const [email, setEmail] = useState("");
   const [emailNote, setEmailNote] = useState("");
   const [emailMatch, setEmailMatch] = useState<SavedPasskey | null>(null);
+  const [emailRestore, setEmailRestore] = useState(false);
   const [emailWallet, setEmailWallet] = useState(false);
   const [emailBusy, setEmailBusy] = useState(false);
   const [vaultNote, setVaultNote] = useState("");
@@ -88,7 +90,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
         }
       }
       if (rows.status === "rejected") {
-        setVaultNote("A passkey saved in this browser could not be opened. You can still try the passkey prompt, or use Connect Base if it is a Coinbase passkey.");
+        setVaultNote("A passkey saved in this browser could not be opened. You can still try the passkey prompt, or connect the wallet through WalletConnect.");
       } else if (prepared.status === "rejected") {
         setVaultNote("Sign-in is still loading. Wait a moment, then try the passkey again.");
       }
@@ -141,26 +143,6 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
     })();
   }
 
-  function startBase() {
-    if (!agreed) {
-      setTermsError("Accept the terms before you sign.");
-      return;
-    }
-    setTermsError("");
-    setPhase({ name: "connecting", via: "base" });
-    const connecting = requestBaseAccount();
-    void (async () => {
-      try {
-        const address = await connecting;
-        await noteTerms();
-        await openSession(address, "wallet", name.trim());
-      } catch (error) {
-        if (redirectError(error)) throw error;
-        setPhase(cancelled(error) ? { name: "cancelled", kind: "wallet", attempt: "connect" } : { name: "failed", kind: "wallet", attempt: "connect", detail: failureDetail(error) });
-      }
-    })();
-  }
-
   function startWallet() {
     if (!agreed) {
       setTermsError("Accept the terms before you sign.");
@@ -188,7 +170,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
     }
     setTermsError("");
     setPhase({ name: "confirming", label: passkeys.length === 1 ? passkeys[0].label : "your passkey" });
-    let confirming: Promise<string>;
+    let confirming: Promise<Awaited<ReturnType<typeof requestPasskey>>>;
     try {
       confirming = requestPasskey(passkeys.map((passkey) => passkey.id));
     } catch (error) {
@@ -197,9 +179,10 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
     }
     void (async () => {
       try {
-        const id = await confirming;
+        const proof = await confirming;
+        setPhase({ name: "restoring" });
         await noteTerms();
-        await finishPasskey(passkeys, id);
+        await finishPasskey(passkeys, proof);
       } catch (error) {
         if (redirectError(error)) throw error;
         if (passkeys.length === 0 && missingPasskey(error)) {
@@ -223,6 +206,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
   async function checkEmail() {
     setEmailNote("");
     setEmailMatch(null);
+    setEmailRestore(false);
     setEmailWallet(false);
     setEmailBusy(true);
     try {
@@ -237,7 +221,8 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
       else {
         const match = saved.find((item) => item.address.toLowerCase() === hint.address.toLowerCase()) ?? null;
         setEmailMatch(match);
-        setEmailNote(match ? `That email belongs to ${match.label} on this device. Continue with that passkey.` : "That email matches a passkey, but this browser could not open it.");
+        setEmailRestore(!match);
+        setEmailNote(match ? `That email belongs to ${match.label} on this device. Continue with that passkey.` : "That email belongs to a passkey. Continue with the passkey on this device and the account is restored.");
       }
     } catch {
       setEmailNote("The member directory is unavailable, so this email cannot be checked. You can still sign in with a passkey or wallet.");
@@ -262,14 +247,14 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
       ? "An account is already on this device. Continue with the passkey you saved here, or the wallet you used before."
       : signingIn
         ? "Sign in with the method you already set up. A passkey opens on the device that created it."
-        : "Sign in with a wallet. The same wallet works on any device. A passkey you already made still opens on this device.";
+        : "A passkey is the recommended way to create an account. It stays on this device. Any wallet connects through WalletConnect.";
 
   return (
     <div className="px-5 pt-4 pb-6 sm:px-6">
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.03em]">
           <IconMark className="size-7 [--background:#ffffff]" />
-          RvessFlow
+          Rvess
         </p>
         <Dialog.Close className="grid size-8 place-items-center rounded-full text-[#141414] hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]">
           <X className="size-4" />
@@ -283,7 +268,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
             <Lock className="size-3.5" />
             Secure & private
           </p>
-          <Dialog.Title className="mt-4 text-[1.7rem] leading-[1.05] font-semibold tracking-[-0.04em]">Welcome to RvessFlow</Dialog.Title>
+          <Dialog.Title className="mt-4 text-[1.7rem] leading-[1.05] font-semibold tracking-[-0.04em]">Welcome to Rvess</Dialog.Title>
           <Dialog.Description className="mt-2 text-sm leading-relaxed text-[#5C6572]">{lead}</Dialog.Description>
 
           <div className="mt-5 grid grid-cols-2 rounded-full bg-[#F3F2EE] p-1" role="tablist" aria-label="Account">
@@ -300,22 +285,6 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
               <TermsBox checked={agreed} onChange={acceptTermsBox} />
               {termsError ? <p className="text-sm text-[#C5362B]">{termsError}</p> : null}
 
-              <MethodButton
-                icon={<Fingerprint className="size-5" />}
-                title="Connect Base"
-                body="Coinbase passkey wallet. It connects on this site, including Android."
-                recommended
-                tone="accent"
-                onClick={() => void startBase()}
-              />
-
-              <MethodButton
-                icon={<Wallet className="size-5" />}
-                title="Sign in with wallet"
-                body="MetaMask and other wallets stay on WalletConnect."
-                onClick={() => void startWallet()}
-              />
-
               {signingIn && saved.length > 0 ? (
                 saved.map((passkey) => (
                   <MethodButton
@@ -323,7 +292,8 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
                     icon={<Fingerprint className="size-5" />}
                     title={`Continue as ${passkey.label}`}
                     body={`${shortAddress(passkey.address)}. Face ID, Touch ID, or the saved passkey on this device.`}
-                    tone="plain"
+                    recommended
+                    tone="accent"
                     onClick={() => startUnlock([passkey])}
                   />
                 ))
@@ -334,15 +304,23 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
                   body={
                     canPasskey
                       ? signingIn
-                        ? "Use Face ID, Touch ID, or the passkey saved on the device where you created this account."
+                        ? "Use Face ID, Touch ID, or a passkey already saved for this site."
                         : "Use Face ID, Touch ID, or this device’s saved passkey. It is fast and stays on this device."
-                      : "This browser cannot create a passkey. Continue with a wallet instead."
+                      : "This browser cannot create a passkey. Connect a wallet through WalletConnect instead."
                   }
-                  tone="plain"
+                  recommended={canPasskey}
+                  tone={canPasskey ? "accent" : "plain"}
                   disabled={!canPasskey}
                   onClick={onPasskey}
                 />
               )}
+
+              <MethodButton
+                icon={<Wallet className="size-5" />}
+                title="Connect a wallet"
+                body="Base and every other wallet open in WalletConnect. The wallet is switched onto Base."
+                onClick={() => void startWallet()}
+              />
 
               {!signingIn && saved.length > 0 ? (
                 <p className="px-1 text-[13px] leading-snug text-[#5C6572]">
@@ -375,7 +353,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
                     <Shield className="size-4" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold">New to RvessFlow?</span>
+                    <span className="block text-sm font-semibold">New to Rvess?</span>
                     <span className="mt-0.5 block text-[13px] leading-snug text-[#5C6572]">We’ll help you set up a secure account in a few steps.</span>
                   </span>
                   <ChevronRight className="size-4 shrink-0 text-[#8B919A]" />
@@ -414,7 +392,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
           <Back onClick={() => setPhase({ name: "choose" })} />
           <Dialog.Title className="mt-4 text-[1.55rem] leading-none font-semibold tracking-[-0.04em]">Name this account</Dialog.Title>
           <Dialog.Description className="mt-2 text-sm leading-relaxed text-[#5C6572]">
-            This name is stored with the passkey on this device. It is the name people see inside RvessFlow.
+            This name is stored with the passkey on this device. It is the name people see inside Rvess.
           </Dialog.Description>
           <label className="mt-5 block text-sm font-medium" htmlFor={nameId}>
             What should we call you?
@@ -458,7 +436,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
           <Dialog.Description className="mt-2 text-sm leading-relaxed text-[#5C6572]">
             {signingIn
               ? "Email does not sign you in by itself. If you saved one in Settings, we can point you to the passkey or wallet that owns it."
-              : "RvessFlow creates the account with a passkey or a wallet. After you sign in, Settings is where that email is saved so groups can find you."}
+              : "Rvess creates the account with a passkey or a wallet. After you sign in, Settings is where that email is saved so groups can find you."}
           </Dialog.Description>
           {signingIn ? (
             <form
@@ -494,9 +472,8 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
             </form>
           ) : (
             <div className="mt-5 space-y-2.5">
-              <MethodButton icon={<Fingerprint className="size-5" />} title="Connect Base" body="Coinbase passkey wallet. It connects on this site." tone="accent" recommended onClick={() => void startBase()} />
-              <MethodButton icon={<Fingerprint className="size-5" />} title="Continue with a passkey" body="Recommended on this device." onClick={() => setPhase({ name: "name" })} />
-              <MethodButton icon={<Wallet className="size-5" />} title="Sign in with wallet" body="Use the wallet you already have." onClick={() => void startWallet()} />
+              <MethodButton icon={<Fingerprint className="size-5" />} title="Continue with a passkey" body="Recommended. It stays on this device." recommended tone="accent" onClick={() => setPhase({ name: "name" })} />
+              <MethodButton icon={<Wallet className="size-5" />} title="Connect a wallet" body="Base and every other wallet open in WalletConnect." onClick={() => void startWallet()} />
             </div>
           )}
           {emailNote ? <p className="mt-3 text-sm leading-relaxed text-[#3A3F47]">{emailNote}</p> : null}
@@ -509,19 +486,21 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
               Unlock {emailMatch.label}
             </button>
           ) : null}
+          {emailRestore ? (
+            <button
+              type="button"
+              onClick={() => startUnlock(saved)}
+              className="mt-3 h-11 w-full rounded-full bg-[#171717] text-sm font-medium text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
+            >
+              Continue with a passkey
+            </button>
+          ) : null}
           {emailWallet ? (
             <div className="mt-3 space-y-2">
               <button
                 type="button"
-                onClick={() => void startBase()}
-                className="h-11 w-full rounded-full bg-[#171717] text-sm font-medium text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
-              >
-                Connect Base
-              </button>
-              <button
-                type="button"
                 onClick={() => void startWallet()}
-                className="h-11 w-full rounded-full border border-[#E4E2DC] text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
+                className="h-11 w-full rounded-full bg-[#171717] text-sm font-medium text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
               >
                 Connect wallet
               </button>
@@ -538,9 +517,8 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
             A passkey opens where you created it. This browser does not have one saved. Connect the wallet you used before, or create an account if you are new.
           </Dialog.Description>
           <div className="mt-5 space-y-2.5">
-            <MethodButton icon={<Fingerprint className="size-5" />} title="Connect Base" body="Coinbase passkey wallet. It connects on this site, including Android." tone="accent" onClick={() => void startBase()} />
-            <MethodButton icon={<Wallet className="size-5" />} title="Sign in with wallet" body="The same wallet works on any device." onClick={() => void startWallet()} />
-            <MethodButton icon={<Fingerprint className="size-5" />} title="Create an account" body="This makes a new passkey. It does not open an old one." onClick={() => choose("create")} />
+            <MethodButton icon={<Fingerprint className="size-5" />} title="Create an account" body="Recommended. This makes a new passkey on this device. It does not open an old one." recommended tone="accent" onClick={() => choose("create")} />
+            <MethodButton icon={<Wallet className="size-5" />} title="Connect a wallet" body="Base and every other wallet open in WalletConnect." onClick={() => void startWallet()} />
           </div>
         </div>
       ) : null}
@@ -553,9 +531,8 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
             You get back in with the same method that created the account. There is no separate password for the account itself.
           </Dialog.Description>
           <ul className="mt-4 space-y-3 text-sm leading-relaxed text-[#3A3F47]">
-            <li>A passkey stays on the device that created it. A new phone or browser will not see it.</li>
-            <li>Connect Base uses a Coinbase passkey. The prompt opens on this site, so the same Base account works on Android.</li>
-            <li>A wallet is the way back in on another device. Connect the same wallet you used before.</li>
+            <li>A passkey is the recommended way to create an account. It stays on this device. If the browser forgets the account, sign in with that same passkey and it is restored. One that never sent a payment can only be opened in the browser that created it.</li>
+            <li>Every external wallet opens in WalletConnect. Base is listed there, and the wallet is switched onto Base. The same wallet is the way back in on another device.</li>
             <li>An email saved in Settings helps groups find you. It does not replace the passkey or the wallet.</li>
           </ul>
           <form
@@ -579,11 +556,12 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
 
       {phase.name === "creating" ? <Status title="Creating your account" body="Setting up your passkey. This may take a few seconds." mark={<WaitMark icon={<Fingerprint className="size-6" />} />} bar /> : null}
       {phase.name === "confirming" ? <Status title="Confirm your passkey" body={`Approve the prompt to unlock ${phase.label}.`} mark={<WaitMark icon={<Fingerprint className="size-6" />} />} bar /> : null}
+      {phase.name === "restoring" ? <Status title="Opening your account" body="The passkey checked out. Finding the account that belongs to it." mark={<WaitMark icon={<Fingerprint className="size-6" />} />} bar /> : null}
       {phase.name === "connecting" ? (
         <Status
-          title={phase.via === "base" ? "Connecting Base" : "Connecting wallet"}
-          body={phase.via === "base" ? "Confirm the Coinbase passkey. It opens on this site." : "Confirm the connection in your wallet."}
-          mark={<WaitMark icon={phase.via === "base" ? <Fingerprint className="size-6" /> : <Wallet className="size-6" />} />}
+          title="Connecting wallet"
+          body="Confirm in WalletConnect. Base and every other wallet are listed there."
+          mark={<WaitMark icon={<Wallet className="size-6" />} />}
           bar
         />
       ) : null}

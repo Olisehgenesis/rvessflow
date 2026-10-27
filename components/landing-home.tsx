@@ -121,7 +121,7 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
         <div className="relative mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:h-[4.5rem] lg:px-8">
           <a href="#top" className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.03em]">
             <IconMark className="size-8" />
-            RvessFlow
+            Rvess
             <span className="rounded-full bg-[#D6F34A] px-2 py-0.5 text-[11px] font-semibold tracking-normal">Beta</span>
           </a>
           <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 text-sm text-[#3d4450] lg:flex" aria-label="Page">
@@ -251,7 +251,7 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
               for bigger dreams.
             </h2>
             <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-[#5C6572]">
-              RvessFlow combines the power of streaming payments, savings vaults, and group rotations into one seamless experience.
+              Rvess combines the power of streaming payments, savings vaults, and group rotations into one seamless experience.
             </p>
             <LimeButton onClick={() => openAuth("start")} className="mt-7 h-12 px-5 text-[15px]">
               Get started

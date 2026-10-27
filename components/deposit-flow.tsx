@@ -563,7 +563,7 @@ export function DepositStatus({
 
   return (
     <main className="px-4 pb-8">
-      <FlowHeader title="RvessFlow" back={preview ? depositHref("/home/add/review", preview.pay, usd) : "/home/add"} close="/home" />
+      <FlowHeader title="Rvess" back={preview ? depositHref("/home/add/review", preview.pay, usd) : "/home/add"} close="/home" />
       <div className="mt-4 flex flex-col items-center text-center">
         <span className="grid size-16 place-items-center rounded-full border border-border bg-card">
           {success ? <IconCheck className="size-7" /> : <IconClock className="size-7" />}

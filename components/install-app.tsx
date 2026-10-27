@@ -67,7 +67,7 @@ export function InstallButton({ className = "", row = false }: { className?: str
           <span className="mt-1 block text-sm font-normal leading-snug text-muted-foreground">
             {ios
               ? "In Safari, tap Share, then Add to Home Screen."
-              : "Open the browser menu and choose Install RvessFlow."}
+              : "Open the browser menu and choose Install Rvess."}
           </span>
         ) : null}
       </button>
@@ -87,8 +87,8 @@ export function InstallButton({ className = "", row = false }: { className?: str
       {help ? (
         <p className="mt-2 text-sm leading-snug text-muted-foreground">
           {ios
-            ? "In Safari, tap Share, then Add to Home Screen. The icon is the RvessFlow mark."
-            : "Open the browser menu and choose Install RvessFlow. It opens on its own, with the same mark."}
+            ? "In Safari, tap Share, then Add to Home Screen. The icon is the Rvess mark."
+            : "Open the browser menu and choose Install Rvess. It opens on its own, with the same mark."}
         </p>
       ) : null}
     </div>
@@ -160,7 +160,7 @@ export function PwaRegister() {
       )}
       {updateWorker ? (
         <div className="fixed inset-x-3 bottom-[max(5rem,env(safe-area-inset-bottom))] z-50 flex items-center justify-between gap-3 rounded-2xl border border-[#E6EADF] bg-white px-4 py-3 text-sm shadow-[0_8px_24px_rgba(20,20,20,0.08)]">
-          <p>A new version of RvessFlow is ready.</p>
+          <p>A new version of Rvess is ready.</p>
           <button type="button" onClick={applyUpdate} className="h-10 shrink-0 rounded-full bg-[#D6F34A] px-4 font-semibold text-[#17210C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]">
             Update
           </button>
@@ -168,7 +168,7 @@ export function PwaRegister() {
       ) : null}
       {storageTight ? (
         <p role="status" className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 rounded-2xl bg-[#141414] px-4 py-3 text-sm text-white">
-          This device is low on storage. RvessFlow may not keep the offline page.
+          This device is low on storage. Rvess may not keep the offline page.
         </p>
       ) : null}
     </>
