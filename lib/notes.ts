@@ -1,6 +1,7 @@
 import "server-only";
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { isFrequency, type Frequency } from "@/lib/intent";
 import { rows, sql } from "@/lib/motherduck";
@@ -29,7 +30,10 @@ type FileStore = {
   activity: ActivityRecord[];
 };
 
-const filePath = path.join(process.cwd(), "data", "local-store.json");
+function storeFile(): string {
+  if (process.env.VERCEL) return path.join(os.tmpdir(), "rvess-local-store.json");
+  return path.join(process.cwd(), "data", "local-store.json");
+}
 let queue: Promise<unknown> = Promise.resolve();
 
 function locked<T>(run: () => Promise<T>): Promise<T> {
@@ -55,7 +59,7 @@ function dbReady() {
 
 async function readFileStore(): Promise<FileStore> {
   try {
-    const parsed = JSON.parse(await readFile(filePath, "utf8")) as Partial<FileStore>;
+    const parsed = JSON.parse(await readFile(storeFile(), "utf8")) as Partial<FileStore>;
     return {
       goals: parsed.goals ?? {},
       activity: Array.isArray(parsed.activity) ? parsed.activity : [],
@@ -66,8 +70,15 @@ async function readFileStore(): Promise<FileStore> {
 }
 
 async function writeFileStore(store: FileStore) {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(store));
+  const target = storeFile();
+  try {
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, JSON.stringify(store));
+  } catch (error) {
+    const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
+    if (code === "EROFS" || code === "EACCES" || code === "EPERM") return;
+    throw error;
+  }
 }
 
 let schemaReady: Promise<void> | null = null;

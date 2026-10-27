@@ -20,11 +20,11 @@ const paths = [
 export default function ExpensePage() {
   return (
     <Suspense fallback={<Loading />}>
-      <Page title="Expense" back="/goals">
-        <ul className="space-y-3">
+      <Page title="Expense" back="/goals" bleed>
+        <ul className="space-y-3 lg:grid lg:max-w-3xl lg:grid-cols-2 lg:gap-4 lg:space-y-0">
           {paths.map((path) => (
             <li key={path.href}>
-              <Link href={path.href} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
+              <Link href={path.href} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 lg:h-full lg:rounded-3xl lg:p-5 lg:transition-colors lg:duration-150 lg:hover:border-[#C9D7A4] lg:focus-visible:outline-2 lg:focus-visible:outline-offset-2 lg:focus-visible:outline-[#141414]">
                 <ProductMark kind="expense" size="md" />
                 <span className="min-w-0">
                   <span className="block font-medium">{path.title}</span>

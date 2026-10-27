@@ -52,10 +52,10 @@ export function EmptyGroups({ joined = false }: { joined?: boolean }) {
         body={joined ? "Ask an organizer for a code, or look for a group that is open." : "Join a group with a code, or create one and invite people you trust."}
       />
       <div className="flex flex-col gap-2">
-        <Link href={joined ? "/groups/join" : "/groups/new"} className="inline-flex h-12 items-center justify-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground">
+        <Link href={joined ? "/groups/join" : "/groups/new"} className="inline-flex h-12 items-center justify-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground lg:self-start lg:px-6">
           {joined ? "Join with a code" : "Create group"}
         </Link>
-        <Link href="/groups/explore" className="inline-flex h-12 items-center justify-center rounded-full border border-border bg-card px-5 text-sm font-medium">
+        <Link href="/groups/explore" className="inline-flex h-12 items-center justify-center rounded-full border border-border bg-card px-5 text-sm font-medium lg:self-start lg:px-6">
           Explore groups
         </Link>
       </div>

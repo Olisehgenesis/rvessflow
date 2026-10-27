@@ -34,6 +34,7 @@ export async function PlanList({
   const open = flows.filter((flow) => !flow.settled && !flow.paused && !(kind === "saving" && notes[flow.id]?.paused)).length;
   return (
     <Page
+      bleed
       title={title}
       back={back}
       action={
@@ -46,7 +47,7 @@ export async function PlanList({
         {open + incoming.length === 0 ? "None open" : `${open + incoming.length} open`}
       </p>
       {showIncoming && incoming.length > 0 ? (
-        <ul className="mb-3 space-y-3">
+        <ul className="mb-3 space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
           {incoming.map((item) => (
             <li key={`${item.vault}-${item.flow.id}`}>
               <GoalLink
@@ -61,14 +62,17 @@ export async function PlanList({
         </ul>
       ) : null}
       {flows.length === 0 && incoming.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card px-4 py-6">
+        <div className="rounded-2xl border border-border bg-card px-4 py-6 lg:flex lg:items-center lg:gap-5 lg:rounded-3xl lg:px-6 lg:py-8">
+          <img src={kind === "saving" ? "/marks/saving.png" : kind === "expense" ? "/marks/expense.png" : "/marks/flow.png"} alt="" className="hidden size-20 shrink-0 object-contain lg:block" />
+          <div>
           <p className="text-sm text-muted-foreground">{empty}</p>
-          <Link href={createHref} className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground">
+          <Link href={createHref} className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground lg:w-fit">
             {createLabel}
           </Link>
+          </div>
         </div>
       ) : flows.length > 0 ? (
-        <ul className="space-y-3">
+        <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
           {flows.map((flow) => (
             <li key={flow.id}>
               <GoalLink flow={flow} readAt={data.readAt} quote={quote} appPaused={Boolean(notes[flow.id]?.paused)} />

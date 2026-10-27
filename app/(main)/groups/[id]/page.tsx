@@ -38,6 +38,8 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
       <div className="mb-4">
         <GroupUpgradeNote />
       </div>
+      <div className="contents lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] lg:items-start lg:gap-6">
+      <div className="lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
       <GroupLead
         src="/marks/group.png"
         title={status}
@@ -49,6 +51,8 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
         <Fact label="Cycles" value={String(group.cycles)} />
         <Fact label="Organizer" value={group.creatorName} />
       </Facts>
+      </div>
+      <div className="lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
       <GroupNav
         links={[
           { href: `${base}/members`, label: "Members" },
@@ -66,6 +70,8 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
         ) : null}
         {!group.started && !group.cancelled && allPosted && mine ? <GroupButton id={group.id} fn="start" label="Start the rotation" /> : null}
         {group.started && !group.cycleOpen && !group.finalized ? <p className="text-sm text-muted-foreground">This cycle is not open for payment yet.</p> : null}
+      </div>
+      </div>
       </div>
     </Page>
   );

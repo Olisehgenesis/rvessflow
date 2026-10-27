@@ -152,7 +152,7 @@ export function GoalLink({
   const pace = goalStatus(flow, readAt, appPaused);
   const live = pace === "Active" && flow.kind !== "saving" && flow.active && !flow.paused;
   return (
-    <Link href={href ?? `/goals/${flow.id}`} className="block rounded-2xl border border-border bg-card p-4">
+    <Link href={href ?? `/goals/${flow.id}`} className="block rounded-2xl border border-border bg-card p-4 lg:transition-colors lg:duration-150 lg:hover:border-[#C9D7A4] lg:focus-visible:outline-2 lg:focus-visible:outline-offset-2 lg:focus-visible:outline-[#141414]">
       <div className="flex items-start gap-3">
         <ProductMark kind={flow.kind} size="sm" quiet={flow.settled} />
         <div className="min-w-0 flex-1">
@@ -246,7 +246,7 @@ export function GroupLink({
   quote: Quote;
 }) {
   return (
-    <Link href={`/groups/${id}`} className="flex gap-3 rounded-2xl border border-border bg-card p-4">
+    <Link href={`/groups/${id}`} className="flex gap-3 rounded-2xl border border-border bg-card p-4 lg:transition-colors lg:duration-150 lg:hover:border-[#C9D7A4] lg:focus-visible:outline-2 lg:focus-visible:outline-offset-2 lg:focus-visible:outline-[#141414]">
       <ProductMark kind="group" quiet={status === "Finished" || status === "Cancelled"} />
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">

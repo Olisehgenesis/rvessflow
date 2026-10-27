@@ -203,7 +203,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
       ? "An account is already on this device. Continue with the passkey you saved here, or the wallet you used before."
       : signingIn
         ? "Sign in with the method you already set up. A passkey opens on the device that created it."
-        : "Create one account. A passkey stays on this device. A wallet works anywhere. Email is added in Settings after you sign in.";
+        : "Sign in with a wallet. The same wallet works on any device. A passkey you already made still opens on this device.";
 
   return (
     <div className="px-5 pt-4 pb-6 sm:px-6">
@@ -241,15 +241,23 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
               <TermsBox checked={agreed} onChange={acceptTermsBox} />
               {termsError ? <p className="text-sm text-[#C5362B]">{termsError}</p> : null}
 
+              <MethodButton
+                icon={<Wallet className="size-5" />}
+                title="Sign in with wallet"
+                body="Base is listed first. MetaMask and the other wallets stay on WalletConnect."
+                recommended
+                tone="accent"
+                onClick={() => void startWallet()}
+              />
+
               {signingIn && saved.length > 0 ? (
-                saved.map((passkey, index) => (
+                saved.map((passkey) => (
                   <MethodButton
                     key={passkey.address}
                     icon={<Fingerprint className="size-5" />}
                     title={`Continue as ${passkey.label}`}
                     body={`${shortAddress(passkey.address)}. Face ID, Touch ID, or the saved passkey on this device.`}
-                    recommended={index === 0}
-                    tone="accent"
+                    tone="plain"
                     onClick={() => void startUnlock(passkey)}
                   />
                 ))
@@ -264,8 +272,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
                         : "Use Face ID, Touch ID, or this device’s saved passkey. It is fast and stays on this device."
                       : "This browser cannot create a passkey. Continue with a wallet instead."
                   }
-                  recommended={canPasskey}
-                  tone={canPasskey ? "accent" : "plain"}
+                  tone="plain"
                   disabled={!canPasskey}
                   onClick={onPasskey}
                 />
@@ -277,12 +284,6 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
                 </p>
               ) : null}
 
-              <MethodButton
-                icon={<Wallet className="size-5" />}
-                title="Continue with a wallet"
-                body="MetaMask, Coinbase Wallet, and other wallets on Base. The same wallet works on any device."
-                onClick={() => void startWallet()}
-              />
               <MethodButton
                 icon={<Mail className="size-5" />}
                 title="Continue with email"
@@ -428,7 +429,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
           ) : (
             <div className="mt-5 space-y-2.5">
               <MethodButton icon={<Fingerprint className="size-5" />} title="Continue with a passkey" body="Recommended on this device." tone="accent" recommended onClick={() => setPhase({ name: "name" })} />
-              <MethodButton icon={<Wallet className="size-5" />} title="Continue with a wallet" body="Use the wallet you already have." onClick={() => void startWallet()} />
+              <MethodButton icon={<Wallet className="size-5" />} title="Sign in with wallet" body="Use the wallet you already have." onClick={() => void startWallet()} />
             </div>
           )}
           {emailNote ? <p className="mt-3 text-sm leading-relaxed text-[#3A3F47]">{emailNote}</p> : null}
@@ -461,7 +462,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
             A passkey opens where you created it. This browser does not have one saved. Connect the wallet you used before, or create an account if you are new.
           </Dialog.Description>
           <div className="mt-5 space-y-2.5">
-            <MethodButton icon={<Wallet className="size-5" />} title="Continue with a wallet" body="The same wallet works on any device." tone="accent" onClick={() => void startWallet()} />
+            <MethodButton icon={<Wallet className="size-5" />} title="Sign in with wallet" body="The same wallet works on any device." tone="accent" onClick={() => void startWallet()} />
             <MethodButton icon={<Fingerprint className="size-5" />} title="Create an account" body="This makes a new passkey. It does not open an old one." onClick={() => choose("create")} />
           </div>
         </div>

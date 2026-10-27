@@ -30,6 +30,8 @@ async function LockBody({ params }: { params: Promise<{ id: string }> }) {
   const mature = now >= lock.end;
   return (
     <Page title={lock.name} back="/vaults">
+      <div className="contents lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)] lg:items-start lg:gap-6">
+      <div className="lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
       <div className="mb-4">
         <ProductMark kind="lock" size="xl" quiet={lock.settled} />
         <p className="mt-3 text-sm text-muted-foreground">{lock.settled ? "Closed" : mature ? "Ready" : "Locked"}</p>
@@ -47,8 +49,10 @@ async function LockBody({ params }: { params: Promise<{ id: string }> }) {
           <Fact label="Yield stream" value={BigInt(lock.yieldRate) > 0n ? "On, from the reward budget" : "Off"} />
         </Facts>
       </div>
+      </div>
       {lock.settled ? null : (
-        <div className="mt-5 space-y-4">
+      <div className="lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
+        <div className="mt-5 space-y-4 lg:mt-0">
           {mature ? (
             <>
               <Notice>The date has passed. Withdrawing returns the principal{BigInt(lock.matureBonus) > 0n ? " and this lock's share of the bonus pool" : ""}.</Notice>
@@ -62,7 +66,9 @@ async function LockBody({ params }: { params: Promise<{ id: string }> }) {
             </>
           )}
         </div>
+      </div>
       )}
+      </div>
     </Page>
   );
 }

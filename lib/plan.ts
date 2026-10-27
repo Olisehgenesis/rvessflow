@@ -5,6 +5,8 @@ import { assetByAddress } from "@/lib/assets";
 import { fundingCalls, superForUsd, superForWithdraw, withdrawCalls } from "@/lib/funding";
 import type { Intent, Plan, PreparedCall } from "@/lib/intent";
 import { readPay, type PayAsset } from "@/lib/pay-math";
+import { sendLabel, sendToken, walletBalance } from "@/lib/send";
+import { isSendAsset, parseSendAmount, spendableEth } from "@/lib/send-math";
 import { readName, stableLabel, toName } from "@/lib/protocol";
 import {
   addresses,
@@ -320,6 +322,35 @@ async function planDeposit(owner: Address, intent: Extract<Intent, { kind: "depo
   return { calls, intent: { ...next, submitted: true }, done: false };
 }
 
+async function planSend(owner: Address, intent: Extract<Intent, { kind: "send" }>): Promise<Plan> {
+  if (!isSendAsset(intent.asset)) throw new Error("Pick a token.");
+  if (!isAddress(intent.to)) throw new Error("Enter a wallet address.");
+  const recipient = getAddress(intent.to);
+  if (recipient === zeroAddress) throw new Error("Enter a wallet address.");
+  if (recipient.toLowerCase() === owner.toLowerCase()) throw new Error("That address is this account.");
+  const amount = parseSendAmount(intent.asset, intent.amount);
+  const balance = await walletBalance(owner, intent.asset);
+  if (intent.seen) {
+    const before = BigInt(intent.seen);
+    if (balance < before && before - balance >= amount) return done(intent, { href: "/home" });
+  }
+  if (intent.submitted) return pending(intent);
+  const spendable = intent.asset === "eth" ? spendableEth(balance) : balance;
+  const label = sendLabel(intent.asset);
+  if (amount > spendable) {
+    throw new Error(
+      intent.asset === "eth" && amount <= balance
+        ? "Leave a little ETH in the wallet for the network fee."
+        : `The wallet does not have that much ${label}.`,
+    );
+  }
+  const token = sendToken(intent.asset);
+  const calls: PreparedCall[] = token
+    ? [encode(token, erc20, "transfer", [recipient, amount])]
+    : [{ to: recipient, data: "0x", value: amount.toString() }];
+  return { calls, intent: { ...intent, to: recipient, seen: balance.toString(), submitted: true }, done: false };
+}
+
 async function planWithdraw(owner: Address, intent: Extract<Intent, { kind: "withdraw" }>): Promise<Plan> {
   const vault = await vaultOf(owner);
   if (vault === zeroAddress) throw new Error("Open a goal first. That creates your vault.");
@@ -623,6 +654,8 @@ export async function planIntent(owner: Address, intent: Intent): Promise<Plan> 
       return planDeposit(owner, intent);
     case "withdraw":
       return planWithdraw(owner, intent);
+    case "send":
+      return planSend(owner, intent);
     case "goal":
       return planGoal(owner, intent);
     case "lockAct":

@@ -100,6 +100,7 @@ export function HomeBalance({
   availableUsd8 = "0",
   streamingUsd8 = "0",
   lockedUsd8 = "0",
+  layout = "phone",
 }: {
   totalUsd: string;
   totalLocal?: string;
@@ -117,6 +118,7 @@ export function HomeBalance({
   availableUsd8?: string;
   streamingUsd8?: string;
   lockedUsd8?: string;
+  layout?: "phone" | "desk";
 }) {
   const conceal = useConceal();
   const liveWei = useFlowingValue(pulse?.readAt ?? 0, pulse?.wallet ?? "0", pulse?.rate ?? "0", pulse?.wallet ?? "0", pulse?.ceiling);
@@ -157,17 +159,66 @@ export function HomeBalance({
       `${lead}${value}`
     );
   };
+  const desk = layout === "desk";
   const columns = preferLocal
     ? [
-        { label: "Available", prefix: localUnit ?? "", value: availableLocal, live: ticking },
-        { label: "Streaming", prefix: localUnit ?? "", value: streamingLocal, live: false },
-        { label: "Locked", prefix: localUnit ?? "", value: lockedLocal, live: false },
+        { label: "Available", prefix: localUnit ?? "", value: availableLocal, live: ticking, usd: shownAvailable, usdLive: ticking },
+        { label: "Streaming", prefix: localUnit ?? "", value: streamingLocal, live: false, usd: streaming, usdLive: false },
+        { label: "Locked", prefix: localUnit ?? "", value: lockedLocal, live: false, usd: locked, usdLive: false },
       ]
     : [
-        { label: "Available", prefix: "$", value: shownAvailable, live: ticking },
-        { label: "Streaming", prefix: "$", value: streaming, live: false },
-        { label: "Locked", prefix: "$", value: locked, live: false },
+        { label: "Available", prefix: "$", value: shownAvailable, live: ticking, usd: "", usdLive: false },
+        { label: "Streaming", prefix: "$", value: streaming, live: false, usd: "", usdLive: false },
+        { label: "Locked", prefix: "$", value: locked, live: false, usd: "", usdLive: false },
       ];
+  const actions = (
+    <div className={`mt-4 grid gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
+      <TopUpSheet network={network} className={lime} />
+      {showWithdraw ? <WithdrawSheet savings={savings} unit={unit} conceal={conceal} /> : null}
+    </div>
+  );
+  if (desk) {
+    return (
+      <section className="relative overflow-hidden rounded-[1.75rem] border border-[#D7E7B0] bg-[#E7F4C4] p-6 text-[#141414] xl:p-7">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center">
+              <p className="text-sm">Total balance</p>
+              <button
+                type="button"
+                aria-label={conceal ? "Show balance" : "Hide balance"}
+                aria-pressed={conceal}
+                onClick={() => writeConceal(!conceal)}
+                className="grid size-11 place-items-center rounded-full hover:bg-[#141414]/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
+              >
+                {conceal ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
+              </button>
+            </div>
+            <p className="mt-1 font-[family-name:var(--font-manrope)] text-5xl font-semibold tracking-[-0.04em] tabular-nums">
+              {preferLocal ? figure(localUnit ?? "", shownLocal ?? "", ticking) : figure("$", shownTotal, ticking)}
+            </p>
+            {preferLocal ? <p className="mt-0.5 text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal, ticking)}</p> : null}
+          </div>
+          <img src="/marks/saving.png" alt="" className="pointer-events-none hidden w-28 shrink-0 xl:block" />
+        </div>
+        <dl className="mt-6 grid grid-cols-3 border-t border-[#141414]/10 pt-4">
+          {columns.map((column, index) => (
+            <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#141414]/10 px-3"}>
+              <dt className="text-xs text-[#3C4A2E]">{column.label}</dt>
+              <dd className="mt-1 text-base font-semibold tabular-nums">
+                {figure(column.prefix, column.value, column.live)}
+                {preferLocal && column.usd ? <span className="mt-0.5 block text-[11px] font-medium text-[#3C4A2E]">{figure("$", column.usd, column.usdLive)}</span> : null}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <div className={`mt-6 grid max-w-sm gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
+          <TopUpSheet network={network} className={lime} />
+          {showWithdraw ? <WithdrawSheet savings={savings} unit={unit} conceal={conceal} /> : null}
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="mt-5 rounded-3xl border border-[#D7E7B0] bg-[#E7F4C4] p-4 text-[#141414]">
       <div className="flex items-center justify-between">
@@ -201,10 +252,7 @@ export function HomeBalance({
           </div>
         ))}
       </dl>
-      <div className={`mt-4 grid gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
-        <TopUpSheet network={network} className={lime} />
-        {showWithdraw ? <WithdrawSheet savings={savings} unit={unit} conceal={conceal} /> : null}
-      </div>
+      {actions}
     </section>
   );
 }

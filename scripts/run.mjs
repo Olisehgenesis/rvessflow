@@ -20,7 +20,7 @@ if (picked) {
   env.NEXT_PUBLIC_BASE_RPC_URL = rpc;
 }
 
-const child = spawn("npx", ["next", command, ...nextArgs], { env, stdio: "inherit" });
+const child = spawn("npx", ["dotenvx", "run", "-f", ".env.local", "--", "npx", "next", command, ...nextArgs], { env, stdio: "inherit" });
 child.on("exit", (code, signal) => {
   if (signal) process.kill(process.pid, signal);
   process.exit(code ?? 1);

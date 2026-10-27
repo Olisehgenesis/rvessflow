@@ -53,9 +53,18 @@ function SlideSheet({
 
 export function WithdrawSheet({ savings, unit, conceal = false }: { savings: SavingBox[]; unit: string; conceal?: boolean }) {
   return (
-    <SlideSheet label="Withdraw" className={withdrawButton} title="Withdraw" description="Choose a saving. Each one has its own withdraw.">
+    <SlideSheet label="Withdraw" className={withdrawButton} title="Withdraw" description="Send ETH or USDC out, or open a saving.">
       {(close) =>
-        savings.length === 0 ? (
+        <div className="space-y-3">
+          <Link href="/home/add/withdraw" onClick={close} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3">
+            <img src="/marks/receive.png" alt="" className="size-11 shrink-0 object-contain" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">Send ETH or USDC</span>
+              <span className="block text-xs text-muted-foreground">To another address. The slider goes to the maximum.</span>
+            </span>
+            <IconChevron className="size-4 shrink-0 text-muted-foreground" />
+          </Link>
+          {savings.length === 0 ? (
           <div className="px-1 pb-2 text-center">
             <img src="/marks/saving.png" alt="" className="mx-auto size-24 object-contain" />
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">No savings yet. Open a goal, then withdraw from that saving.</p>
@@ -86,7 +95,8 @@ export function WithdrawSheet({ savings, unit, conceal = false }: { savings: Sav
               </li>
             ))}
           </ul>
-        )
+        )}
+        </div>
       }
     </SlideSheet>
   );

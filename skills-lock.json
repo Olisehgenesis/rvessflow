@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "superfluid": {
+      "source": "superfluid-org/skills",
+      "sourceType": "github",
+      "skillPath": "skills/superfluid/SKILL.md",
+      "computedHash": "d4ece33fe0cf26166f82f77b76292e4201324bd50af86e6ae82a01021a2e6f02"
+    }
+  }
+}

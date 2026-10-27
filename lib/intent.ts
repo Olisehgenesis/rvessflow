@@ -75,6 +75,7 @@ export type Intent = (
     }
   | { kind: "deposit"; token: string; amount: string; pay?: PayAsset }
   | { kind: "withdraw"; amount: string; receive?: ReceiveAsset }
+  | { kind: "send"; asset: string; amount: string; to: string; label: string }
   | {
       kind: "goal";
       fn: "topup" | "release" | "pause" | "resume" | "cancel" | "settle";

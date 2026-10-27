@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Caveat, Geist_Mono, Inter } from "next/font/google";
+import { Caveat, Geist_Mono, Inter, Manrope } from "next/font/google";
 import { PwaRegister } from "@/components/install-app";
 import "./globals.css";
 
@@ -19,6 +19,12 @@ const caveat = Caveat({
 const mono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
+  display: "swap",
+});
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-manrope",
   display: "swap",
 });
 
@@ -45,7 +51,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${mono.variable} ${caveat.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} ${mono.variable} ${caveat.variable} ${manrope.variable} h-full antialiased`}>
       <body className="min-h-full bg-background font-sans text-foreground">
         <PwaRegister />
         {children}

@@ -30,6 +30,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
   const empty = drafts.length === 0 && groups.length === 0;
   return (
     <Page
+      bleed
       title="Groups"
       action={
         <Link href="/groups/join" className="text-sm font-medium text-foreground">
@@ -56,7 +57,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
           {drafts.length > 0 ? (
             <section>
               <h2 className="mb-2 text-sm font-semibold">Getting ready</h2>
-              <ul className="space-y-3">
+              <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
                 {drafts.map((draft) => (
                   <li key={draft.id}>
                     <Link href={`/groups/draft/${draft.id}`} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
@@ -75,7 +76,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
             </section>
           ) : null}
           {groups.length > 0 ? (
-            <ul className="space-y-3">
+            <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
               {groups.map((group) => (
                 <li key={group.id}>
                   <GroupLink
@@ -91,7 +92,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
               ))}
             </ul>
           ) : null}
-          <Link href="/groups/new" className="inline-flex h-12 w-full items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
+          <Link href="/groups/new" className="inline-flex h-12 w-full items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground lg:w-fit lg:px-6">
             Create group
           </Link>
         </div>

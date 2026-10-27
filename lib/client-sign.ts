@@ -1,17 +1,28 @@
 "use client";
 
-import { createPublicClient, http, type Address, type Hash, type Hex } from "viem";
+import { createPublicClient, encodePacked, erc20Abi, http, maxUint256, parseErc6492Signature, type Address, type Hash, type Hex } from "viem";
 import { base, baseSepolia } from "viem/chains";
 import { walletProvider } from "@/lib/auth-client";
 import type { PreparedCall, SignPayload } from "@/lib/intent";
 import { readPasskeys } from "@/lib/passkey-vault";
+import { estimationSkipped, passkeyPaysWith, usdcCanPayFee, userOpCost } from "@/lib/passkey-fee";
 
 const testnet = process.env.NEXT_PUBLIC_RVESS_NETWORK === "sepolia";
+const chain = testnet ? baseSepolia : base;
 const rpc = testnet
   ? process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://sepolia.base.org"
   : process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+const bundlerUrl = process.env.NEXT_PUBLIC_BUNDLER_URL || `https://public.pimlico.io/v2/${chain.id}/rpc`;
+const circlePaymaster = (testnet ? "0x31BE08D380A21fc740883c0BC434FcFc88740b58" : "0x6C973eBe80dCD8660841D4356bf15c32460271C9") as Address;
+const circleUsdc = (testnet ? "0x036CbD53842c5426634e7929541eC2318f3dCF7e" : "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913") as Address;
+const permitAmount = 10_000_000n;
+const permitAbi = [
+  ...erc20Abi,
+  { type: "function", name: "nonces", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "version", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+] as const;
 
-const client = createPublicClient({ chain: testnet ? baseSepolia : base, transport: http(rpc) });
+const client = createPublicClient({ chain, transport: http(rpc) });
 
 async function wait(hash: Hash) {
   const receipt = await client.waitForTransactionReceipt({ hash, timeout: 120_000 });
@@ -57,10 +68,12 @@ async function onAppChain(provider: Awaited<ReturnType<typeof walletProvider>>) 
 
 async function sendWallet(calls: PreparedCall[], from: Address, onHash?: (hash: Hash) => void) {
   const provider = await walletProvider();
-  if (!provider.connected) await provider.connect();
+  if (!provider.connected && provider.connect) await provider.connect();
   await onAppChain(provider);
-  const account = provider.accounts[0];
-  if (!account || account.toLowerCase() !== from.toLowerCase()) {
+  const listed = provider.accounts?.[0];
+  const accounts = listed ? null : ((await provider.request({ method: "eth_accounts" })) as string[] | undefined);
+  const found = listed || accounts?.[0] || "";
+  if (!found || found.toLowerCase() !== from.toLowerCase()) {
     throw new Error("Reconnect the wallet for this account.");
   }
   let last: Hash | undefined;
@@ -79,24 +92,21 @@ async function sendWallet(calls: PreparedCall[], from: Address, onHash?: (hash: 
 }
 
 async function sendPasskey(calls: PreparedCall[], from: Address, onHash?: (hash: Hash) => void) {
-  const bundler = process.env.NEXT_PUBLIC_BUNDLER_URL;
-  if (!bundler) {
-    throw new Error("Passkey payments need a bundler. Set NEXT_PUBLIC_BUNDLER_URL to a Base bundler that accepts user operations.");
-  }
   const saved = (await readPasskeys()).find((item) => item.address.toLowerCase() === from.toLowerCase());
   if (!saved) throw new Error("This browser does not have the passkey for this account. Sign in again on this device.");
-  const [{ createPublicClient: createClient, http: transport }, accountAbstraction, { toKernelSmartAccount }, { createSmartAccountClient }] =
+  const [{ createPublicClient: createClient, http: transport }, accountAbstraction, { toKernelSmartAccount }, { createSmartAccountClient }, { getUserOperationGasPrice }] =
     await Promise.all([
       import("viem"),
       import("viem/account-abstraction"),
       import("permissionless/accounts"),
       import("permissionless"),
+      import("permissionless/actions/pimlico"),
     ]);
   const owner = accountAbstraction.toWebAuthnAccount({
     credential: { id: saved.id, publicKey: saved.publicKey },
     rpId: window.location.hostname,
   });
-  const publicClient = createClient({ chain: base, transport: transport(rpc) });
+  const publicClient = createClient({ chain, transport: transport(rpc) });
   const account = await toKernelSmartAccount({
     client: publicClient,
     owners: [owner],
@@ -106,19 +116,89 @@ async function sendPasskey(calls: PreparedCall[], from: Address, onHash?: (hash:
   if (account.address.toLowerCase() !== from.toLowerCase()) {
     throw new Error("This passkey does not match the signed-in account.");
   }
+  const pimlico = createClient({ chain, transport: transport(bundlerUrl) });
+  const batched = calls.map((call) => ({
+    to: call.to,
+    data: call.data,
+    value: BigInt(call.value || "0"),
+  }));
+  const userOperation = {
+    estimateFeesPerGas: async () => (await getUserOperationGasPrice(pimlico)).fast,
+  };
   const smart = createSmartAccountClient({
     account,
-    chain: base,
-    bundlerTransport: transport(bundler),
+    chain,
+    bundlerTransport: transport(bundlerUrl),
     client: publicClient,
+    userOperation,
   });
-  const hash = await smart.sendTransaction({
-    calls: calls.map((call) => ({
-      to: call.to,
-      data: call.data,
-      value: BigInt(call.value || "0"),
-    })),
+  const [ethBalance, usdcBalance] = await Promise.all([
+    publicClient.getBalance({ address: account.address }),
+    publicClient.readContract({ address: circleUsdc, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }),
+  ]);
+  let ethCost: bigint | null = null;
+  if (!usdcCanPayFee(usdcBalance) && ethBalance > 0n) {
+    try {
+      ethCost = userOpCost(await smart.prepareUserOperation({ calls: batched }));
+    } catch (error) {
+      if (!estimationSkipped(error)) throw error;
+    }
+  }
+  if (passkeyPaysWith({ ethBalance, ethCost, usdcBalance }) === "eth") {
+    const hash = await smart.sendTransaction({ calls: batched });
+    onHash?.(hash);
+    await wait(hash);
+    return hash;
+  }
+  let signed: { paymaster: Address; paymasterData: Hex; paymasterVerificationGasLimit: bigint; paymasterPostOpGasLimit: bigint } | null = null;
+  const paymaster = {
+    getPaymasterStubData: async () => ({ ...(await circlePermit()), isFinal: true as const }),
+    getPaymasterData: async () => circlePermit(),
+  };
+  async function circlePermit() {
+    if (signed) return signed;
+    const [name, version, nonce] = await Promise.all([
+      publicClient.readContract({ address: circleUsdc, abi: permitAbi, functionName: "name" }),
+      publicClient.readContract({ address: circleUsdc, abi: permitAbi, functionName: "version" }),
+      publicClient.readContract({ address: circleUsdc, abi: permitAbi, functionName: "nonces", args: [account.address] }),
+    ]);
+    const permit = {
+      domain: { name, version, chainId: chain.id, verifyingContract: circleUsdc },
+      types: {
+        Permit: [
+          { name: "owner", type: "address" },
+          { name: "spender", type: "address" },
+          { name: "value", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+        ],
+      },
+      primaryType: "Permit",
+      message: { owner: account.address, spender: circlePaymaster, value: permitAmount, nonce, deadline: maxUint256 },
+    } as const;
+    const wrapped = await account.signTypedData(permit);
+    const code = await publicClient.getCode({ address: account.address });
+    if (code && code !== "0x") {
+      const valid = await publicClient.verifyTypedData({ ...permit, address: account.address, signature: wrapped });
+      if (!valid) throw new Error("The passkey could not approve USDC for the network fee.");
+    }
+    signed = {
+      paymaster: circlePaymaster,
+      paymasterData: encodePacked(["uint8", "address", "uint256", "bytes"], [0, circleUsdc, permitAmount, parseErc6492Signature(wrapped).signature]),
+      paymasterVerificationGasLimit: 300_000n,
+      paymasterPostOpGasLimit: 35_000n,
+    };
+    return signed;
+  }
+  const sponsored = createSmartAccountClient({
+    account,
+    chain,
+    bundlerTransport: transport(bundlerUrl),
+    client: publicClient,
+    paymaster,
+    userOperation,
   });
+  const hash = await sponsored.sendTransaction({ calls: batched });
   onHash?.(hash);
   await wait(hash);
   return hash;

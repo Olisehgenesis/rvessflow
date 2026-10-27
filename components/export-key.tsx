@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorNote } from "@/components/ui-bits";
 import { revealAccountKey } from "@/lib/account-key";
 
-export function ExportKey({ held }: { held: boolean }) {
+export function ExportKey({ method }: { method: "tester" | "passkey" | "wallet" }) {
   const [open, setOpen] = useState(false);
   const [understood, setUnderstood] = useState(false);
   const [secret, setSecret] = useState("");
@@ -52,7 +52,16 @@ export function ExportKey({ held }: { held: boolean }) {
     }
   }
 
-  if (!held) {
+  if (method === "passkey") {
+    return (
+      <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
+        <p className="font-medium">No key to export</p>
+        <p className="mt-1 leading-relaxed text-muted-foreground">This passkey stays on this device. There is no private key to copy. The money stays at this address until this passkey signs a payment.</p>
+      </div>
+    );
+  }
+
+  if (method === "wallet") {
     return (
       <div className="flex items-start justify-between gap-4 border-y border-border py-3 text-sm">
         <p className="text-muted-foreground">Private key</p>

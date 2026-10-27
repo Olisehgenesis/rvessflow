@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useConceal } from "@/components/balance-card";
-import { IconBolt, IconDown, IconLock, IconTarget } from "@/components/icons";
+import { IconBolt, IconDown, IconLock, IconSend, IconTarget } from "@/components/icons";
 import { show } from "@/lib/display";
 import type { Quote } from "@/lib/quote";
 
@@ -19,21 +19,21 @@ export type ActivityItem = {
 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export function ActivityList({ items, quote }: { items: ActivityItem[]; quote: Quote }) {
+export function ActivityList({ items, quote, desk = false }: { items: ActivityItem[]; quote: Quote; desk?: boolean }) {
   if (items.length === 0) {
     return (
-      <p className="rounded-2xl border border-border bg-card px-4 py-5 text-sm text-muted-foreground">
+      <p className={desk ? "rounded-3xl border border-[#E6EADF] bg-white px-4 py-5 text-sm text-[#5C6572] shadow-[0_1px_0_rgba(20,20,20,0.04)]" : "rounded-2xl border border-border bg-card px-4 py-5 text-sm text-muted-foreground"}>
         Nothing is moving yet. Save, stream, or lock to start.
       </p>
     );
   }
   return (
-    <ul className="space-y-2">
+    <ul className={desk ? "divide-y divide-[#EEF1E6] overflow-hidden rounded-3xl border border-[#E6EADF] bg-white shadow-[0_1px_0_rgba(20,20,20,0.04)]" : "space-y-2"}>
       {items.map((item) => {
         const tone = activityTone(item.title);
         return (
           <li key={item.id}>
-            <Link href={item.href} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3.5 py-3">
+            <Link href={item.href} className={desk ? "flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[#F7FAF2] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#141414]" : "flex items-center gap-3 rounded-2xl border border-border bg-card px-3.5 py-3"}>
               <span className={`grid size-10 shrink-0 place-items-center rounded-full ${tone.well}`}>
                 <tone.Icon className="size-4" />
               </span>
@@ -84,6 +84,7 @@ function activityTone(title: string): { well: string; Icon: typeof IconTarget } 
   if (title === "Streamed" || title === "Expense" || title === "Moved to wallet") {
     return { well: "bg-[#E4D9FF] text-[#6A4ED4]", Icon: IconBolt };
   }
+  if (title === "Sent") return { well: "bg-[#E4D9FF] text-[#6A4ED4]", Icon: IconSend };
   if (title === "Added money" || title === "Goal closed") {
     return { well: "bg-[#D4F06B] text-[#1C2A14]", Icon: IconDown };
   }

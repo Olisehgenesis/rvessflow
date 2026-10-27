@@ -1,0 +1,626 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "/goals": {
+      "targetKind": "existing-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "baselineDraftId": "10af4b3f-1acf-4ae1-b283-eefb2e0c00e2",
+      "activeDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0",
+        "9a1d11e2-7b57-412a-af3a-1190ad1a595c",
+        "1a222068-49d7-4438-97e6-1f504d1ee1db",
+        "282b6191-dd8e-4002-ab87-16a48355ab9e"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui-bits.tsx",
+        "components/product.tsx",
+        "app/(main)/goals/page.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "376e8ec3c1451126965fe578c8405c0d47da8fe49aef83fbca57e93ded02f309",
+        "components/shell.tsx": "4c3dabe59f7a8e11cc757cfccadbffc7359d2fe528aaf476c15add102ca934b0",
+        "components/ui-bits.tsx": "9f7e8e8b5da926d9924eac1e0b4e9abd32b8c248da63714e478defe937725b2b",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1",
+        "app/(main)/goals/page.tsx": "06ebe7abd5ade69a41677841a88f6358bc5cfc434792062c109170f378e30ced"
+      },
+      "drafts": {
+        "10af4b3f-1acf-4ae1-b283-eefb2e0c00e2": {
+          "title": "Current Goals",
+          "visualDirection": "faithful empty goals screen",
+          "currentVersion": 1
+        },
+        "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22": {
+          "title": "RvessFlow - Goals List",
+          "visualDirection": "filled goals list with marks, status pills, and progress",
+          "parentDraftId": "10af4b3f-1acf-4ae1-b283-eefb2e0c00e2",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-10-23T08:03:19Z"
+    },
+    "/": {
+      "targetKind": "new-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "activeDraftId": "9c1280aa-2a37-47b3-94a8-7ecd6a90f273",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "app/page.tsx",
+        "components/product.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "e34c116b54323ebc8d6b75f79dddcf770cea235bd4cbe9db385af49c55e71232",
+        "app/page.tsx": "89cd48f1befdb489c9c07a7ef8d4f2e87f5fd60d247ea9d983bde6b31cbb5190",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1"
+      },
+      "sourceTarget": "/goals",
+      "sourceDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "drafts": {
+        "9c1280aa-2a37-47b3-94a8-7ecd6a90f273": {
+          "title": "Splash",
+          "visualDirection": "landing with a still hold and a stream that moves",
+          "parentDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+          "currentVersion": 2
+        }
+      },
+      "updatedAt": "2026-10-23T08:21:21Z"
+    },
+    "/home": {
+      "targetKind": "new-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "activeDraftId": "a7c58493-1f8b-4c25-a20b-7cc135f2f6d2",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0",
+        "9a1d11e2-7b57-412a-af3a-1190ad1a595c",
+        "90baab01-ef4f-4964-b66b-b6b0e8f66487",
+        "9f6b8f30-9a9a-4bab-9325-ad6b1811face"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui-bits.tsx",
+        "components/product.tsx",
+        "app/(main)/goals/page.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "376e8ec3c1451126965fe578c8405c0d47da8fe49aef83fbca57e93ded02f309",
+        "components/shell.tsx": "4c3dabe59f7a8e11cc757cfccadbffc7359d2fe528aaf476c15add102ca934b0",
+        "components/ui-bits.tsx": "9f7e8e8b5da926d9924eac1e0b4e9abd32b8c248da63714e478defe937725b2b",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1",
+        "app/(main)/goals/page.tsx": "06ebe7abd5ade69a41677841a88f6358bc5cfc434792062c109170f378e30ced"
+      },
+      "sourceTarget": "/goals",
+      "sourceDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "drafts": {
+        "a7c58493-1f8b-4c25-a20b-7cc135f2f6d2": {
+          "title": "Home",
+          "visualDirection": "total, start buttons, and the filled goals list",
+          "parentDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-10-23T08:09:44Z"
+    },
+    "/goals/new": {
+      "targetKind": "new-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "activeDraftId": "c2b023af-46da-496a-9d88-033bd62b619c",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0",
+        "9a1d11e2-7b57-412a-af3a-1190ad1a595c",
+        "90baab01-ef4f-4964-b66b-b6b0e8f66487",
+        "9f6b8f30-9a9a-4bab-9325-ad6b1811face"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui-bits.tsx",
+        "components/product.tsx",
+        "app/(main)/goals/page.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "376e8ec3c1451126965fe578c8405c0d47da8fe49aef83fbca57e93ded02f309",
+        "components/shell.tsx": "4c3dabe59f7a8e11cc757cfccadbffc7359d2fe528aaf476c15add102ca934b0",
+        "components/ui-bits.tsx": "9f7e8e8b5da926d9924eac1e0b4e9abd32b8c248da63714e478defe937725b2b",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1",
+        "app/(main)/goals/page.tsx": "06ebe7abd5ade69a41677841a88f6358bc5cfc434792062c109170f378e30ced"
+      },
+      "sourceTarget": "/goals",
+      "sourceDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "drafts": {
+        "c2b023af-46da-496a-9d88-033bd62b619c": {
+          "title": "Create goal",
+          "visualDirection": "saving form with an open end-date calendar",
+          "parentDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+          "currentVersion": 2
+        }
+      },
+      "updatedAt": "2026-10-23T08:09:44Z"
+    },
+    "/goals/[id]": {
+      "targetKind": "new-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "activeDraftId": "cd10c686-cc3d-45b8-b667-6f752fbdb079",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0",
+        "9a1d11e2-7b57-412a-af3a-1190ad1a595c",
+        "90baab01-ef4f-4964-b66b-b6b0e8f66487",
+        "9f6b8f30-9a9a-4bab-9325-ad6b1811face"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui-bits.tsx",
+        "components/product.tsx",
+        "app/(main)/goals/page.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "376e8ec3c1451126965fe578c8405c0d47da8fe49aef83fbca57e93ded02f309",
+        "components/shell.tsx": "4c3dabe59f7a8e11cc757cfccadbffc7359d2fe528aaf476c15add102ca934b0",
+        "components/ui-bits.tsx": "9f7e8e8b5da926d9924eac1e0b4e9abd32b8c248da63714e478defe937725b2b",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1",
+        "app/(main)/goals/page.tsx": "06ebe7abd5ade69a41677841a88f6358bc5cfc434792062c109170f378e30ced"
+      },
+      "sourceTarget": "/goals",
+      "sourceDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "drafts": {
+        "cd10c686-cc3d-45b8-b667-6f752fbdb079": {
+          "title": "Goal detail",
+          "visualDirection": "holding goal with a still amount",
+          "parentDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-10-23T08:09:44Z"
+    },
+    "/vaults": {
+      "targetKind": "new-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "activeDraftId": "7fa88fa4-78c0-4f7a-ae0a-7b9937d80a63",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0",
+        "9a1d11e2-7b57-412a-af3a-1190ad1a595c",
+        "90baab01-ef4f-4964-b66b-b6b0e8f66487",
+        "9f6b8f30-9a9a-4bab-9325-ad6b1811face"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui-bits.tsx",
+        "components/product.tsx",
+        "app/(main)/goals/page.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "376e8ec3c1451126965fe578c8405c0d47da8fe49aef83fbca57e93ded02f309",
+        "components/shell.tsx": "4c3dabe59f7a8e11cc757cfccadbffc7359d2fe528aaf476c15add102ca934b0",
+        "components/ui-bits.tsx": "9f7e8e8b5da926d9924eac1e0b4e9abd32b8c248da63714e478defe937725b2b",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1",
+        "app/(main)/goals/page.tsx": "06ebe7abd5ade69a41677841a88f6358bc5cfc434792062c109170f378e30ced"
+      },
+      "sourceTarget": "/goals",
+      "sourceDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "drafts": {
+        "7fa88fa4-78c0-4f7a-ae0a-7b9937d80a63": {
+          "title": "Locks",
+          "visualDirection": "lock list with the orange padlock",
+          "parentDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-10-23T08:09:44Z"
+    },
+    "/vaults/new": {
+      "targetKind": "new-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "activeDraftId": "5ff1283e-a113-4e8c-8931-7c8deb785c9e",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0",
+        "9a1d11e2-7b57-412a-af3a-1190ad1a595c",
+        "90baab01-ef4f-4964-b66b-b6b0e8f66487",
+        "9f6b8f30-9a9a-4bab-9325-ad6b1811face"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui-bits.tsx",
+        "components/product.tsx",
+        "app/(main)/goals/page.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "376e8ec3c1451126965fe578c8405c0d47da8fe49aef83fbca57e93ded02f309",
+        "components/shell.tsx": "4c3dabe59f7a8e11cc757cfccadbffc7359d2fe528aaf476c15add102ca934b0",
+        "components/ui-bits.tsx": "9f7e8e8b5da926d9924eac1e0b4e9abd32b8c248da63714e478defe937725b2b",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1",
+        "app/(main)/goals/page.tsx": "06ebe7abd5ade69a41677841a88f6358bc5cfc434792062c109170f378e30ced"
+      },
+      "sourceTarget": "/goals",
+      "sourceDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "drafts": {
+        "5ff1283e-a113-4e8c-8931-7c8deb785c9e": {
+          "title": "New lock",
+          "visualDirection": "lock form with an open unlock-date calendar",
+          "parentDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+          "currentVersion": 2
+        }
+      },
+      "updatedAt": "2026-10-23T08:09:44Z"
+    },
+    "/vaults/[id]": {
+      "targetKind": "new-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "activeDraftId": "b500148a-a6c6-456d-83bc-086a658426cf",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0",
+        "9a1d11e2-7b57-412a-af3a-1190ad1a595c",
+        "90baab01-ef4f-4964-b66b-b6b0e8f66487",
+        "9f6b8f30-9a9a-4bab-9325-ad6b1811face"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui-bits.tsx",
+        "components/product.tsx",
+        "app/(main)/goals/page.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "376e8ec3c1451126965fe578c8405c0d47da8fe49aef83fbca57e93ded02f309",
+        "components/shell.tsx": "4c3dabe59f7a8e11cc757cfccadbffc7359d2fe528aaf476c15add102ca934b0",
+        "components/ui-bits.tsx": "9f7e8e8b5da926d9924eac1e0b4e9abd32b8c248da63714e478defe937725b2b",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1",
+        "app/(main)/goals/page.tsx": "06ebe7abd5ade69a41677841a88f6358bc5cfc434792062c109170f378e30ced"
+      },
+      "sourceTarget": "/goals",
+      "sourceDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "drafts": {
+        "b500148a-a6c6-456d-83bc-086a658426cf": {
+          "title": "Lock detail",
+          "visualDirection": "vacation lock detail",
+          "parentDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-10-23T08:09:44Z"
+    },
+    "/groups": {
+      "targetKind": "new-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "activeDraftId": "390f703e-c42c-44ab-bfb1-7cdb15893e17",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0",
+        "9a1d11e2-7b57-412a-af3a-1190ad1a595c",
+        "90baab01-ef4f-4964-b66b-b6b0e8f66487",
+        "9f6b8f30-9a9a-4bab-9325-ad6b1811face"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui-bits.tsx",
+        "components/product.tsx",
+        "app/(main)/goals/page.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "376e8ec3c1451126965fe578c8405c0d47da8fe49aef83fbca57e93ded02f309",
+        "components/shell.tsx": "4c3dabe59f7a8e11cc757cfccadbffc7359d2fe528aaf476c15add102ca934b0",
+        "components/ui-bits.tsx": "9f7e8e8b5da926d9924eac1e0b4e9abd32b8c248da63714e478defe937725b2b",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1",
+        "app/(main)/goals/page.tsx": "06ebe7abd5ade69a41677841a88f6358bc5cfc434792062c109170f378e30ced"
+      },
+      "sourceTarget": "/goals",
+      "sourceDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "drafts": {
+        "390f703e-c42c-44ab-bfb1-7cdb15893e17": {
+          "title": "Groups",
+          "visualDirection": "filled group row",
+          "parentDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-10-23T08:09:44Z"
+    },
+    "/groups/new": {
+      "targetKind": "new-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "activeDraftId": "00fea9ff-9cbf-4b3e-bbd4-6814fb52959e",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0",
+        "9a1d11e2-7b57-412a-af3a-1190ad1a595c",
+        "90baab01-ef4f-4964-b66b-b6b0e8f66487",
+        "9f6b8f30-9a9a-4bab-9325-ad6b1811face"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui-bits.tsx",
+        "components/product.tsx",
+        "app/(main)/goals/page.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "376e8ec3c1451126965fe578c8405c0d47da8fe49aef83fbca57e93ded02f309",
+        "components/shell.tsx": "4c3dabe59f7a8e11cc757cfccadbffc7359d2fe528aaf476c15add102ca934b0",
+        "components/ui-bits.tsx": "9f7e8e8b5da926d9924eac1e0b4e9abd32b8c248da63714e478defe937725b2b",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1",
+        "app/(main)/goals/page.tsx": "06ebe7abd5ade69a41677841a88f6358bc5cfc434792062c109170f378e30ced"
+      },
+      "sourceTarget": "/goals",
+      "sourceDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "drafts": {
+        "00fea9ff-9cbf-4b3e-bbd4-6814fb52959e": {
+          "title": "New group",
+          "visualDirection": "group form",
+          "parentDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-10-23T08:09:44Z"
+    },
+    "/groups/[id]": {
+      "targetKind": "new-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "activeDraftId": "6056065a-f682-423b-89cc-d6f70231fda6",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0",
+        "9a1d11e2-7b57-412a-af3a-1190ad1a595c",
+        "90baab01-ef4f-4964-b66b-b6b0e8f66487",
+        "9f6b8f30-9a9a-4bab-9325-ad6b1811face"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui-bits.tsx",
+        "components/product.tsx",
+        "app/(main)/goals/page.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "376e8ec3c1451126965fe578c8405c0d47da8fe49aef83fbca57e93ded02f309",
+        "components/shell.tsx": "4c3dabe59f7a8e11cc757cfccadbffc7359d2fe528aaf476c15add102ca934b0",
+        "components/ui-bits.tsx": "9f7e8e8b5da926d9924eac1e0b4e9abd32b8c248da63714e478defe937725b2b",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1",
+        "app/(main)/goals/page.tsx": "06ebe7abd5ade69a41677841a88f6358bc5cfc434792062c109170f378e30ced"
+      },
+      "sourceTarget": "/goals",
+      "sourceDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "drafts": {
+        "6056065a-f682-423b-89cc-d6f70231fda6": {
+          "title": "Group detail",
+          "visualDirection": "open cycle and members",
+          "parentDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-10-23T08:09:44Z"
+    },
+    "/settings": {
+      "targetKind": "new-ui",
+      "projectId": "135bd4c8-4b71-42d0-b6a5-0164eaf782b9",
+      "activeDraftId": "fad168a2-7604-48c6-81ce-29eaf4f6cbac",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-mark.jpg",
+        "a8adb0fa-3b0f-404d-bb54-36f35c501477",
+        "8d4a083e-ee8c-4dfd-a1d2-e7d74f858a03",
+        "8091edc8-b742-4891-b0cb-1c9b0a02a274",
+        "a3a263ff-1a84-4670-a5ee-7382a89a94e0",
+        "9a1d11e2-7b57-412a-af3a-1190ad1a595c",
+        "90baab01-ef4f-4964-b66b-b6b0e8f66487",
+        "9f6b8f30-9a9a-4bab-9325-ad6b1811face"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-mark.jpg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/135bd4c8-4b71-42d0-b6a5-0164eaf782b9/brand-assets/public-mark.jpg/mark.jpg",
+          "sourcePath": "public/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "app/globals.css",
+        "components/shell.tsx",
+        "components/ui-bits.tsx",
+        "components/product.tsx",
+        "app/(main)/goals/page.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "80b66e8368edb8fcff350718de52f19e34c6dabba69f4af829b67945134430b5",
+        ".superdesign/init/theme.md": "439d0b6d28f0414ab5f8cbaaa2c586750b9b26a1d4f0fe83866cd24cccc90b7a",
+        "app/globals.css": "376e8ec3c1451126965fe578c8405c0d47da8fe49aef83fbca57e93ded02f309",
+        "components/shell.tsx": "4c3dabe59f7a8e11cc757cfccadbffc7359d2fe528aaf476c15add102ca934b0",
+        "components/ui-bits.tsx": "9f7e8e8b5da926d9924eac1e0b4e9abd32b8c248da63714e478defe937725b2b",
+        "components/product.tsx": "609910a8317477526db9ce32559a3cc3685d0b097a3eda748373e6b8bccd7ee1",
+        "app/(main)/goals/page.tsx": "06ebe7abd5ade69a41677841a88f6358bc5cfc434792062c109170f378e30ced"
+      },
+      "sourceTarget": "/goals",
+      "sourceDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+      "drafts": {
+        "fad168a2-7604-48c6-81ce-29eaf4f6cbac": {
+          "title": "Settings",
+          "visualDirection": "currency, accounts, and protocol notes",
+          "parentDraftId": "e78cd9b7-6f68-44fc-9bf2-1474cbb29e22",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-10-23T08:09:44Z"
+    }
+  }
+}

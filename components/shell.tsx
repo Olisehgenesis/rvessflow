@@ -4,7 +4,6 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CreateMenu } from "@/components/create-menu";
-import { IconMark } from "@/components/icons";
 
 const left = [
   { href: "/home", label: "Home", src: "/nav/home.png" },
@@ -16,24 +15,66 @@ const right = [
   { href: "/settings", label: "Settings", src: "/nav/more.png" },
 ];
 
+const desk = [
+  { href: "/home", label: "Home", src: "/nav/home.png", match: (path: string) => path === "/home" || path.startsWith("/home/") },
+  { href: "/goals", label: "Save", src: "/nav/goals.png", match: (path: string) => path.startsWith("/goals") && !path.startsWith("/goals/flow") && !path.startsWith("/goals/expense") },
+  { href: "/goals/flow", label: "Stream", src: "/marks/flow.png", match: (path: string) => path.startsWith("/goals/flow") || path.startsWith("/goals/expense") },
+  { href: "/vaults", label: "Lock", src: "/marks/lock.png", match: (path: string) => path.startsWith("/vaults") },
+  { href: "/groups", label: "Groups", src: "/nav/groups.png", match: (path: string) => path.startsWith("/groups") },
+];
+
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh bg-background text-foreground lg:grid lg:grid-cols-[minmax(0,1fr)_30rem]">
-      <aside className="relative hidden bg-background text-foreground lg:flex lg:flex-col lg:p-12">
-        <p className="flex items-center gap-2 text-sm font-medium">
-          <IconMark className="size-8" />
-          RvessFlow
-          <span className="rounded-full bg-[#D4F06B] px-2 py-0.5 text-[11px] font-semibold tracking-normal text-[#141B2D]">Beta</span>
-        </p>
-        <p className="mt-4 max-w-sm text-lg">A hold stays still. A stream moves every second.</p>
-      </aside>
-      <div className="relative mx-auto flex h-dvh w-full max-w-lg flex-col bg-background lg:h-dvh lg:border-l lg:border-border">
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-        <Suspense fallback={<div className="sticky bottom-0 h-14 border-t border-border bg-card" />}>
-          <BottomNav />
-        </Suspense>
+    <div className="rvess-desk min-h-dvh bg-background text-foreground lg:grid lg:grid-cols-[15.5rem_minmax(0,1fr)] lg:bg-[#F3F6EE]">
+      <DesktopSide />
+      <div className="relative mx-auto flex h-dvh w-full max-w-lg flex-col bg-background lg:mx-0 lg:h-dvh lg:max-w-none lg:bg-transparent">
+        <div id="desk-main" className="min-h-0 flex-1 overflow-y-auto lg:px-8 lg:py-7 xl:px-10">{children}</div>
+        <div className="lg:hidden">
+          <Suspense fallback={<div className="sticky bottom-0 h-14 border-t border-border bg-card" />}>
+            <BottomNav />
+          </Suspense>
+        </div>
       </div>
     </div>
+  );
+}
+
+function DesktopSide() {
+  const pathname = usePathname();
+  return (
+    <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-r lg:border-[#E3EAD4] lg:bg-[#F7FAF2] lg:px-3 lg:py-5">
+      <Link href="/home" className="flex items-center gap-2.5 rounded-2xl px-2 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]">
+        <img src="/mark.jpg" alt="" className="size-9 rounded-xl object-cover" />
+        <span className="font-[family-name:var(--font-manrope)] text-lg font-semibold tracking-[-0.03em] text-[#141414]">RvessFlow</span>
+      </Link>
+      <nav className="mt-7" aria-label="Main">
+        <ul className="space-y-1">
+          {desk.map((item) => {
+            const active = item.match(pathname);
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex min-h-11 items-center gap-3 rounded-2xl px-3 text-sm transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414] ${active ? "bg-[#E7F4C4] font-semibold text-[#141414]" : "text-[#3A3F47] hover:bg-white"}`}
+                >
+                  <img src={item.src} alt="" className="size-6 object-contain" />
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+      <Link
+        href="/settings"
+        aria-current={pathname.startsWith("/settings") ? "page" : undefined}
+        className={`mt-auto flex min-h-11 items-center gap-3 rounded-2xl border-t border-transparent px-3 text-sm transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414] ${pathname.startsWith("/settings") ? "bg-[#E7F4C4] font-semibold text-[#141414]" : "text-[#3A3F47] hover:bg-white"}`}
+      >
+        <img src="/nav/more.png" alt="" className="size-6 object-contain" />
+        Account
+      </Link>
+    </aside>
   );
 }
 

@@ -62,6 +62,8 @@ async function GoalBody({
   const status = flow.settled ? "Closed" : paused ? "Paused" : flow.active || saving ? "Active" : "Waiting";
   return (
     <Page title={flow.name} back={saving ? "/goals/savings" : flow.kind === "expense" ? "/goals/expense/stream" : "/goals/flow"} action={<GoalMenu id={flow.id} description={description} frequency={frequency} saving={saving} />}>
+      <div className="contents lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] lg:items-start lg:gap-6">
+      <div className="lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <ProductMark kind={flow.kind} size="md" quiet={flow.settled} />
@@ -100,8 +102,10 @@ async function GoalBody({
           {description || "Add a short note from the menu so you remember what this goal is for."}
         </p>
       </section>
+      </div>
       {flow.settled ? null : (
-        <div className="mt-5 space-y-3">
+      <div className="lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
+        <div className="mt-5 space-y-3 lg:mt-0">
           {saving ? <AddToGoal id={flow.id} choices={choices} /> : null}
           {saving ? (
             appPaused ? (
@@ -126,7 +130,9 @@ async function GoalBody({
             </span>
           </Notice>
         </div>
+      </div>
       )}
+      </div>
     </Page>
   );
 }

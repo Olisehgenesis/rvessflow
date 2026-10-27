@@ -2,11 +2,13 @@ import { TopBar } from "@/components/top-bar";
 import { money, show } from "@/lib/display";
 import type { Quote } from "@/lib/quote";
 
-export function Page({ title = "", back, children, action }: { title?: string; back?: string; children: React.ReactNode; action?: React.ReactNode }) {
+export function Page({ title = "", back, children, action, bleed = false }: { title?: string; back?: string; children: React.ReactNode; action?: React.ReactNode; bleed?: boolean }) {
   return (
-    <main className="px-4 pb-8">
-      <TopBar title={title} back={back} action={action} />
-      {children}
+    <main className="px-4 pb-8 lg:px-0">
+      <div className={bleed ? "lg:max-w-none" : "lg:mx-auto lg:max-w-5xl"}>
+        <TopBar title={title} back={back} action={action} />
+        {children}
+      </div>
     </main>
   );
 }

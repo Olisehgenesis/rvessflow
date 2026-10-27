@@ -12,7 +12,7 @@ import { Fact, Notice, Page } from "@/components/ui-bits";
 import { contactIfReady, type Contact } from "@/lib/circle";
 import { labeled, money, shortAddress } from "@/lib/display";
 import { loadQuote } from "@/lib/rates";
-import { signOut } from "@/lib/actions";
+import { SignOutForm } from "@/components/sign-out";
 import { addresses, explorer, loadPortfolio, networkName, stableLabel } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
@@ -43,7 +43,28 @@ async function SettingsBody() {
     { href: `${explorer}/address/${addresses.groups}`, label: "Group rotation" },
   ];
   return (
-    <Page title="Account">
+    <Page title="Account" bleed>
+      <div className="lg:grid lg:grid-cols-[13.5rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+      <nav className="sticky top-0 hidden lg:block" aria-label="Account sections">
+        <ul className="space-y-1">
+          {[
+            ["#profile", "Profile"],
+            ["#preferences", "Preferences"],
+            ["#security", "Wallet and security"],
+            ...(who.method === "tester" ? [["#accounts", "Switch account"]] : []),
+            ["#protocol", "Advanced"],
+          ].map(([href, label]) => (
+            <li key={href}>
+              <a href={href} className="flex min-h-11 items-center rounded-2xl px-3 text-sm font-medium text-[#3A3F47] hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]">
+                {label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+      <div className="lg:max-w-3xl lg:space-y-4">
+      <section id="profile" className="scroll-mt-6 lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
+      <h2 className="hidden font-[family-name:var(--font-manrope)] text-lg font-semibold tracking-[-0.03em] lg:mb-4 lg:block">Profile</h2>
       <div className="flex items-center gap-3">
         <ProfileAvatar seed={who.address} className="size-14 ring-2 ring-[#D6F34A]" />
         <div className="min-w-0">
@@ -55,10 +76,17 @@ async function SettingsBody() {
           </div>
         </div>
       </div>
-      <p className="mt-3 text-sm text-muted-foreground">{Number(data.eth).toFixed(4)} ETH for network fees</p>
+      <p className="mt-3 text-sm text-muted-foreground">
+        {who.method === "passkey"
+          ? `${Number(data.eth).toFixed(4)} ETH in this account. This passkey pays the network fee in USDC. ETH pays it only when USDC is not there.`
+          : `${Number(data.eth).toFixed(4)} ETH for network fees`}
+      </p>
       <CopyAddress address={data.me.address} />
+      </section>
 
-      <div className="mt-6 flex items-center justify-between gap-3 border-y border-border py-3">
+      <section id="preferences" className="scroll-mt-6 lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
+      <h2 className="hidden font-[family-name:var(--font-manrope)] text-lg font-semibold tracking-[-0.03em] lg:mb-4 lg:block">Preferences</h2>
+      <div className="mt-6 flex items-center justify-between gap-3 border-y border-border py-3 lg:mt-0 lg:border-0 lg:py-0">
         <p className="text-sm font-medium">Currency</p>
         <CurrencyPick code={quote.code} />
       </div>
@@ -78,9 +106,13 @@ async function SettingsBody() {
           <ProfileForm contact={directory.contact} demo={who.method === "tester"} />
         </details>
       )}
+      </section>
 
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold">Security</h2>
+      <section id="security" className="mt-8 scroll-mt-6 lg:mt-0 lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
+        <h2 className="text-sm font-semibold lg:font-[family-name:var(--font-manrope)] lg:text-lg lg:tracking-[-0.03em]">
+          <span className="lg:hidden">Security</span>
+          <span className="hidden lg:inline">Wallet and security</span>
+        </h2>
         <p className="mt-1 mb-3 text-sm leading-relaxed text-muted-foreground">
           {who.method === "wallet"
             ? "Each payment opens in the wallet you connected. This app does not hold that key."
@@ -88,32 +120,31 @@ async function SettingsBody() {
               ? "This device signs with your passkey."
               : "This machine signs payments for this account. Switching accounts below keeps you signed in."}
         </p>
-        <ExportKey held={who.method === "tester"} />
+        <ExportKey method={who.method} />
         <ul className="mt-3 divide-y divide-border border-y border-border text-sm">
           <li>
             <InstallButton row />
           </li>
           <li>
-            <form action={signOut}>
-              <button type="submit" className="min-h-12 w-full py-3 text-left font-medium">
-                Sign out
-              </button>
-            </form>
+            <SignOutForm className="min-h-12 w-full py-3 text-left font-medium lg:inline-flex lg:h-11 lg:min-h-11 lg:w-auto lg:items-center lg:rounded-full lg:border lg:border-[#E7C4B8] lg:bg-white lg:px-4 lg:py-0 lg:text-[#9A3412] lg:focus-visible:outline-2 lg:focus-visible:outline-offset-2 lg:focus-visible:outline-[#141414]" />
           </li>
         </ul>
       </section>
 
       {who.method === "tester" ? (
-        <section className="mt-8">
-          <h2 className="mb-3 text-sm font-semibold">Switch account</h2>
+        <section id="accounts" className="mt-8 scroll-mt-6 lg:mt-0 lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
+          <h2 className="mb-3 text-sm font-semibold lg:font-[family-name:var(--font-manrope)] lg:text-lg lg:tracking-[-0.03em]">Switch account</h2>
           <AccountSwitch people={data.people} current={data.me.address} />
         </section>
       ) : null}
 
-      <details className="mt-8 border-y border-border">
+      <details id="protocol" className="mt-8 scroll-mt-6 border-y border-border lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:px-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
         <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 py-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground [&::-webkit-details-marker]:hidden">
           <span>
-            <span className="block font-medium">Protocol</span>
+            <span className="block font-medium lg:font-[family-name:var(--font-manrope)] lg:text-lg lg:tracking-[-0.03em]">
+              <span className="lg:hidden">Protocol</span>
+              <span className="hidden lg:inline">Advanced</span>
+            </span>
             <span className="block text-muted-foreground">{data.protocol.paused ? "New positions are paused" : "Open"} · view only</span>
           </span>
           <span className="shrink-0 font-medium">View</span>
@@ -147,6 +178,8 @@ async function SettingsBody() {
           <Notice>These contracts are unaudited. An upgrade waits two days after it is scheduled.</Notice>
         </div>
       </details>
+      </div>
+      </div>
     </Page>
   );
 }

@@ -28,11 +28,11 @@ const cards = [
 export default function SavePage() {
   return (
     <Suspense fallback={<Loading />}>
-      <Page title="Save">
-        <ul className="space-y-3">
+      <Page title="Save" bleed>
+        <ul className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0">
           {cards.map((card) => (
             <li key={card.href}>
-              <Link href={card.href} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
+              <Link href={card.href} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 lg:h-full lg:rounded-3xl lg:p-5 lg:transition-colors lg:duration-150 lg:hover:border-[#C9D7A4] lg:focus-visible:outline-2 lg:focus-visible:outline-offset-2 lg:focus-visible:outline-[#141414]">
                 <ProductMark kind={card.kind} size="md" />
                 <span className="min-w-0">
                   <span className="block font-medium">{card.title}</span>
