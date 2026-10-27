@@ -77,12 +77,20 @@ function othersOf(people: Person[], me: string) {
   return people.filter((person) => person.address.toLowerCase() !== me.toLowerCase());
 }
 
-function SendToFields({ people, me }: { people: Person[]; me: string }) {
+function recipientIssue(value: string, me: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "Paste any wallet address.";
+  if (!isAddress(trimmed)) return "Enter a wallet address.";
+  if (trimmed.toLowerCase() === me.toLowerCase()) return "That address is this account. A stream to you is a Flow.";
+  return "";
+}
+
+function SendToFields({ people, me, id, onId }: { people: Person[]; me: string; id: string; onId: (next: string) => void }) {
   const fieldId = useId();
   const others = othersOf(people, me);
-  const [id, setId] = useState(others[0]?.address ?? "");
-  const known = others.find((person) => person.address.toLowerCase() === id.trim().toLowerCase());
-  const bad = id.trim() !== "" && !isAddress(id.trim());
+  const trimmed = id.trim();
+  const known = others.find((person) => person.address.toLowerCase() === trimmed.toLowerCase());
+  const issue = recipientIssue(id, me);
   return (
     <div className="space-y-3">
       <label className="block space-y-1.5">
@@ -90,37 +98,39 @@ function SendToFields({ people, me }: { people: Person[]; me: string }) {
         <span className="relative block">
           <select
             className={`${field} w-full appearance-none pr-10`}
-            value={known?.address ?? ""}
-            onChange={(event) => {
-              if (event.target.value) setId(event.target.value);
-            }}
+            value={known?.address ?? "other"}
+            onChange={(event) => onId(event.target.value === "other" ? "" : event.target.value)}
           >
+            <option value="other">Another address</option>
             {others.map((person) => (
               <option key={person.address} value={person.address}>
                 {person.name}
               </option>
             ))}
-            <option value="">{others.length === 0 ? "No other account on this device" : "Another wallet"}</option>
           </select>
           <IconChevron className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted-foreground" />
         </span>
       </label>
       <label className="block space-y-1.5">
-        <Label htmlFor={fieldId}>ID</Label>
+        <Label htmlFor={fieldId}>Wallet address</Label>
         <Input
           id={fieldId}
           name="recipient"
           value={id}
-          onChange={(event) => setId(event.target.value)}
+          onChange={(event) => onId(event.target.value)}
           placeholder="0x…"
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
           className={field}
-          aria-invalid={bad}
+          aria-invalid={trimmed !== "" && Boolean(issue)}
         />
       </label>
-      {bad ? <p className="text-sm text-destructive">Enter their wallet address.</p> : null}
+      {trimmed !== "" && issue ? (
+        <p className="text-sm text-destructive">{issue}</p>
+      ) : (
+        <p className="text-sm text-muted-foreground">Any wallet. Pick someone on this device, or paste an address.</p>
+      )}
     </div>
   );
 }
@@ -136,83 +146,52 @@ function When({ start, end, onStart, onEnd }: { start: Date; end: Date; onStart:
   );
 }
 
-export function SavingForm({ people, me, choices }: { people: Person[]; me: string; choices: PayChoice[] }) {
-  const [saveState, save, savePending] = useSignedAction(createSaving);
-  const [sendState, send, sendPending] = useSignedAction(createStream);
-  const [someoneElse, setSomeoneElse] = useState(false);
+export function SavingForm({ me, choices }: { me: string; choices: PayChoice[] }) {
+  const [state, save, pending] = useSignedAction(createSaving);
   const today = startOfDay(new Date());
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(() => addDays(today, 180));
   const window = streamWindow(start, end);
   const problem = startOfDay(end) < startOfDay(start) ? "The end date has to be on or after the start date." : dateProblem(window.duration, FLOW_MIN);
-  const state = someoneElse ? sendState : saveState;
-  const pending = someoneElse ? sendPending : savePending;
   const draftName = useGoalName();
   return (
-    <form action={someoneElse ? send : save} className="space-y-4">
-      {someoneElse ? <input type="hidden" name="kind" value="expense" /> : null}
+    <form action={save} className="space-y-4">
       <input type="hidden" name="name" value={draftName} />
-      <PayWith choices={choices} mode={someoneElse ? "stream" : "vault"} duration={someoneElse && !problem ? window.duration : undefined} />
-      <ForSomeoneElseControlled people={people} me={me} on={someoneElse} onToggle={setSomeoneElse} />
+      <input type="hidden" name="recipient" value={me} />
+      <PayWith choices={choices} mode="vault" />
       <When start={start} end={end} onStart={setStart} onEnd={setEnd} />
       <input type="hidden" name="startAt" value={problem ? "" : window.startAt} />
       <input type="hidden" name="duration" value={problem ? "" : window.duration} />
       {problem ? <p className="text-sm text-destructive">{problem}</p> : null}
-      {someoneElse ? <p className="text-sm text-muted-foreground">A saving stays in your vault. This pays their wallet instead.</p> : null}
       <ErrorNote error={state?.error} />
-      <Submit pending={pending || Boolean(problem)}>Create goal</Submit>
+      <Submit pending={pending || Boolean(problem)}>Save</Submit>
     </form>
-  );
-}
-
-function ForSomeoneElseControlled({
-  people,
-  me,
-  on,
-  onToggle,
-}: {
-  people: Person[];
-  me: string;
-  on: boolean;
-  onToggle: (next: boolean) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <label className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3">
-        <input type="checkbox" checked={on} onChange={(event) => onToggle(event.target.checked)} className="size-4 accent-[#141414]" />
-        <span className="text-sm font-medium">For someone else</span>
-      </label>
-      {on ? <SendToFields people={people} me={me} /> : <input type="hidden" name="recipient" value={me} />}
-    </div>
   );
 }
 
 export function StreamForm({ kind, people, me, choices }: { kind: "flow" | "expense"; people: Person[]; me: string; choices: PayChoice[] }) {
   const [state, action, pending] = useSignedAction(createStream);
-  const [someoneElse, setSomeoneElse] = useState(kind === "expense");
   const today = startOfDay(new Date());
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(() => addDays(today, 180));
   const window = streamWindow(start, end);
   const problem = startOfDay(end) < startOfDay(start) ? "The end date has to be on or after the start date." : dateProblem(window.duration, FLOW_MIN);
-  const payingSomeone = kind === "expense" || someoneElse;
+  const [recipient, setRecipient] = useState("");
+  const whoProblem = kind === "expense" ? recipientIssue(recipient, me) : "";
   const draftName = useGoalName();
   return (
     <form action={action} className="space-y-4">
-      <input type="hidden" name="kind" value={payingSomeone ? "expense" : "flow"} />
+      <input type="hidden" name="kind" value={kind} />
       <input type="hidden" name="name" value={draftName} />
+      {kind === "flow" ? <input type="hidden" name="recipient" value={me} /> : null}
       <PayWith choices={choices} mode="stream" duration={problem ? undefined : window.duration} />
-      {kind === "expense" ? (
-        <SendToFields people={people} me={me} />
-      ) : (
-        <ForSomeoneElseControlled people={people} me={me} on={someoneElse} onToggle={setSomeoneElse} />
-      )}
+      {kind === "expense" ? <SendToFields people={people} me={me} id={recipient} onId={setRecipient} /> : null}
       <When start={start} end={end} onStart={setStart} onEnd={setEnd} />
       <input type="hidden" name="startAt" value={problem ? "" : window.startAt} />
       <input type="hidden" name="duration" value={problem ? "" : window.duration} />
       {problem ? <p className="text-sm text-destructive">{problem}</p> : null}
       <ErrorNote error={state?.error} />
-      <Submit pending={pending || Boolean(problem)}>Create goal</Submit>
+      <Submit pending={pending || Boolean(problem)} hold={Boolean(whoProblem)}>{kind === "expense" ? "Start stream" : "Start flow"}</Submit>
     </form>
   );
 }

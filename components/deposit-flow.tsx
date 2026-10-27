@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { toggleConceal, useConceal } from "@/components/balance-card";
 import { TokenIcon } from "@/components/token-icon";
 import { CopyButton } from "@/components/copy-button";
-import { IconBack, IconCheck, IconChevron, IconClock, IconClose, IconExternal, IconEye, IconEyeOff, IconInfo, IconSearch } from "@/components/icons";
+import { IconCheck, IconChevron, IconClock, IconClose, IconExternal, IconEye, IconEyeOff, IconInfo, IconSearch } from "@/components/icons";
+import { TopBar } from "@/components/top-bar";
 import { addMoney, continueIntent, previewDeposit } from "@/lib/actions";
 import { depositReceipt, sendCalls } from "@/lib/client-sign";
 import { basescan, depositHref, matchesToken, shortHash, type DepositPreview, type TokenFilter } from "@/lib/deposit-math";
@@ -21,23 +22,17 @@ const symbols: Record<PayAsset, string> = { usdc: "USDC", usdt: "USDT", eth: "ET
 
 export function FlowHeader({ title, back, close }: { title: string; back?: string; close?: string }) {
   return (
-    <header className="mb-5 flex items-center gap-2">
-      {back ? (
-        <Link href={back} aria-label="Back" className="grid size-9 place-items-center">
-          <IconBack className="size-5" />
-        </Link>
-      ) : (
-        <span className="size-9" />
-      )}
-      <h1 className="flex-1 text-center font-display text-lg font-semibold tracking-tight">{title}</h1>
-      {close ? (
-        <Link href={close} aria-label="Close" className="grid size-9 place-items-center">
-          <IconClose className="size-5" />
-        </Link>
-      ) : (
-        <span className="size-9" />
-      )}
-    </header>
+    <TopBar
+      title={title}
+      back={back}
+      action={
+        close ? (
+          <Link href={close} aria-label="Close" className="grid size-10 place-items-center">
+            <IconClose className="size-5" />
+          </Link>
+        ) : null
+      }
+    />
   );
 }
 
@@ -148,7 +143,7 @@ export function CryptoDeposit({
   ];
 
   return (
-    <main className="px-4 pt-4 pb-8">
+    <main className="px-4 pb-8">
       <FlowHeader title="Top up" back="/home/add" />
       <section className="rounded-3xl border border-border bg-card p-4">
         <div className="flex items-center justify-between">
@@ -285,7 +280,7 @@ export function TokenSelect({ tokens, pay, usd }: { tokens: DepositToken[]; pay:
   const [query, setQuery] = useState("");
   const shown = tokens.filter((token) => matchesToken(token.pay, filter, query));
   return (
-    <main className="px-4 pt-4 pb-8">
+    <main className="px-4 pb-8">
       <FlowHeader title="Select token" back={depositHref("/home/add/crypto", pay, usd)} />
       <label className="relative block">
         <IconSearch className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -371,7 +366,7 @@ function Party({ kicker, pay, title, name, amount, usd }: { kicker: string; pay?
 
 export function ReviewDeposit({ pay, usd, preview }: { pay: PayAsset; usd: string; preview: DepositPreview }) {
   return (
-    <main className="px-4 pt-4 pb-8">
+    <main className="px-4 pb-8">
       <FlowHeader title="Review deposit" back={depositHref("/home/add/token", pay, usd)} />
       <Party kicker="From" pay={preview.pay} title={preview.symbol} name={preview.tokenName} amount={preview.amountIn} usd={preview.amountInUsd} />
       <div className="relative z-10 -my-3 flex justify-center">
@@ -567,7 +562,7 @@ export function DepositStatus({
   ] as const;
 
   return (
-    <main className="px-4 pt-4 pb-8">
+    <main className="px-4 pb-8">
       <FlowHeader title="RvessFlow" back={preview ? depositHref("/home/add/review", preview.pay, usd) : "/home/add"} close="/home" />
       <div className="mt-4 flex flex-col items-center text-center">
         <span className="grid size-16 place-items-center rounded-full border border-border bg-card">

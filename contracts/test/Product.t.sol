@@ -223,15 +223,15 @@ contract ProductTest is SfBase {
     }
 
     function _memberCount(uint256 id) internal view returns (uint16 memberCount) {
-        (,,,,,,,,,, memberCount,,,,,,,,,) = groups.groups(id);
+        (,,,,,,,,,, memberCount,,,,,,,,,,) = groups.groups(id);
     }
 
     function _started(uint256 id) internal view returns (bool started) {
-        (,,,,,,,,,,, started,,,,,,,,) = groups.groups(id);
+        (,,,,,,,,,,, started,,,,,,,,,) = groups.groups(id);
     }
 
     function _rate(uint256 id) internal view returns (int96 rate) {
-        (,,,,,,,,,,,,,,,, rate,,,) = groups.groups(id);
+        (,,,,,,,,,,,,,,,, rate,,,,) = groups.groups(id);
     }
 
     function _draft(

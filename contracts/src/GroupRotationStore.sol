@@ -58,6 +58,9 @@ abstract contract GroupRotationStore is Initializable, Ownable2Step, UUPSUpgrade
         uint64 rateUpdatedAt;
         bool cycleOpen;
         uint256 receivedSnapshot;
+        /// @dev False keeps the pot as a GDA stream. True pays each contribution
+        ///      straight to the member whose turn it is. Existing groups stay false.
+        bool plain;
     }
 
     struct Member {

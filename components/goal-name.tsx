@@ -9,8 +9,8 @@ export function useGoalName() {
   return useContext(GoalNameContext);
 }
 
-/** One name for Saving, Flow, and Expense. It stays put when the tab changes. */
-export function GoalName({ children }: { children: React.ReactNode }) {
+/** The name sits above the form for one saving, flow, or expense. */
+export function GoalName({ children, placeholder }: { children: React.ReactNode; placeholder: string }) {
   const [name, setName] = useState("");
   return (
     <GoalNameContext.Provider value={name}>
@@ -19,7 +19,7 @@ export function GoalName({ children }: { children: React.ReactNode }) {
         <Input
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="Name this goal"
+          placeholder={placeholder}
           className="h-9 rounded-xl border-border bg-white px-3 text-sm shadow-none"
         />
       </label>

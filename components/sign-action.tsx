@@ -8,6 +8,9 @@ import { sendCalls } from "@/lib/client-sign";
 function explain(error: unknown): string {
   const message = error instanceof Error ? error.message : "The transaction failed.";
   if (/reject|denied|dismiss/i.test(message)) return "The signature was dismissed.";
+  if (/gas required exceeds allowance \(0\)|insufficient funds/i.test(message)) {
+    return "This wallet has no ETH for the network fee. On this local app, that fee is paid on Base Sepolia.";
+  }
   const line = message.split("\n").find((item) => item.trim()) ?? message;
   return line.replace(/^Error:\s*/, "").slice(0, 220);
 }

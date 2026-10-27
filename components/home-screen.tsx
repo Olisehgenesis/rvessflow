@@ -1,11 +1,11 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { BalanceError, BalanceSkeleton, HomeBalance } from "@/components/balance-card";
-import { IconBell, IconChevron, IconMark } from "@/components/icons";
+import { IconBell, IconChevron } from "@/components/icons";
+import { TopBar } from "@/components/top-bar";
 import { GoalLink, ProductMark, type ProductKind } from "@/components/product";
 import { ActivityList } from "@/components/activity-list";
 import { PrivateLine, PrivateUsd } from "@/components/private-money";
-import { ProfileAvatar } from "@/components/profile-avatar";
 import { TokenIcon } from "@/components/token-icon";
 import { percent, show } from "@/lib/display";
 import { hasTokenAmount, showGettingStarted } from "@/lib/home-math";
@@ -24,9 +24,9 @@ export async function HomeScreen({
   notice?: string;
 }) {
   return (
-    <main className="px-4 pt-4 pb-8">
+    <main className="px-4 pb-8">
+      <TopBar title="Home" action={<HomeTools />} />
       {notice ? <p className="mb-4 rounded-2xl border border-border bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">{notice}</p> : null}
-      <HomeHeader name={who.name} address={who.address} />
       <Suspense fallback={<BalanceSkeleton />}>
         <HomeFigures who={who} />
       </Suspense>
@@ -34,23 +34,14 @@ export async function HomeScreen({
   );
 }
 
-export function HomeHeader({ name, address, alert = false }: { name: string; address: string; alert?: boolean }) {
+function HomeTools({ alert = false }: { alert?: boolean }) {
   return (
-    <header className="mb-5 flex items-center justify-between">
-      <Link href="/home" className="flex items-center gap-2 text-base font-semibold tracking-tight">
-        <IconMark className="size-8" />
-        RvessFlow
+    <div className="flex items-center gap-2">
+      <Link href="/home/activity" aria-label="Activity" className="relative grid size-10 place-items-center rounded-full border border-border bg-card">
+        <IconBell className="size-5" />
+        {alert ? <span className="absolute top-2 right-2 size-2 rounded-full bg-[#E39A45]" /> : null}
       </Link>
-      <div className="flex items-center gap-2">
-        <Link href="/home/activity" aria-label="Activity" className="relative grid size-10 place-items-center rounded-full border border-border bg-card">
-          <IconBell className="size-5" />
-          {alert ? <span className="absolute top-2 right-2 size-2 rounded-full bg-[#E39A45]" /> : null}
-        </Link>
-        <Link href="/settings" aria-label={`${name} account`} className="rounded-full ring-2 ring-[#D6F34A]">
-          <ProfileAvatar seed={address} />
-        </Link>
-      </div>
-    </header>
+    </div>
   );
 }
 
@@ -203,8 +194,8 @@ async function HomeReady({
 }
 
 const quickActions: { href: string; title: string; body: string; kind: ProductKind }[] = [
-  { href: "/goals/new", title: "Save", body: "Set goals and watch your money grow.", kind: "saving" },
-  { href: "/goals/new?kind=flow", title: "Stream", body: "Send and receive recurring payments.", kind: "flow" },
+  { href: "/goals", title: "Save", body: "Lock money, or get paid every second.", kind: "saving" },
+  { href: "/goals/flow", title: "Flow", body: "Receive money every second.", kind: "flow" },
   { href: "/vaults/new", title: "Lock", body: "Keep your funds safe until the right time.", kind: "lock" },
   { href: "/groups/new", title: "Groups", body: "Save together with trusted people.", kind: "group" },
 ];
@@ -228,7 +219,7 @@ function QuickActions() {
 function GettingStarted() {
   const steps = [
     { href: "/home/add", title: "Fund your wallet", body: `Receive on ${networkName}, convert crypto you hold, or use a provider that is configured.` },
-    { href: "/goals/new", title: "Create your first goal", body: "Optional. A goal is not required before you top up." },
+    { href: "/goals", title: "Choose a saving, flow, or expense", body: "Optional. You can top up before you start one." },
   ];
   return (
     <section className="mt-4">

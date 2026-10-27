@@ -9,6 +9,7 @@ import { readName, stableLabel, toName } from "@/lib/protocol";
 import {
   addresses,
   allowAbi,
+  readGroup,
   erc20,
   factoryAbi,
   groupAbi,
@@ -438,7 +439,7 @@ async function planLockAct(owner: Address, intent: Extract<Intent, { kind: "lock
 }
 
 async function groupOf(id: bigint) {
-  return publicClient.readContract({ address: addresses.groups, abi: groupAbi, functionName: "groups", args: [id] });
+  return readGroup(id);
 }
 
 async function membersOf(id: bigint, count: number) {
@@ -519,7 +520,7 @@ async function planGroupCreate(owner: Address, intent: Extract<Intent, { kind: "
     }
     return {
       calls: [
-        encode(addresses.groups, groupAbi, "createGroup", [
+        encode(addresses.groups, groupAbi, intent.plain ? "createPlainGroup" : "createGroup", [
           addresses.fusdcx,
           contribution,
           BigInt(intent.cycleSeconds),

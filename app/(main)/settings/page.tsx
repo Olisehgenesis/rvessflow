@@ -39,7 +39,7 @@ async function SettingsBody() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">Currency</p>
-          <p className="text-xs text-muted-foreground">Balances are shown in USD. On chain that USD is USDCx, a wrapper of USDC on Base. Other countries add that country’s rate.</p>
+          <p className="text-xs text-muted-foreground">This is the large number on Home. Dollars stay on the line under it.</p>
         </div>
         <CurrencyPick code={quote.code} />
       </div>

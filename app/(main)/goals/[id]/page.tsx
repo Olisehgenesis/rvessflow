@@ -61,7 +61,7 @@ async function GoalBody({
   const part = saving ? flow.saved : (BigInt(flow.reserved) - BigInt(flow.remaining)).toString();
   const status = flow.settled ? "Closed" : paused ? "Paused" : flow.active || saving ? "Active" : "Waiting";
   return (
-    <Page back="/goals" action={<GoalMenu id={flow.id} description={description} frequency={frequency} saving={saving} />}>
+    <Page title={flow.name} back={saving ? "/goals/savings" : flow.kind === "expense" ? "/goals/expense/stream" : "/goals/flow"} action={<GoalMenu id={flow.id} description={description} frequency={frequency} saving={saving} />}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <ProductMark kind={flow.kind} size="md" quiet={flow.settled} />

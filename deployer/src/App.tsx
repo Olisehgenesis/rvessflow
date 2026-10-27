@@ -3,6 +3,7 @@ import { getContractAddress, isAddress, type Address } from "viem";
 import { asProtocolChain, chains, type ProtocolChain } from "./chains";
 import { ownerContract, parseOwners } from "./owners";
 import { buildDeployment, deployerBytecode, type Deployment } from "./plan";
+import { UpgradeGroups } from "./upgrade";
 import { connectWallet, sendCall, sendCreate, type ConnectedWallet } from "./wallet";
 
 type Saved = {
@@ -57,7 +58,7 @@ export function App() {
   async function prepare(current: ConnectedWallet, selected: ProtocolChain) {
     const saved = readSaved(selected.id, current.address);
     if (saved?.addresses) {
-      const code = await current.getBytecode(saved.addresses.groups);
+      const code = await current.getBytecode(saved.addresses.groups, selected);
       if (code && code !== "0x") {
         return { deployment: null, deployer: saved.deployer, deployerReady: true, done: true, saved };
       }
@@ -65,17 +66,17 @@ export function App() {
 
     let deployer: Address;
     let nonce = 1n;
-    const savedCode = saved ? await current.getBytecode(saved.deployer) : undefined;
+    const savedCode = saved ? await current.getBytecode(saved.deployer, selected) : undefined;
     if (saved && savedCode && savedCode !== "0x") {
       deployer = saved.deployer;
-      nonce = await current.getTransactionCount(deployer);
+      nonce = await current.getTransactionCount(deployer, selected);
     } else {
-      const walletNonce = await current.getTransactionCount(current.address);
+      const walletNonce = await current.getTransactionCount(current.address, selected);
       deployer = getContractAddress({ from: current.address, nonce: walletNonce });
     }
     const owners = parseOwners(wallets);
     if (!owners) {
-      const deployerCode = await current.getBytecode(deployer);
+      const deployerCode = await current.getBytecode(deployer, selected);
       return {
         deployment: null,
         deployer,
@@ -85,8 +86,8 @@ export function App() {
       };
     }
     const deployment = buildDeployment(deployer, 1n, selected, keeper, ownerContract(owners), Number(nonce - 1n));
-    const created = await current.getBytecode(deployment.addresses.groups);
-    const deployerCode = await current.getBytecode(deployer);
+    const created = await current.getBytecode(deployment.addresses.groups, selected);
+    const deployerCode = await current.getBytecode(deployer, selected);
     return {
       deployment,
       deployer,
@@ -215,7 +216,7 @@ export function App() {
     <main className="page">
       <h1>Sign the deployment</h1>
       <p className="lede">
-        Any two of these three wallets can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. You connect one of them and sign. The first signature creates a small contract. The protocol takes a few more signatures, because a wallet cannot fit every contract into one transaction. The addresses stay the same. People using RvessFlow do not sign here. This page stores no key, and it does not change the contracts already on Base Sepolia.
+        Any two of these three wallets can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. You connect one of them and sign. The first signature creates a small contract. The protocol takes a few more signatures, because a wallet cannot fit every contract into one transaction. The addresses stay the same. People using RvessFlow do not sign here. This page stores no key. A fresh deployment does not change contracts already on Base. The section below upgrades the group contract that is already live.
       </p>
 
       <div className="choices" role="group" aria-label="Network">
@@ -325,6 +326,7 @@ export function App() {
           <div><dt>Vault code</dt><dd>{shownAddresses.vaultImplementation}</dd></div>
         </dl>
       )}
+      <UpgradeGroups chain={chain} wallet={wallet} onConnect={onConnect} />
     </main>
   );
 }

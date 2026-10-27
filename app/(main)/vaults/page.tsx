@@ -19,7 +19,7 @@ async function VaultsBody() {
   const who = await viewer();
   const [data, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
   return (
-    <Page title="Vaults">
+    <Page title="Locks" back="/home">
       <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
         Lock your assets and earn more, with a small penalty for early access.
       </p>

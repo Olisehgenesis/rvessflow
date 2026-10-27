@@ -15,7 +15,7 @@ function bucketFor(address: string): Bucket {
   return people().some((person) => person.address.toLowerCase() === address.toLowerCase()) ? "demo" : "app";
 }
 
-function raw(bucket: Bucket, name: "profiles" | "group_profiles" | "milestones") {
+function raw(bucket: Bucket, name: "profiles" | "drafts" | "group_profiles" | "milestones") {
   return `${bucket}.${name}`;
 }
 
@@ -50,6 +50,7 @@ async function applySchema() {
     await rows(sql.raw(`ALTER TABLE ${profiles} ADD COLUMN IF NOT EXISTS id_status VARCHAR DEFAULT 'none'`));
     await rows(sql.raw(`ALTER TABLE ${profiles} ADD COLUMN IF NOT EXISTS kin_name VARCHAR DEFAULT ''`));
     await rows(sql.raw(`ALTER TABLE ${profiles} ADD COLUMN IF NOT EXISTS kin_contact VARCHAR DEFAULT ''`));
+    await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS plain BOOLEAN NOT NULL DEFAULT false`));
     await rows(
       sql.raw(
         `CREATE TABLE IF NOT EXISTS ${raw(bucket, "group_profiles")} (ref VARCHAR PRIMARY KEY, creator VARCHAR NOT NULL, name VARCHAR NOT NULL, purpose VARCHAR NOT NULL, rules VARCHAR NOT NULL, require_id BOOLEAN NOT NULL)`,

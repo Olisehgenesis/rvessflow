@@ -6,6 +6,8 @@ import { cache } from "react";
 import {
   createPublicClient,
   createWalletClient,
+  decodeFunctionResult,
+  encodeFunctionData,
   http,
   parseAbi,
   stringToHex,
@@ -116,10 +118,11 @@ export const groupAbi = parseAbi([
   "function owner() view returns (address)",
   "function nextId() view returns (uint256)",
   "function groupsOf(address) view returns (uint256[])",
-  "function groups(uint256) view returns (address creator, address token, address pool, uint128 contribution, uint128 collateralRequired, uint64 cycleDuration, uint64 windowDuration, uint64 graceDuration, uint64 startTime, uint16 totalCycles, uint16 memberCount, bool started, bool cancelled, bool finalized, uint16 streamingCycle, address streamingTo, int96 rate, uint64 rateUpdatedAt, bool cycleOpen, uint256 receivedSnapshot)",
+  "function groups(uint256) view returns (address creator, address token, address pool, uint128 contribution, uint128 collateralRequired, uint64 cycleDuration, uint64 windowDuration, uint64 graceDuration, uint64 startTime, uint16 totalCycles, uint16 memberCount, bool started, bool cancelled, bool finalized, uint16 streamingCycle, address streamingTo, int96 rate, uint64 rateUpdatedAt, bool cycleOpen, uint256 receivedSnapshot, bool plain)",
   "function getMember(uint256 id, uint256 index) view returns (address account, uint64 offset, uint128 collateral, bool collateralPosted, bool defaulted, uint256 given, uint256 received, uint256 owed, uint16 missed)",
   "function currentCycle(uint256) view returns (uint256 cycle, bool open)",
   "function createGroup(address token, uint128 contribution, uint64 cycleDuration, uint64 windowDuration, uint64 graceDuration, uint16 totalCycles, address[] accounts, uint64[] offsets) returns (uint256)",
+  "function createPlainGroup(address token, uint128 contribution, uint64 cycleDuration, uint64 windowDuration, uint64 graceDuration, uint16 totalCycles, address[] accounts, uint64[] offsets) returns (uint256)",
   "function postCollateral(uint256 id)",
   "function start(uint256 id)",
   "function contribute(uint256 id)",
@@ -131,6 +134,26 @@ export const groupAbi = parseAbi([
   "function setMemberPhone(uint256 id, address account, bytes32 phone)",
   "function setPayoutOrder(uint256 id, uint16[] indexes)",
 ]);
+
+const groupLegacyAbi = parseAbi([
+  "function groups(uint256) view returns (address creator, address token, address pool, uint128 contribution, uint128 collateralRequired, uint64 cycleDuration, uint64 windowDuration, uint64 graceDuration, uint64 startTime, uint16 totalCycles, uint16 memberCount, bool started, bool cancelled, bool finalized, uint16 streamingCycle, address streamingTo, int96 rate, uint64 rateUpdatedAt, bool cycleOpen, uint256 receivedSnapshot)",
+]);
+
+/// Reads a group from the live proxy. Contracts that have not been upgraded yet
+/// return one fewer field, and those groups are streaming.
+export async function readGroup(id: bigint) {
+  const data = await publicClient.call({
+    to: addresses.groups,
+    data: encodeFunctionData({ abi: groupAbi, functionName: "groups", args: [id] }),
+  });
+  const raw = data.data ?? "0x";
+  const words = Math.floor((raw.length - 2) / 64);
+  return decodeFunctionResult({
+    abi: words >= 21 ? groupAbi : groupLegacyAbi,
+    functionName: "groups",
+    data: raw,
+  });
+}
 
 export type Person = { name: string; address: Address };
 
@@ -511,12 +534,7 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
 
   const groupRows: GroupRow[] = [];
   for (const id of groupIds) {
-    const group = await publicClient.readContract({
-      address: addresses.groups,
-      abi: groupAbi,
-      functionName: "groups",
-      args: [id],
-    });
+    const group = await readGroup(id);
     const creator = group[0];
     const contribution = group[3];
     const collateralRequired = group[4];
@@ -934,7 +952,15 @@ export async function lockMature(index: number, id: bigint) {
 
 export async function openGroup(
   index: number,
-  input: { contribution: string; members: Address[]; cycles: number; cycleSeconds: number; windowSeconds: number; graceSeconds: number },
+  input: {
+    contribution: string;
+    members: Address[];
+    cycles: number;
+    cycleSeconds: number;
+    windowSeconds: number;
+    graceSeconds: number;
+    plain?: boolean;
+  },
 ) {
   const contribution = parseAmount(input.contribution);
   const { account } = signer(index);
@@ -959,7 +985,7 @@ export async function openGroup(
   await write(index, {
     address: addresses.groups,
     abi: groupAbi,
-    functionName: "createGroup",
+    functionName: input.plain ? "createPlainGroup" : "createGroup",
     args: [addresses.fusdcx, contribution, cycle, window, grace, input.cycles, unique, unique.map(() => 0n)],
   });
   const after = await publicClient.readContract({
@@ -991,12 +1017,7 @@ async function readPayout(id: bigint, count: number): Promise<{ order: number[];
 }
 
 export async function shiftPayout(index: number, id: bigint, from: number, dir: -1 | 1) {
-  const group = await publicClient.readContract({
-    address: addresses.groups,
-    abi: groupAbi,
-    functionName: "groups",
-    args: [id],
-  });
+  const group = await readGroup(id);
   if (group[11] || group[12]) throw new Error("The turn order is fixed once the group has started.");
   const count = Number(group[10]);
   const seating = await readPayout(id, count);
@@ -1048,12 +1069,7 @@ export async function groupAct(
   fn: "postCollateral" | "start" | "contribute" | "exitBeforeStart" | "cancelBeforeStart" | "claimCollateral",
 ) {
   if (fn === "postCollateral" || fn === "contribute") {
-    const group = await publicClient.readContract({
-      address: addresses.groups,
-      abi: groupAbi,
-      functionName: "groups",
-      args: [id],
-    });
+    const group = await readGroup(id);
     const amount = fn === "postCollateral" ? group[4] : group[3];
     const { account } = signer(index);
     await ensureAllowance(index, account.address, addresses.groups, withProtocolFee(amount));

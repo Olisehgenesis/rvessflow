@@ -235,6 +235,9 @@ function spoken(error: unknown): ActionState {
     throw error;
   }
   const message = error instanceof Error ? error.message : "";
+  if (/Failed query:|Connection terminated|MotherDuck is not configured/i.test(message)) {
+    return { error: "The member directory is unavailable, so this cannot be saved right now." };
+  }
   if (message && message.length < 180 && !message.includes("\n")) return { error: message };
   return { error: explain(error) };
 }
@@ -331,7 +334,7 @@ export async function createSaving(_prev: ActionState, formData: FormData): Prom
     const duration = readSpan(formData, FLOW_MIN);
     const sendTo = String(formData.get("recipient") ?? "");
     if (sendTo && sendTo.toLowerCase() !== who.address.toLowerCase()) {
-      return { error: "A saving stays in your vault. Check For someone else on Flow to pay another wallet." };
+      return { error: "A saving stays in your vault. Use Expense to pay another wallet." };
     }
     const name = String(formData.get("name") ?? "");
     const pay = payField(formData);
@@ -489,6 +492,7 @@ export async function createDraft(_prev: ActionState, formData: FormData): Promi
       cycles: Number(formData.get("cycles") ?? "4"),
       cycle: String(formData.get("cycle") ?? ""),
       days: String(formData.get("days") ?? ""),
+      plain: String(formData.get("payout") ?? "") === "plain",
     });
   } catch (error) {
     return spoken(error);

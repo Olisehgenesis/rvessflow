@@ -34,7 +34,7 @@ async function IncomingBody({ params }: { params: Promise<{ vault: string; id: s
   const readAt = Math.floor(Date.now() / 1000);
   const status = flow.settled ? "Closed" : flow.paused ? "Paused" : flow.active ? "Active" : "Waiting";
   return (
-    <Page back="/goals">
+    <Page title={flow.name} back="/goals/flow">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <ProductMark kind={flow.kind} size="md" />

@@ -14,20 +14,20 @@ export type ProductKind = "saving" | "flow" | "expense" | "lock" | "group";
 
 const meta: Record<ProductKind, { title: string; rest: string; art: string; bar: string }> = {
   saving: {
-    title: "Saving goal",
-    rest: "Holds the deposit until the date. The number stays still.",
+    title: "Saving",
+    rest: "Lock money until a future date.",
     art: "/marks/saving.png",
     bar: "bg-primary",
   },
   flow: {
-    title: "Flow goal",
-    rest: "Streams the amount back to you, every second.",
+    title: "Flow",
+    rest: "Receive money every second.",
     art: "/marks/flow.png",
     bar: "bg-[var(--lavender)]",
   },
   expense: {
     title: "Expense",
-    rest: "Streams the amount to someone else.",
+    rest: "Pay now, or stream the payment.",
     art: "/marks/expense.png",
     bar: "bg-[var(--lavender)]",
   },
@@ -39,7 +39,7 @@ const meta: Record<ProductKind, { title: string; rest: string; art: string; bar:
   },
   group: {
     title: "Group",
-    rest: "Members take turns. The pot is a real distribution.",
+    rest: "Members take turns. Pay each turn, or stream the pot.",
     art: "/marks/group.png",
     bar: "bg-[#4C8DFF]",
   },
@@ -81,14 +81,14 @@ function Status({ children }: { children: string }) {
   return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${statusTone[children] ?? "bg-muted text-foreground"}`}>{children}</span>;
 }
 
-export function KindIntro({ kind }: { kind: ProductKind }) {
+export function KindIntro({ kind, rest }: { kind: ProductKind; rest?: string }) {
   const item = meta[kind];
   return (
     <div className="mb-4 flex items-center gap-3">
       <ProductMark kind={kind} />
       <div>
         <p className="font-medium">{item.title}</p>
-        <p className="text-sm leading-snug text-muted-foreground">{item.rest}</p>
+        <p className="text-sm leading-snug text-muted-foreground">{rest ?? item.rest}</p>
       </div>
     </div>
   );
@@ -102,7 +102,7 @@ export function KindChoices({ lead }: { lead?: string }) {
     <ul className="divide-y divide-border">
       {kinds.map((kind) => (
         <li key={kind}>
-          <Link href={kind === "saving" ? "/goals/new" : `/goals/new?kind=${kind}`} className="flex items-center gap-3 py-4">
+          <Link href={kind === "saving" ? "/goals/savings" : kind === "flow" ? "/goals/flow" : "/goals/expense"} className="flex items-center gap-3 py-4">
             <ProductMark kind={kind} />
             <span>
               <span className="block font-medium">{meta[kind].title}</span>

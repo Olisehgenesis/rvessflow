@@ -12,6 +12,7 @@ export type ProtocolChain = {
   gda: Address;
   stable: { address: Address; kind: 0 | 1; name: string };
   eth: { address: Address; kind: 0 | 1; name: string };
+  groups: Address;
   mainnet: boolean;
   chain: ReturnType<typeof defineChain>;
 };
@@ -42,6 +43,7 @@ export const chains: Record<84532 | 8453, ProtocolChain> = {
     gda,
     stable: { address: "0x1650581F573eAd727B92073B5Ef8B4f5B94D1648", kind: 0, name: "fUSDCx" },
     eth: { address: "0x143ea239159155B408e71CDbE836e8CFD6766732", kind: 1, name: "ETHx" },
+    groups: "0x70f5CF80052E8a8E0e5e252d33cd15F059956E3D",
     mainnet: false,
     chain: baseSepolia,
   },
@@ -54,6 +56,7 @@ export const chains: Record<84532 | 8453, ProtocolChain> = {
     gda,
     stable: { address: "0xD04383398dD2426297da660F9CCA3d439AF9ce1b", kind: 0, name: "USDCx" },
     eth: { address: "0x46fd5cfB4c12D87acD3a13e92BAa53240C661D93", kind: 1, name: "ETHx" },
+    groups: "0x13008059FAd0348Fb8848A0737F9E826C82199fa",
     mainnet: true,
     chain: base,
   },

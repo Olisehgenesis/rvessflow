@@ -20,10 +20,27 @@ export type ConnectedWallet = {
   chainId: number;
   getChainId: () => Promise<number>;
   switchChain: (id: number) => Promise<void>;
-  send: (args: { to?: Address; data: Hex }) => Promise<Hex>;
-  getBytecode: (address: Address) => Promise<Hex | undefined>;
-  getTransactionCount: (address: Address) => Promise<bigint>;
-  wait: (hash: Hex) => Promise<{ status: string; contractAddress: Address | null }>;
+  send: (args: { to?: Address; data: Hex; chain: ProtocolChain }) => Promise<Hex>;
+  signTypedData: (parameters: {
+    domain: { chainId: number; verifyingContract: Address };
+    types: { readonly SafeTx: readonly { readonly name: string; readonly type: string }[] };
+    primaryType: "SafeTx";
+    message: {
+      to: Address;
+      value: bigint;
+      data: Hex;
+      operation: number;
+      safeTxGas: bigint;
+      baseGas: bigint;
+      gasPrice: bigint;
+      gasToken: Address;
+      refundReceiver: Address;
+      nonce: bigint;
+    };
+  }) => Promise<Hex>;
+  getBytecode: (address: Address, chain: ProtocolChain) => Promise<Hex | undefined>;
+  getTransactionCount: (address: Address, chain: ProtocolChain) => Promise<bigint>;
+  wait: (hash: Hex, chain: ProtocolChain) => Promise<{ status: string; contractAddress: Address | null }>;
 };
 
 export async function connectWallet(chain: ProtocolChain): Promise<ConnectedWallet> {
@@ -33,17 +50,19 @@ export async function connectWallet(chain: ProtocolChain): Promise<ConnectedWall
   const [address] = await wallet.requestAddresses();
   if (!address) throw new Error("The wallet did not return an account.");
   const chainId = await wallet.getChainId();
-  const client = createPublicClient({ chain: chain.chain, transport: http(chain.rpc) });
+  const reader = (selected: ProtocolChain) =>
+    createPublicClient({ chain: selected.chain, transport: http(selected.rpc) });
   return {
     address,
     chainId,
     getChainId: () => wallet.getChainId(),
     switchChain: (id) => wallet.switchChain({ id }),
-    send: (args) => wallet.sendTransaction({ account: address, chain: chain.chain, ...args }),
-    getBytecode: (account) => client.getBytecode({ address: account }),
-    getTransactionCount: async (account) => BigInt(await client.getTransactionCount({ address: account })),
-    wait: async (hash) => {
-      const receipt = await client.waitForTransactionReceipt({ hash });
+    send: (args) => wallet.sendTransaction({ account: address, to: args.to, data: args.data, chain: args.chain.chain }),
+    signTypedData: (parameters) => wallet.signTypedData({ account: address, ...parameters }),
+    getBytecode: (account, selected) => reader(selected).getBytecode({ address: account }),
+    getTransactionCount: async (account, selected) => BigInt(await reader(selected).getTransactionCount({ address: account })),
+    wait: async (hash, selected) => {
+      const receipt = await reader(selected).waitForTransactionReceipt({ hash });
       return { status: receipt.status, contractAddress: receipt.contractAddress };
     },
   };
@@ -73,8 +92,8 @@ export async function ensureChain(current: ConnectedWallet, chain: ProtocolChain
 
 export async function sendCreate(current: ConnectedWallet, chain: ProtocolChain, data: Hex): Promise<Address> {
   await ensureChain(current, chain);
-  const hash = await current.send({ data });
-  const receipt = await current.wait(hash);
+  const hash = await current.send({ data, chain });
+  const receipt = await current.wait(hash, chain);
   if (receipt.status !== "success" || !receipt.contractAddress) {
     throw new Error("The signing contract was not created.");
   }
@@ -83,7 +102,7 @@ export async function sendCreate(current: ConnectedWallet, chain: ProtocolChain,
 
 export async function sendCall(current: ConnectedWallet, chain: ProtocolChain, to: Address, data: Hex): Promise<void> {
   await ensureChain(current, chain);
-  const hash = await current.send({ to, data });
-  const receipt = await current.wait(hash);
+  const hash = await current.send({ to, data, chain });
+  const receipt = await current.wait(hash, chain);
   if (receipt.status !== "success") throw new Error("The deployment transaction reverted.");
 }

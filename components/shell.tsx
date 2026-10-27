@@ -8,12 +8,12 @@ import { IconMark } from "@/components/icons";
 
 const left = [
   { href: "/home", label: "Home", src: "/nav/home.png" },
-  { href: "/goals", label: "Goals", src: "/nav/goals.png" },
+  { href: "/goals", label: "Save", src: "/nav/goals.png" },
 ];
 
 const right = [
   { href: "/groups", label: "Groups", src: "/nav/groups.png" },
-  { href: "/settings", label: "More", src: "/nav/more.png" },
+  { href: "/settings", label: "Settings", src: "/nav/more.png" },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -50,8 +50,9 @@ function BottomNav() {
         {left.map((item) => (
           <NavTab key={item.href} item={item} pathname={pathname} />
         ))}
-        <li className="flex justify-center">
+        <li className="flex flex-col items-center justify-end">
           <CreateMenu />
+          <span className="pb-1 text-[11px] text-muted-foreground">Create</span>
         </li>
         {right.map((item) => (
           <NavTab key={item.href} item={item} pathname={pathname} />

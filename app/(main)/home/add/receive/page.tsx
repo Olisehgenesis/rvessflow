@@ -23,7 +23,7 @@ async function ReceiveBody() {
     color: { dark: "#0b0f14", light: "#ffffff" },
   });
   return (
-    <main className="px-4 pt-4 pb-8">
+    <main className="px-4 pb-8">
       <FlowHeader title="Receive" back="/home/add" />
       <p className="text-sm text-muted-foreground">Send USDC, USDT, or ETH on Base to this address. It lands in your wallet. Convert crypto afterwards to move it into the vault.</p>
       <section className="mt-5 rounded-3xl border border-border bg-card p-5">

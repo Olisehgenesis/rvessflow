@@ -665,6 +665,7 @@ contract GroupRotationTest is SfBase {
             rate,
             ,
             ,
+            ,
         ) = groups.groups(id);
     }
 
@@ -689,7 +690,33 @@ contract GroupRotationTest is SfBase {
             ,
             ,
             ,
+            ,
         ) = groups.groups(id);
+    }
+
+    function test_plainGroupPaysTheTurnAsATransfer() public {
+        address[] memory members = _members(3, "plain");
+        uint128 contribution = 1e18;
+        for (uint256 i; i < members.length; ++i) {
+            _giveUsdcx(members[i], 10e18);
+            _approveToken(members[i], address(usdcx), address(groups));
+        }
+        vm.prank(members[0]);
+        uint256 id = groups.createPlainGroup(
+            address(usdcx), contribution, 1 hours, 20 minutes, 10 minutes, 1, members, _zeroOffsets(3)
+        );
+        for (uint256 i; i < members.length; ++i) {
+            vm.prank(members[i]);
+            groups.postCollateral(id);
+        }
+        vm.prank(members[0]);
+        groups.start(id);
+        assertEq(groups.poolOf(id), address(0));
+        uint256 beforeBal = _bal(address(usdcx), members[0]);
+        vm.prank(members[1]);
+        groups.contribute(id);
+        assertEq(_bal(address(usdcx), members[0]), beforeBal + contribution);
+        assertEq(_flowRate(id), 0);
     }
 
     function _recipient(uint256 id, uint256 cycle) internal view returns (address) {

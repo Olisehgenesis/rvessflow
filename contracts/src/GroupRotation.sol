@@ -22,8 +22,8 @@ import {GroupRotationStore} from "./GroupRotationStore.sol";
 
 /// @title GroupRotation
 /// @notice RvessFlow Protocol. A ROSCA / chama. Members contribute once per cycle inside their own
-///         window. The pot is a real GDA pool flow to that cycle's recipient,
-///         not a lump sum and not an internal balance.
+///         window. A streaming group pays that cycle's recipient with a real GDA pool flow.
+///         A plain group pays the same turn as a transfer, with no pool.
 /// @dev Collateral (contribution × cycles) stays here until the group ends and
 ///      is the solvency margin for the pool's deposit. A missed window is
 ///      settled on the next call: the missed contribution is slashed from
@@ -90,71 +90,6 @@ contract GroupRotation is GroupRotationStore {
         emit GroupPausedSet(id, paused_);
     }
 
-    function createGroup(
-        address token,
-        uint128 contribution,
-        uint64 cycleDuration,
-        uint64 windowDuration,
-        uint64 graceDuration,
-        uint16 totalCycles,
-        address[] calldata accounts,
-        uint64[] calldata offsets
-    ) external returns (uint256 id) {
-        if (!allowlist.isAllowed(token)) revert TokenNotAllowed();
-        if (allowlist.paused()) revert Paused();
-        uint256 n = accounts.length;
-        if (contribution == 0 || n < MIN_MEMBERS || n > MAX_MEMBERS || n != offsets.length) revert BadParams();
-        if (totalCycles == 0 || totalCycles > MAX_CYCLES) revert BadParams();
-        if (cycleDuration < MIN_CYCLE || cycleDuration > MAX_CYCLE || windowDuration == 0) revert BadParams();
-
-        uint256 bond = uint256(contribution) * uint256(totalCycles);
-        if (bond > type(uint128).max) revert BadParams();
-
-        bool creatorIn;
-        for (uint256 i; i < n; ++i) {
-            if (accounts[i] == address(0)) revert ZeroAddress();
-            if (accounts[i] == msg.sender) creatorIn = true;
-            if (uint256(offsets[i]) + uint256(windowDuration) + uint256(graceDuration) > cycleDuration) {
-                revert WindowOutOfRange();
-            }
-            for (uint256 j; j < i; ++j) {
-                if (accounts[i] == accounts[j]) revert DuplicateMember();
-            }
-        }
-        if (!creatorIn) revert CreatorNotMember();
-
-        id = nextId++;
-        Group storage g = groups[id];
-        g.creator = msg.sender;
-        g.token = token;
-        g.contribution = contribution;
-        g.collateralRequired = uint128(bond);
-        g.cycleDuration = cycleDuration;
-        g.windowDuration = windowDuration;
-        g.graceDuration = graceDuration;
-        g.totalCycles = totalCycles;
-        g.memberCount = uint16(n);
-        for (uint256 i; i < n; ++i) {
-            _members[id].push(
-                Member({
-                    account: accounts[i],
-                    offset: offsets[i],
-                    collateral: 0,
-                    collateralPosted: false,
-                    defaulted: false,
-                    given: 0,
-                    received: 0,
-                    owed: 0,
-                    missed: 0
-                })
-            );
-            _indexOf[id][accounts[i]] = i + 1;
-            _groupsOf[accounts[i]].push(id);
-        }
-        groupAdmin[id][msg.sender] = true;
-        emit GroupCreated(id, msg.sender, token, uint16(n), totalCycles);
-    }
-
     function postCollateral(uint256 id) external nonReentrant {
         Group storage g = groups[id];
         if (g.creator == address(0) || g.started || g.cancelled) revert BadState();
@@ -166,30 +101,6 @@ contract GroupRotation is GroupRotationStore {
         m.collateral = uint128(got);
         m.collateralPosted = true;
         emit CollateralPosted(id, msg.sender, got);
-    }
-
-    function start(uint256 id) external {
-        Group storage g = groups[id];
-        // The creator starts the group. If the creator already left, any remaining member may.
-        if (_indexOf[id][g.creator] != 0) {
-            if (!_isAdmin(id, msg.sender)) revert NotAdmin();
-        } else {
-            _memberIndex(id, msg.sender);
-        }
-        if (groupPaused[id]) revert Paused();
-        if (g.started || g.cancelled || allowlist.paused()) revert BadState();
-        uint256 n = g.memberCount;
-        if (n < MIN_MEMBERS) revert BadParams();
-        for (uint256 i; i < n; ++i) {
-            if (!_members[id][i].collateralPosted) revert MissingCollateral();
-        }
-        IGDAv1Forwarder.PoolConfig memory config =
-            IGDAv1Forwarder.PoolConfig({transferabilityForUnitsOwner: false, distributionFromAnyAddress: false});
-        (, address pool) = gda.createPool(g.token, address(this), config);
-        g.pool = pool;
-        g.started = true;
-        g.startTime = uint64(block.timestamp);
-        emit GroupStarted(id, g.startTime, pool);
     }
 
     /// @notice Stop a group that has not started. Members pull their own collateral.
@@ -235,10 +146,11 @@ contract GroupRotation is GroupRotationStore {
         p.paidAt = uint64(block.timestamp);
         p.status = status;
         pots[id][cycle].funded += g.contribution;
-        address to = g.streamingTo != address(0) ? g.streamingTo : _activeRecipient(id, cycle);
+        address to = g.plain ? _activeRecipient(id, cycle) : (g.streamingTo != address(0) ? g.streamingTo : _activeRecipient(id, cycle));
         _pushLeg(id, msg.sender, to, g.contribution, uint16(cycle), status);
         m.given += g.contribution;
         emit Contributed(id, cycle, msg.sender, status, g.contribution);
+        if (g.plain) _payPlain(id, cycle, to, g.contribution);
         adminFeeGate = id;
         _ext(abi.encodeWithSignature("takeAdminFee(uint256)", id));
         _sync(id, false);
@@ -272,6 +184,7 @@ contract GroupRotation is GroupRotationStore {
     function claimPayout(uint256 id) external nonReentrant {
         if (groupPaused[id]) revert Paused();
         Group storage g = groups[id];
+        if (g.plain) revert BadState();
         if (!g.started || g.finalized) revert BadState();
         _sync(id, false);
         if (g.streamingTo != msg.sender) revert NotMember();
@@ -380,7 +293,12 @@ contract GroupRotation is GroupRotationStore {
 
     function _sync(uint256 id, bool forceClose) internal {
         Group storage g = groups[id];
-        if (!g.started || g.finalized || g.pool == address(0)) return;
+        if (!g.started || g.finalized) return;
+        if (g.plain) {
+            _syncPlain(id, forceClose);
+            return;
+        }
+        if (g.pool == address(0)) return;
         // A pause freezes misses and stops the stream. It does not move collateral.
         if (groupPaused[id]) {
             if (g.rate != 0) _setRate(id, 0);
@@ -421,6 +339,38 @@ contract GroupRotation is GroupRotationStore {
         _setRate(id, _safeRate(id));
         emit PoolRetargeted(id, cycle, recipient, g.rate);
         _touchAdminFee(id);
+    }
+
+    /// @dev A plain group has no pool. Missed windows still slash collateral, and that
+    ///      amount is transferred to whoever the turn now belongs to.
+    function _syncPlain(uint256 id, bool forceClose) internal {
+        if (groupPaused[id]) return;
+        (uint256 cycle, bool open) = currentCycle(id);
+        _catchUp(id, cycle, open && !forceClose);
+        uint256 end = forceClose || !open ? groups[id].totalCycles : cycle + 1;
+        for (uint256 c; c < end; ++c) {
+            Cycle storage pot = pots[id][c];
+            if (pot.closed) continue;
+            uint256 left = pot.funded > pot.accounted ? pot.funded - pot.accounted : 0;
+            if (left > 0) _payPlain(id, c, _activeRecipient(id, c), left);
+            // A live cycle can still receive the next contribution or a slash.
+            // Close it only after that cycle is over and nothing is waiting.
+            bool finished = forceClose || !open || c < cycle;
+            if (finished && pot.accounted >= pot.funded) pot.closed = true;
+        }
+    }
+
+    function _payPlain(uint256 id, uint256 cycle, address to, uint256 amount) internal {
+        if (to == address(0) || amount == 0) return;
+        Group storage g = groups[id];
+        uint256 bal = ISuperTokenMini(g.token).balanceOf(address(this));
+        uint256 reserved = _reserved(id);
+        uint256 free = bal > reserved ? bal - reserved : 0;
+        if (amount > free) amount = free;
+        if (amount == 0) return;
+        ISuperTokenMini(g.token).transfer(to, amount);
+        pots[id][cycle].accounted += amount;
+        _creditReceived(id, to, amount);
     }
 
     function _finishStreamingCycle(uint256 id) internal {
@@ -759,6 +709,26 @@ contract GroupRotation is GroupRotationStore {
         _members[id][index - 1].received += amount;
     }
 
+    /// @dev Creation and start live on the extension. These wrappers keep the
+    ///      calls on this contract's surface and forward the raw calldata.
+    function createGroup(address, uint128, uint64, uint64, uint64, uint16, address[] calldata, uint64[] calldata)
+        external
+        returns (uint256)
+    {
+        _delegate();
+    }
+
+    function createPlainGroup(address, uint128, uint64, uint64, uint64, uint16, address[] calldata, uint64[] calldata)
+        external
+        returns (uint256)
+    {
+        _delegate();
+    }
+
+    function start(uint256) external {
+        _delegate();
+    }
+
     /// @dev These calls live on the extension. The fallback forwards them so this
     ///      contract stays under the EIP-170 size limit. See {IGroupCalls}.
     fallback() external {
@@ -781,6 +751,27 @@ contract GroupRotation is GroupRotationStore {
 /// @notice Calls implemented on {GroupRotationExtension} and reached through
 ///         {GroupRotation}'s fallback. Kept off the main contract so it deploys.
 interface IGroupCalls {
+    function createGroup(
+        address token,
+        uint128 contribution,
+        uint64 cycleDuration,
+        uint64 windowDuration,
+        uint64 graceDuration,
+        uint16 totalCycles,
+        address[] calldata accounts,
+        uint64[] calldata offsets
+    ) external returns (uint256 id);
+    function createPlainGroup(
+        address token,
+        uint128 contribution,
+        uint64 cycleDuration,
+        uint64 windowDuration,
+        uint64 graceDuration,
+        uint16 totalCycles,
+        address[] calldata accounts,
+        uint64[] calldata offsets
+    ) external returns (uint256 id);
+    function start(uint256 id) external;
     function exitBeforeStart(uint256 id) external;
     function removeBeforeStart(uint256 id, address account) external;
     function setMemberWindow(uint256 id, uint256 index, uint64 window) external;

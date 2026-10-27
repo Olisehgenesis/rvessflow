@@ -7,7 +7,7 @@ import { networkName } from "@/lib/protocol";
 export default function AddMoneyPage() {
   return (
     <Suspense fallback={<Loading />}>
-      <main className="px-4 pt-4 pb-8">
+      <main className="px-4 pb-8">
         <FlowHeader title="Top up" back="/home" />
         <p className="mb-4 text-sm text-muted-foreground">Choose how money comes in.</p>
         <TopUpList network={networkName} />

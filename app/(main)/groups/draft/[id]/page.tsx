@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Loading from "../../../loading";
 import { DraftDesk } from "@/components/circle";
+import { GroupUpgradeNote } from "@/components/group-upgrade";
 import { Page } from "@/components/ui-bits";
 import { readDraft } from "@/lib/circle";
 
@@ -19,6 +20,9 @@ async function DraftBody({ params }: { params: Promise<{ id: string }> }) {
   if (!draft) notFound();
   return (
     <Page title="Group" back="/groups">
+      <div className="mb-4">
+        <GroupUpgradeNote />
+      </div>
       <DraftDesk draft={draft} />
     </Page>
   );

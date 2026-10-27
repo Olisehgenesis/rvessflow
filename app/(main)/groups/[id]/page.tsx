@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Loading from "../../loading";
 import { LinkPhone, TurnMove } from "@/components/circle";
 import { GroupButton, GroupPay } from "@/components/forms";
+import { GroupUpgradeNote } from "@/components/group-upgrade";
 import { ProductMark } from "@/components/product";
 import { Fact, Facts, Notice, Page } from "@/components/ui-bits";
 import { phoneFor } from "@/lib/circle";
@@ -35,6 +36,9 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
   const myPhone = await phoneFor(data.me.address).catch(() => "");
   return (
     <Page title={`Group ${group.id}`} back="/groups">
+      <div className="mb-4">
+        <GroupUpgradeNote />
+      </div>
       <div className="mb-4">
         <ProductMark kind="group" size="xl" quiet={group.finalized || group.cancelled} />
         <p className="mt-3 text-sm text-muted-foreground">

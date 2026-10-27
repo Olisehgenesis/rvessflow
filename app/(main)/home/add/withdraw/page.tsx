@@ -20,7 +20,7 @@ async function WithdrawBody() {
   const [portfolio, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
   const holdings = await loadHoldings(who.address, portfolio, quote);
   return (
-    <main className="px-4 pt-4 pb-8">
+    <main className="px-4 pb-8">
       <FlowHeader title="Withdraw" back="/home/add" />
       <WithdrawForm idleUsd={holdings.idleUsd} />
     </main>

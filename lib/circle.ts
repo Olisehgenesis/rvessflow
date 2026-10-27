@@ -1,10 +1,11 @@
 import "server-only";
 
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { getAddress, isAddress, type Address } from "viem";
 import { cyclePlan, spanLabel } from "@/lib/cycle";
+import { plainGroupWaits } from "@/lib/group-upgrade";
 import { rows, sql, transaction } from "@/lib/motherduck";
 import { ensureSchema } from "@/lib/records";
 import type { IdStatus } from "@/lib/savings";
@@ -72,6 +73,7 @@ type Draft = {
   days: string;
   members: Address[];
   open: boolean;
+  plain: boolean;
   applications: { address: Address; name: string }[];
 };
 
@@ -115,8 +117,8 @@ async function readBucket(bucket: Bucket): Promise<Store> {
   const phones = await rows<{ address: string; phone: string; position: unknown }>(
     sql`SELECT address, phone, position FROM ${table(bucket, "phones")} ORDER BY position`,
   );
-  const drafts = await rows<{ id: string; creator: string; contribution: string; cycles: unknown; cycle: string; days: string; is_open: boolean }>(
-    sql`SELECT id, creator, contribution, cycles, cycle, days, is_open FROM ${table(bucket, "drafts")}`,
+  const drafts = await rows<{ id: string; creator: string; contribution: string; cycles: unknown; cycle: string; days: string; is_open: boolean; plain: boolean }>(
+    sql`SELECT id, creator, contribution, cycles, cycle, days, is_open, plain FROM ${table(bucket, "drafts")}`,
   );
   const members = await rows<{ draft_id: string; position: unknown; address: string }>(
     sql`SELECT draft_id, position, address FROM ${table(bucket, "draft_members")} ORDER BY position`,
@@ -157,6 +159,7 @@ async function readBucket(bucket: Bucket): Promise<Store> {
           cycle: draft.cycle,
           days: draft.days,
           open: Boolean(draft.is_open),
+          plain: Boolean(draft.plain),
           members: members.flatMap((item) => {
             if (item.draft_id !== draft.id) return [];
             const address = asAddress(item.address);
@@ -174,6 +177,12 @@ async function readBucket(bucket: Bucket): Promise<Store> {
 }
 
 async function writeBucket(bucket: Bucket, store: Store) {
+  if (usingFile) {
+    const cached = loadFileWorld();
+    cached[bucket] = store;
+    persistFile();
+    return;
+  }
   await transaction(async (query) => {
     await query(sql`DELETE FROM ${table(bucket, "applications")}`);
     await query(sql`DELETE FROM ${table(bucket, "draft_members")}`);
@@ -192,7 +201,7 @@ async function writeBucket(bucket: Bucket, store: Store) {
     }
     for (const draft of store.drafts) {
       await query(
-        sql`INSERT INTO ${table(bucket, "drafts")} (id, creator, contribution, cycles, cycle, days, is_open) VALUES (${draft.id}, ${draft.creator}, ${draft.contribution}, ${draft.cycles}, ${draft.cycle}, ${draft.days}, ${draft.open})`,
+        sql`INSERT INTO ${table(bucket, "drafts")} (id, creator, contribution, cycles, cycle, days, is_open, plain) VALUES (${draft.id}, ${draft.creator}, ${draft.contribution}, ${draft.cycles}, ${draft.cycle}, ${draft.days}, ${draft.open}, ${Boolean(draft.plain)})`,
       );
       for (let index = 0; index < draft.members.length; index += 1) {
         await query(
@@ -210,7 +219,7 @@ async function writeBucket(bucket: Bucket, store: Store) {
 
 function localFile(): Store {
   try {
-    const parsed = JSON.parse(readFileSync(path.join(process.cwd(), "data", "circle.json"), "utf8")) as Store;
+    const parsed = JSON.parse(readFileSync(circleFile, "utf8")) as Store;
     return {
       profiles: Array.isArray(parsed.profiles) ? parsed.profiles : [],
       drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
@@ -220,19 +229,78 @@ function localFile(): Store {
   }
 }
 
-let boot: Promise<void> | null = null;
+const circleFile = path.join(process.cwd(), "data", "circle.json");
+let fileCache: World | null = null;
+let usingFile = false;
+let source: Promise<"remote" | "file"> | null = null;
 
-function ready() {
-  boot ??= bootWorld().catch((error) => {
-    boot = null;
-    throw error;
-  });
-  return boot;
+function chooseSource() {
+  source ??= (async () => {
+    try {
+      await ensureSchema();
+      await importLocal();
+      return "remote" as const;
+    } catch {
+      usingFile = true;
+      loadFileWorld();
+      return "file" as const;
+    }
+  })();
+  return source;
 }
 
-async function bootWorld() {
-  await ensureSchema();
-  await importLocal();
+function loadFileWorld(): World {
+  if (fileCache) return fileCache;
+  const file = localFile();
+  const loaded: World = { demo: empty(), app: empty() };
+  for (const profile of file.profiles) {
+    const address = asAddress(profile.address);
+    if (!address) continue;
+    loaded[bucketFor(address)].profiles.push({
+      ...profile,
+      address,
+      phones: profile.phones ?? [],
+      email: profile.email ?? "",
+      password: profile.password ?? "",
+      memberCode: profile.memberCode ?? "",
+      idStatus: statusOf(profile.idStatus),
+      kinName: profile.kinName ?? "",
+      kinContact: profile.kinContact ?? "",
+    });
+  }
+  for (const draft of file.drafts) {
+    const creator = asAddress(draft.creator);
+    if (!creator) continue;
+    loaded[bucketFor(creator)].drafts.push({
+      ...draft,
+      creator,
+      members: (draft.members ?? []).flatMap((item) => {
+        const address = asAddress(item);
+        return address ? [address] : [];
+      }),
+      applications: (draft.applications ?? []).flatMap((item) => {
+        const address = asAddress(item.address);
+        return address ? [{ address, name: item.name }] : [];
+      }),
+      open: Boolean(draft.open),
+      plain: Boolean(draft.plain),
+      cycles: num(draft.cycles),
+    });
+  }
+  fileCache = loaded;
+  return loaded;
+}
+
+function persistFile() {
+  if (!fileCache) return;
+  mkdirSync(path.dirname(circleFile), { recursive: true });
+  writeFileSync(
+    circleFile,
+    JSON.stringify({
+      profiles: [...fileCache.demo.profiles, ...fileCache.app.profiles],
+      drafts: [...fileCache.demo.drafts, ...fileCache.app.drafts],
+    }),
+  );
 }
 
 async function importLocal() {
@@ -273,7 +341,7 @@ async function importLocal() {
 }
 
 async function world(): Promise<World> {
-  await ready();
+  if ((await chooseSource()) === "file") return loadFileWorld();
   const [demo, app] = await Promise.all([readBucket("demo"), readBucket("app")]);
   return { demo, app };
 }
@@ -390,9 +458,7 @@ function view(data: World, draft: Draft, who: Viewer): DraftView {
     id: draft.id,
     contribution: draft.contribution,
     cycles: draft.cycles,
-    summary: plan
-      ? `${draft.contribution} USD each cycle, ${draft.cycles} cycles of ${spanLabel(plan.cycle)}.`
-      : `${draft.contribution} USD each cycle.`,
+    summary: `${plan ? `${draft.contribution} USD each cycle, ${draft.cycles} cycles of ${spanLabel(plan.cycle)}.` : `${draft.contribution} USD each cycle.`} ${draft.plain ? "Each contribution is paid to the person whose turn it is." : "The pot streams to the person whose turn it is."}`,
     open: draft.open,
     mine,
     member: draft.members.some((item) => same(item, who.address)),
@@ -449,6 +515,47 @@ export type EmailHint =
   | { status: "none" }
   | { status: "passkey"; address: Address }
   | { status: "wallet" };
+
+function locateAccount(data: World, value: string): Profile | undefined {
+  if (value.includes("@")) return holder(data, classify(value));
+  const compact = value.replace(/[\s().-]/g, "");
+  if (/^\+?\d{7,15}$/.test(compact)) return holder(data, classify(value));
+  if (/^[a-z0-9]{3,16}$/i.test(value)) {
+    const code = value.toLowerCase();
+    for (const bucket of buckets) {
+      const found = data[bucket].profiles.find((item) => item.memberCode.toLowerCase() === code);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  throw new Error("Enter their email, phone, or member code.");
+}
+
+function accountMiss(value: string): string {
+  if (value.includes("@")) return "No account is using that email. They can add it in Settings.";
+  const compact = value.replace(/[\s().-]/g, "");
+  if (/^\+?\d{7,15}$/.test(compact)) return "No account is using that phone number. They can add it in Settings.";
+  return "No account is using that member code.";
+}
+
+/** Finds a wallet that saved this email, phone, or member code. Does not open a session. */
+export async function findAccount(raw: string): Promise<{ name: string; address: Address }> {
+  const who = await viewer();
+  const value = raw.trim();
+  if (!value) throw new Error("Enter their email, phone, or member code.");
+  let data: World;
+  try {
+    data = await world();
+  } catch {
+    throw new Error("The member directory is unavailable, so this account cannot be found.");
+  }
+  const found = locateAccount(data, value);
+  if (!found) throw new Error(accountMiss(value));
+  const account = asAddress(found.address);
+  if (!account) throw new Error("That account does not point at a wallet.");
+  if (same(account, who.address)) throw new Error("That account is the one you are using.");
+  return { name: named(data, account), address: account };
+}
 
 /** Looks up a Settings email without opening a session or returning an address the browser does not already hold. */
 export async function hintForEmail(raw: string, known: string[]): Promise<EmailHint> {
@@ -621,7 +728,7 @@ export async function savePassword(raw: string) {
   await writeBucket(bucket, data[bucket]);
 }
 
-export async function openDraft(input: { contribution: string; cycles: number; cycle: string; days: string }) {
+export async function openDraft(input: { contribution: string; cycles: number; cycle: string; days: string; plain: boolean }) {
   const contribution = input.contribution.trim();
   if (!/^\d+(\.\d{1,18})?$/.test(contribution) || Number(contribution) <= 0) {
     throw new Error("Enter a contribution greater than zero.");
@@ -644,6 +751,7 @@ export async function openDraft(input: { contribution: string; cycles: number; c
     days: String(Number.isInteger(Number(input.days)) ? Number(input.days) : 14),
     members: [who.address],
     open: true,
+    plain: input.plain,
     applications: [],
   });
   await writeBucket(bucket, store);
@@ -658,10 +766,18 @@ function place(store: Store, draft: Draft, address: Address) {
 }
 
 export async function addDraftMember(id: string, raw: string) {
-  const key = classify(raw);
+  const value = raw.trim();
   const who = await viewer();
   const data = await world();
   const { bucket, draft } = owned(data, id, who);
+  const direct = asAddress(value);
+  if (direct) {
+    if (direct === "0x0000000000000000000000000000000000000000") throw new Error("Enter a wallet address.");
+    place(data[bucket], draft, direct);
+    await writeBucket(bucket, data[bucket]);
+    return;
+  }
+  const key = classify(value);
   const found = holder(data, key);
   if (!found) throw new Error(miss(key.kind));
   const account = asAddress(found.address);
@@ -752,6 +868,10 @@ export async function groupCreateIntent(draftId: string) {
   if (draft.members.length < 3) throw new Error("Add at least 3 people before the group can start.");
   const plan = cyclePlan(draft.cycle, Number(draft.days));
   if (!plan) throw new Error("That cycle length is outside what the contract allows. Use 1 to 366 days.");
+  if (draft.plain) {
+    const wait = plainGroupWaits();
+    if (wait) throw new Error(wait);
+  }
   const members = draft.members.flatMap((item) => {
     const account = asAddress(item);
     return account ? [account] : [];
@@ -770,6 +890,7 @@ export async function groupCreateIntent(draftId: string) {
     windowSeconds: plan.window,
     graceSeconds: plan.grace,
     phones,
+    plain: draft.plain,
     ref: "",
   };
 }
@@ -781,6 +902,10 @@ export async function launchDraft(id: string) {
   if (draft.members.length < 3) throw new Error("Add at least 3 people before the group can start.");
   const plan = cyclePlan(draft.cycle, Number(draft.days));
   if (!plan) throw new Error("That cycle length is outside what the contract allows. Use 1 to 366 days.");
+  if (draft.plain) {
+    const wait = plainGroupWaits();
+    if (wait) throw new Error(wait);
+  }
   const members = draft.members.flatMap((item) => {
     const account = asAddress(item);
     return account ? [account] : [];
@@ -797,6 +922,7 @@ export async function launchDraft(id: string) {
     cycleSeconds: plan.cycle,
     windowSeconds: plan.window,
     graceSeconds: plan.grace,
+    plain: draft.plain,
   });
   const fresh = await world();
   const current = locate(fresh, id);

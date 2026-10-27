@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { AccountFrame } from "@/components/account-mark";
 import { NameAsk } from "@/components/name-ask";
 import { Shell } from "@/components/shell";
 import { TermsAsk } from "@/components/terms-ask";
@@ -11,8 +12,10 @@ async function Entered({ children }: { children: React.ReactNode }) {
   const [who, agreed] = await Promise.all([viewer(), acceptedTerms()]);
   return (
     <>
-      {agreed ? who.needsName ? <NameAsk /> : null : <TermsAsk />}
-      {children}
+      <AccountFrame name={who.name} address={who.address}>
+        {agreed ? who.needsName ? <NameAsk /> : null : <TermsAsk />}
+        {children}
+      </AccountFrame>
     </>
   );
 }

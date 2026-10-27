@@ -47,12 +47,28 @@ button:disabled {
   padding: 2.5rem 0 4rem;
 }
 
-h1 {
+h1, h2 {
   margin: 0 0 0.75rem;
   font-size: 2rem;
   font-weight: 560;
   letter-spacing: -0.02em;
   line-height: 1.15;
+}
+
+h2 { font-size: 1.5rem; }
+
+.upgrade {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--rule);
+}
+
+.upgrade .sign, .upgrade .connect { margin: 0 0.75rem 0.75rem 0; }
+
+.mono {
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  color: var(--quiet);
 }
 
 .lede, .note, .status {

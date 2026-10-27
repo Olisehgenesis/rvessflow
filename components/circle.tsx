@@ -52,6 +52,14 @@ export function DraftTerms() {
         <span className="block text-xs leading-relaxed text-muted-foreground">Each member posts contribution × cycles as collateral before the rotation can start.</span>
       </label>
       <label className="block space-y-1.5">
+        <Label htmlFor="payout">How each turn is paid</Label>
+        <select id="payout" name="payout" className={`${field} w-full`} defaultValue="plain">
+          <option value="plain">Paid each turn</option>
+          <option value="stream">Streaming pot</option>
+        </select>
+        <span className="block text-xs leading-relaxed text-muted-foreground">Paid each turn sends the contribution to the person whose turn it is. A streaming pot pays that person every second. Paid each turn is an upgrade coming soon, on Thursday, 29 October.</span>
+      </label>
+      <label className="block space-y-1.5">
         <Label htmlFor="cycles">Cycles</Label>
         <select id="cycles" name="cycles" className={`${field} w-full`} defaultValue="4">
           <option value="4">4 cycles</option>
@@ -154,8 +162,8 @@ function AddPerson({ id }: { id: string }) {
       <input type="hidden" name="id" value={id} />
       <label className="block space-y-1.5">
         <Label htmlFor="who">Add a member</Label>
-        <Input id="who" name="who" placeholder="Email, phone, or password" autoComplete="off" className={field} aria-invalid={Boolean(state?.error)} />
-        <span className="block text-xs leading-relaxed text-muted-foreground">Use the email, phone, or password they linked to their wallet.</span>
+        <Input id="who" name="who" placeholder="Wallet address, email, phone, or password" autoComplete="off" spellCheck={false} className={field} aria-invalid={Boolean(state?.error)} />
+        <span className="block text-xs leading-relaxed text-muted-foreground">Paste any wallet address, or the email, phone, or password they linked in Settings.</span>
       </label>
       <ErrorNote error={state?.error} />
       <Submit pending={pending}>Add member</Submit>

@@ -8,9 +8,10 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 
 const actions = [
   { href: "/home/add", title: "Top up", body: "Crypto, mobile money, or a card", icon: IconDown, well: "bg-[#D4F06B] text-[#1C2A14]" },
-  { href: "/goals/new", title: "New goal", body: "Set a goal and watch it grow", icon: IconTarget, well: "bg-[#D4F06B] text-[#1C2A14]" },
-  { href: "/vaults/new", title: "New lock", body: "Vaults", icon: IconLock, well: "bg-[#E7F6C8] text-[#1C2A14]" },
-  { href: "/goals/new?kind=flow", title: "Start stream", body: "A recurring payment", icon: IconBolt, well: "bg-[#E4D9FF] text-[#6A4ED4]" },
+  { href: "/goals/savings", title: "Saving", body: "Lock money until a future date", icon: IconTarget, well: "bg-[#D4F06B] text-[#1C2A14]" },
+  { href: "/goals/flow", title: "Flow", body: "Receive money every second", icon: IconBolt, well: "bg-[#E4D9FF] text-[#6A4ED4]" },
+  { href: "/goals/expense", title: "Expense", body: "Pay now, or stream the payment", icon: IconBolt, well: "bg-[#E4D9FF] text-[#6A4ED4]" },
+  { href: "/vaults/new", title: "New lock", body: "Keep funds until a date", icon: IconLock, well: "bg-[#E7F6C8] text-[#1C2A14]" },
   { href: "/groups/new", title: "New group", body: "Save with trusted people", icon: IconPeople, well: "bg-[#DDD4FF] text-[#6550C4]" },
 ];
 
@@ -36,7 +37,7 @@ function CreateMenuBody() {
         <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-[#E3E8DC]" />
         <SheetHeader className="px-1 pb-2">
           <SheetTitle>Create</SheetTitle>
-          <SheetDescription>Top up, or start a goal, lock, stream, or group.</SheetDescription>
+          <SheetDescription>Top up, or start a saving, flow, expense, lock, or group.</SheetDescription>
         </SheetHeader>
         <ul className="space-y-2">
           {actions.map((action) => (
@@ -54,7 +55,7 @@ function CreateMenuBody() {
           ))}
         </ul>
         <Link href="/vaults" className="mt-2 flex h-11 items-center justify-center rounded-full text-sm font-medium text-[#3C4A2E]" onClick={() => setOpen(false)}>
-          Open vaults
+          Open locks
         </Link>
       </SheetContent>
     </Sheet>

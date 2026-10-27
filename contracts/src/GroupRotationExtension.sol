@@ -11,7 +11,7 @@ import {
 } from "./interfaces/ISuperfluidMini.sol";
 import {GroupRotationStore, IGroupCycle} from "./GroupRotationStore.sol";
 
-/// @notice Exit and the group reads for {GroupRotation}.
+/// @notice Exit, creation, and the group reads for {GroupRotation}.
 ///         The group delegatecalls here. Storage is the group's storage.
 contract GroupRotationExtension is GroupRotationStore {
     constructor(address allowlist_, address host_, address gda_) GroupRotationStore(allowlist_, host_, gda_) {
@@ -461,6 +461,130 @@ contract GroupRotationExtension is GroupRotationStore {
     function _collateral(uint256 id) internal view returns (uint256 total) {
         uint256 n = groups[id].memberCount;
         for (uint256 i; i < n; ++i) total += _members[id][i].collateral;
+    }
+
+    function createGroup(
+        address token,
+        uint128 contribution,
+        uint64 cycleDuration,
+        uint64 windowDuration,
+        uint64 graceDuration,
+        uint16 totalCycles,
+        address[] calldata accounts,
+        uint64[] calldata offsets
+    ) external returns (uint256 id) {
+        id = _createGroup(token, contribution, cycleDuration, windowDuration, graceDuration, totalCycles, accounts, offsets, false);
+    }
+
+    /// @notice Same rotation as {createGroup}, but each payment is transferred to the
+    ///         member whose turn it is. No pool is opened and nothing streams.
+    function createPlainGroup(
+        address token,
+        uint128 contribution,
+        uint64 cycleDuration,
+        uint64 windowDuration,
+        uint64 graceDuration,
+        uint16 totalCycles,
+        address[] calldata accounts,
+        uint64[] calldata offsets
+    ) external returns (uint256 id) {
+        id = _createGroup(token, contribution, cycleDuration, windowDuration, graceDuration, totalCycles, accounts, offsets, true);
+    }
+
+    function _createGroup(
+        address token,
+        uint128 contribution,
+        uint64 cycleDuration,
+        uint64 windowDuration,
+        uint64 graceDuration,
+        uint16 totalCycles,
+        address[] calldata accounts,
+        uint64[] calldata offsets,
+        bool plain
+    ) internal returns (uint256 id) {
+        if (!allowlist.isAllowed(token)) revert TokenNotAllowed();
+        if (allowlist.paused()) revert Paused();
+        uint256 n = accounts.length;
+        if (contribution == 0 || n < MIN_MEMBERS || n > MAX_MEMBERS || n != offsets.length) revert BadParams();
+        if (totalCycles == 0 || totalCycles > MAX_CYCLES) revert BadParams();
+        if (cycleDuration < MIN_CYCLE || cycleDuration > MAX_CYCLE || windowDuration == 0) revert BadParams();
+
+        uint256 bond = uint256(contribution) * uint256(totalCycles);
+        if (bond > type(uint128).max) revert BadParams();
+
+        bool creatorIn;
+        for (uint256 i; i < n; ++i) {
+            if (accounts[i] == address(0)) revert ZeroAddress();
+            if (accounts[i] == msg.sender) creatorIn = true;
+            if (uint256(offsets[i]) + uint256(windowDuration) + uint256(graceDuration) > cycleDuration) {
+                revert WindowOutOfRange();
+            }
+            for (uint256 j; j < i; ++j) {
+                if (accounts[i] == accounts[j]) revert DuplicateMember();
+            }
+        }
+        if (!creatorIn) revert CreatorNotMember();
+
+        id = nextId++;
+        Group storage g = groups[id];
+        g.creator = msg.sender;
+        g.token = token;
+        g.contribution = contribution;
+        g.collateralRequired = uint128(bond);
+        g.cycleDuration = cycleDuration;
+        g.windowDuration = windowDuration;
+        g.graceDuration = graceDuration;
+        g.totalCycles = totalCycles;
+        g.memberCount = uint16(n);
+        g.plain = plain;
+        for (uint256 i; i < n; ++i) {
+            _members[id].push(
+                Member({
+                    account: accounts[i],
+                    offset: offsets[i],
+                    collateral: 0,
+                    collateralPosted: false,
+                    defaulted: false,
+                    given: 0,
+                    received: 0,
+                    owed: 0,
+                    missed: 0
+                })
+            );
+            _indexOf[id][accounts[i]] = i + 1;
+            _groupsOf[accounts[i]].push(id);
+        }
+        groupAdmin[id][msg.sender] = true;
+        emit GroupCreated(id, msg.sender, token, uint16(n), totalCycles);
+    }
+
+    function start(uint256 id) external {
+        Group storage g = groups[id];
+        if (_indexOf[id][g.creator] != 0) {
+            if (!_isAdmin(id, msg.sender)) revert NotAdmin();
+        } else {
+            _memberIndex(id, msg.sender);
+        }
+        if (groupPaused[id]) revert Paused();
+        if (g.started || g.cancelled || allowlist.paused()) revert BadState();
+        uint256 n = g.memberCount;
+        if (n < MIN_MEMBERS) revert BadParams();
+        for (uint256 i; i < n; ++i) {
+            if (!_members[id][i].collateralPosted) revert MissingCollateral();
+        }
+        if (g.plain) {
+            g.started = true;
+            g.startTime = uint64(block.timestamp);
+            emit GroupStarted(id, g.startTime, address(0));
+            return;
+        }
+        IGDAv1Forwarder.PoolConfig memory config =
+            IGDAv1Forwarder.PoolConfig({transferabilityForUnitsOwner: false, distributionFromAnyAddress: false});
+        (, address pool) = gda.createPool(g.token, address(this), config);
+        g.pool = pool;
+        g.started = true;
+        g.startTime = uint64(block.timestamp);
+        emit GroupStarted(id, g.startTime, pool);
     }
 
     function _pullExact(address token, uint256 amount) internal returns (uint256 got) {

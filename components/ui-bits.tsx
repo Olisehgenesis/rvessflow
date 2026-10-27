@@ -1,20 +1,11 @@
-import Link from "next/link";
-import { IconBack } from "@/components/icons";
+import { TopBar } from "@/components/top-bar";
 import { money, show } from "@/lib/display";
 import type { Quote } from "@/lib/quote";
 
 export function Page({ title = "", back, children, action }: { title?: string; back?: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <main className="px-4 pb-8 pt-4">
-      <header className={`mb-5 flex items-center gap-2 ${back ? "" : "justify-between"}`}>
-        {back ? (
-          <Link href={back} className="grid size-9 shrink-0 place-items-center text-foreground" aria-label="Back">
-            <IconBack className="size-5" />
-          </Link>
-        ) : null}
-        <h1 className={`font-display text-lg font-semibold tracking-tight ${back ? "flex-1 text-center" : ""}`}>{title}</h1>
-        {action ? <div className="shrink-0">{action}</div> : back ? <span className="size-9 shrink-0" /> : null}
-      </header>
+    <main className="px-4 pb-8">
+      <TopBar title={title} back={back} action={action} />
       {children}
     </main>
   );

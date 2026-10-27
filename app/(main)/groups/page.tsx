@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import Loading from "../loading";
 import { ApplyLink } from "@/components/circle";
+import { GroupUpgradeNote } from "@/components/group-upgrade";
 import { GroupLink, ProductMark } from "@/components/product";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
@@ -31,6 +32,9 @@ async function GroupsBody() {
         </Link>
       }
     >
+      <div className="mb-4">
+        <GroupUpgradeNote />
+      </div>
       {directory.down ? <p className="mb-4 text-sm text-muted-foreground">The member directory is unavailable, so drafts cannot load. Groups already on Base still show here.</p> : null}
       {drafts.length === 0 && data.groups.length === 0 ? (
         <div className="space-y-3">
@@ -39,7 +43,7 @@ async function GroupsBody() {
             <h2 className="text-lg font-semibold">A rotating pot</h2>
           </div>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Create a group, add people by the email, phone, or password linked to their wallet, arrange the order, then start it. People can also apply to join.
+            Create a group, add people by wallet address, or by the email, phone, or password linked to their wallet, arrange the order, then start it. People can also apply to join.
           </p>
           <Link href="/groups/new" className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground">
             Start a group
