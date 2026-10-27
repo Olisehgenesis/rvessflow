@@ -267,6 +267,21 @@
   }
 }
 
+html {
+  color-scheme: light;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+a,
+button,
+[role="button"] {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
 @media (min-width: 64rem) and (prefers-reduced-motion: no-preference) {
   .rvess-desk :is(a, button)[class~="bg-primary"]:not([role="switch"]):active {
     transform: scale(0.98);

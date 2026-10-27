@@ -186,7 +186,7 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
         ) : null}
       </header>
 
-      <main>
+      <main id="main">
         <section className="mx-auto grid max-w-6xl items-center gap-6 px-5 pt-8 pb-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:gap-4 lg:px-8 lg:pt-10 lg:pb-2">
           <div className="max-w-xl">
             <h1 className="text-[3.15rem] leading-[0.94] font-semibold tracking-[-0.045em] sm:text-[4.25rem] lg:text-[5.15rem]">

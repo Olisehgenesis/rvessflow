@@ -28,7 +28,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className="rvess-desk min-h-dvh bg-background text-foreground lg:grid lg:grid-cols-[15.5rem_minmax(0,1fr)] lg:bg-[#F3F6EE]">
       <DesktopSide />
       <div className="relative mx-auto flex h-dvh w-full max-w-lg flex-col bg-background lg:mx-0 lg:h-dvh lg:max-w-none lg:bg-transparent">
-        <div id="desk-main" className="min-h-0 flex-1 overflow-y-auto lg:px-8 lg:py-7 xl:px-10">{children}</div>
+        <div id="main" className="min-h-0 flex-1 overflow-y-auto lg:px-8 lg:py-7 xl:px-10">{children}</div>
         <div className="lg:hidden">
           <Suspense fallback={<div className="sticky bottom-0 h-14 border-t border-border bg-card" />}>
             <BottomNav />

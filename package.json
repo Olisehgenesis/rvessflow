@@ -10,6 +10,7 @@
     "test": "node --experimental-strip-types --import ./test/register.mjs --test test/pay.test.ts test/deposit.test.ts test/onramp.test.ts test/home.test.ts test/send.test.ts"
   },
   "dependencies": {
+    "@base-org/account": "^2.5.13",
     "@dicebear/core": "^9.4.2",
     "@dicebear/personas": "^9.4.2",
     "@dotenvx/dotenvx": "^2.38.2",

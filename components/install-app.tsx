@@ -33,8 +33,13 @@ export function InstallButton({ className = "", row = false }: { className?: str
       event.preventDefault();
       setPrompt(event as InstallEvent);
     };
+    const onInstalled = () => setDismissed(true);
     window.addEventListener("beforeinstallprompt", onPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
   }, [installed]);
 
   if (installed || dismissed) return null;
@@ -90,10 +95,82 @@ export function InstallButton({ className = "", row = false }: { className?: str
   );
 }
 
+function subscribeOnline(onChange: () => void) {
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+}
+
 export function PwaRegister() {
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
+  const [updateWorker, setUpdateWorker] = useState<ServiceWorker | null>(null);
+  const [storageTight, setStorageTight] = useState(false);
+
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    let reloaded = false;
+    const onControl = () => {
+      if (reloaded || sessionStorage.getItem("pwa-reloading") !== "1") return;
+      reloaded = true;
+      location.reload();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", onControl);
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    const saveData = connection?.saveData === true || connection?.effectiveType === "slow-2g" || connection?.effectiveType === "2g";
+    if (!saveData && navigator.storage?.persist) void navigator.storage.persist();
+    if (navigator.storage?.estimate) {
+      void navigator.storage.estimate().then(({ usage, quota }) => {
+        if (quota && usage !== undefined && usage / quota > 0.8) setStorageTight(true);
+      });
+    }
+    navigator.serviceWorker.register("/sw.js").then((registration) => {
+      const justUpdated = Number(localStorage.getItem("pwa-just-updated") || 0);
+      const offer = (worker: ServiceWorker | null) => {
+        if (!worker || Date.now() - justUpdated < 30_000) return;
+        setUpdateWorker(worker);
+      };
+      if (registration.waiting) offer(registration.waiting);
+      registration.addEventListener("updatefound", () => {
+        const worker = registration.installing;
+        worker?.addEventListener("statechange", () => {
+          if (worker.state === "installed" && navigator.serviceWorker.controller) offer(worker);
+        });
+      });
+    }).catch(() => undefined);
+    return () => navigator.serviceWorker.removeEventListener("controllerchange", onControl);
   }, []);
-  return null;
+
+  function applyUpdate() {
+    if (!updateWorker) return;
+    localStorage.setItem("pwa-just-updated", String(Date.now()));
+    sessionStorage.setItem("pwa-reloading", "1");
+    updateWorker.postMessage({ type: "SKIP_WAITING" });
+    setUpdateWorker(null);
+  }
+
+  return (
+    <>
+      {online ? null : (
+        <p role="status" className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 rounded-2xl border border-[#E6EADF] bg-[#F7FBF3] px-4 py-3 text-sm text-[#141414] shadow-[0_8px_24px_rgba(20,20,20,0.08)]">
+          You are offline. Balances update when the connection returns.
+        </p>
+      )}
+      {updateWorker ? (
+        <div className="fixed inset-x-3 bottom-[max(5rem,env(safe-area-inset-bottom))] z-50 flex items-center justify-between gap-3 rounded-2xl border border-[#E6EADF] bg-white px-4 py-3 text-sm shadow-[0_8px_24px_rgba(20,20,20,0.08)]">
+          <p>A new version of RvessFlow is ready.</p>
+          <button type="button" onClick={applyUpdate} className="h-10 shrink-0 rounded-full bg-[#D6F34A] px-4 font-semibold text-[#17210C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]">
+            Update
+          </button>
+        </div>
+      ) : null}
+      {storageTight ? (
+        <p role="status" className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 rounded-2xl bg-[#141414] px-4 py-3 text-sm text-white">
+          This device is low on storage. RvessFlow may not keep the offline page.
+        </p>
+      ) : null}
+    </>
+  );
 }

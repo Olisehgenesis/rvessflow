@@ -5,7 +5,7 @@ import { Dialog } from "radix-ui";
 import { Check, ChevronLeft, ChevronRight, Fingerprint, Lock, Mail, Shield, Wallet, X } from "lucide-react";
 import { IconMark } from "@/components/icons";
 import { enterApp, lookUpEmail, noteTerms, openSession } from "@/lib/actions";
-import { connectWallet, createPasskeyWallet, unlockPasskey } from "@/lib/auth-client";
+import { connectBase, connectWallet, createPasskeyWallet, unlockPasskey } from "@/lib/auth-client";
 import { shortAddress } from "@/lib/display";
 import { readPasskeys, type SavedPasskey } from "@/lib/passkey-vault";
 
@@ -20,12 +20,13 @@ type Phase =
   | { name: "absent" }
   | { name: "creating" }
   | { name: "created"; address: string; label: string }
-  | { name: "connecting" }
+  | { name: "connecting"; via: "base" | "wallet" }
   | { name: "confirming"; label: string }
   | { name: "cancelled"; kind: Kind; attempt: Attempt }
   | { name: "failed"; kind: Kind; attempt: Attempt };
 
 function cancelled(error: unknown): boolean {
+  if (typeof error === "object" && error !== null && "code" in error && Number(error.code) === 4001) return true;
   if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "AbortError")) return true;
   const text = error instanceof Error ? `${error.name} ${error.message}` : "";
   return /reject|reset|closed|cancel|dismiss|not allowed|timed out/i.test(text);
@@ -129,9 +130,20 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
     }
   }
 
+  async function startBase() {
+    if (!(await agreeFirst())) return;
+    setPhase({ name: "connecting", via: "base" });
+    try {
+      await connectBase(name.trim());
+    } catch (error) {
+      if (redirectError(error)) throw error;
+      setPhase(cancelled(error) ? { name: "cancelled", kind: "wallet", attempt: "connect" } : { name: "failed", kind: "wallet", attempt: "connect" });
+    }
+  }
+
   async function startWallet() {
     if (!(await agreeFirst())) return;
-    setPhase({ name: "connecting" });
+    setPhase({ name: "connecting", via: "wallet" });
     try {
       await connectWallet(name.trim());
     } catch (error) {
@@ -242,11 +254,18 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
               {termsError ? <p className="text-sm text-[#C5362B]">{termsError}</p> : null}
 
               <MethodButton
-                icon={<Wallet className="size-5" />}
-                title="Sign in with wallet"
-                body="Base is listed first. MetaMask and the other wallets stay on WalletConnect."
+                icon={<Fingerprint className="size-5" />}
+                title="Connect Base"
+                body="Coinbase passkey wallet. It connects on this site, including Android."
                 recommended
                 tone="accent"
+                onClick={() => void startBase()}
+              />
+
+              <MethodButton
+                icon={<Wallet className="size-5" />}
+                title="Sign in with wallet"
+                body="MetaMask and other wallets stay on WalletConnect."
                 onClick={() => void startWallet()}
               />
 
@@ -428,7 +447,8 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
             </form>
           ) : (
             <div className="mt-5 space-y-2.5">
-              <MethodButton icon={<Fingerprint className="size-5" />} title="Continue with a passkey" body="Recommended on this device." tone="accent" recommended onClick={() => setPhase({ name: "name" })} />
+              <MethodButton icon={<Fingerprint className="size-5" />} title="Connect Base" body="Coinbase passkey wallet. It connects on this site." tone="accent" recommended onClick={() => void startBase()} />
+              <MethodButton icon={<Fingerprint className="size-5" />} title="Continue with a passkey" body="Recommended on this device." onClick={() => setPhase({ name: "name" })} />
               <MethodButton icon={<Wallet className="size-5" />} title="Sign in with wallet" body="Use the wallet you already have." onClick={() => void startWallet()} />
             </div>
           )}
@@ -443,13 +463,22 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
             </button>
           ) : null}
           {emailWallet ? (
-            <button
-              type="button"
-              onClick={() => void startWallet()}
-              className="mt-3 h-11 w-full rounded-full border border-[#E4E2DC] text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
-            >
-              Connect wallet
-            </button>
+            <div className="mt-3 space-y-2">
+              <button
+                type="button"
+                onClick={() => void startBase()}
+                className="h-11 w-full rounded-full bg-[#171717] text-sm font-medium text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
+              >
+                Connect Base
+              </button>
+              <button
+                type="button"
+                onClick={() => void startWallet()}
+                className="h-11 w-full rounded-full border border-[#E4E2DC] text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
+              >
+                Connect wallet
+              </button>
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -462,7 +491,8 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
             A passkey opens where you created it. This browser does not have one saved. Connect the wallet you used before, or create an account if you are new.
           </Dialog.Description>
           <div className="mt-5 space-y-2.5">
-            <MethodButton icon={<Wallet className="size-5" />} title="Sign in with wallet" body="The same wallet works on any device." tone="accent" onClick={() => void startWallet()} />
+            <MethodButton icon={<Fingerprint className="size-5" />} title="Connect Base" body="Coinbase passkey wallet. It connects on this site, including Android." tone="accent" onClick={() => void startBase()} />
+            <MethodButton icon={<Wallet className="size-5" />} title="Sign in with wallet" body="The same wallet works on any device." onClick={() => void startWallet()} />
             <MethodButton icon={<Fingerprint className="size-5" />} title="Create an account" body="This makes a new passkey. It does not open an old one." onClick={() => choose("create")} />
           </div>
         </div>
@@ -477,6 +507,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
           </Dialog.Description>
           <ul className="mt-4 space-y-3 text-sm leading-relaxed text-[#3A3F47]">
             <li>A passkey stays on the device that created it. A new phone or browser will not see it.</li>
+            <li>Connect Base uses a Coinbase passkey. The prompt opens on this site, so the same Base account works on Android.</li>
             <li>A wallet is the way back in on another device. Connect the same wallet you used before.</li>
             <li>An email saved in Settings helps groups find you. It does not replace the passkey or the wallet.</li>
           </ul>
@@ -501,7 +532,14 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
 
       {phase.name === "creating" ? <Status title="Creating your account" body="Setting up your passkey. This may take a few seconds." mark={<WaitMark icon={<Fingerprint className="size-6" />} />} bar /> : null}
       {phase.name === "confirming" ? <Status title="Confirm your passkey" body={`Approve the prompt to unlock ${phase.label}.`} mark={<WaitMark icon={<Fingerprint className="size-6" />} />} bar /> : null}
-      {phase.name === "connecting" ? <Status title="Connecting wallet" body="Confirm the connection in your wallet." mark={<WaitMark icon={<Wallet className="size-6" />} />} bar /> : null}
+      {phase.name === "connecting" ? (
+        <Status
+          title={phase.via === "base" ? "Connecting Base" : "Connecting wallet"}
+          body={phase.via === "base" ? "Confirm the Coinbase passkey. It opens on this site." : "Confirm the connection in your wallet."}
+          mark={<WaitMark icon={phase.via === "base" ? <Fingerprint className="size-6" /> : <Wallet className="size-6" />} />}
+          bar
+        />
+      ) : null}
       {phase.name === "created" ? (
         <Status
           title="Passkey created"

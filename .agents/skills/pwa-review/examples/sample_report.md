@@ -1,0 +1,98 @@
+# PWA Audit Report
+
+**Target:** https://app.example.com + `~/code/example-app` · **Mode:** url+source
+**Date:** 2026-10-22 · **Evidence:** `/tmp/pwa-app.example.com/`
+**Score:** 186/206 applicable points (90.3%) — **Grade: A+**
+**Nominal:** 186/209 · N/A: 3 pts · Unverifiable: 0 pts
+
+> Illustrative report for a fictional, well-built React + Workbox PWA with real-time chat.
+> File names and lines show the evidence format the skill requires.
+
+---
+
+## Score Breakdown
+
+| Category | Score | Applicable | % | Status |
+|----------|------:|-----------:|--:|:------:|
+| Manifest Compliance | 22 | /22 | 100% | ✅ |
+| Advanced Manifest | 13 | /14 | 93% | ✅ |
+| Service Worker & Caching | 33 | /35 | 94% | ✅ |
+| Offline Capability | 22 | /24 | 92% | ✅ |
+| Installability | 14 | /15 | 93% | ✅ |
+| Security | 11 | /14 | 79% | ⚠️ |
+| Performance Signals | 18 | /19 | 95% | ✅ |
+| UX & Accessibility | 33 | /35 | 94% | ✅ |
+| SEO & Discoverability | 7 | /8 | 88% | ✅ |
+| PWA Advanced | 12 | /19 | 63% | ⚠️ |
+| iOS Compatibility | 1 | /1 | 100% | ✅ |
+
+**N/A:** SRI (2) — all scripts are first-party · `note_taking` (1) — not a notes app
+
+---
+
+## Critical Issues
+
+None.
+
+## Warnings
+
+- **[UX] Zoom disabled** — `index.html:6` `maximum-scale=1, user-scalable=no` (fails WCAG 1.4.4 on Android).
+  **Fix:** `width=device-width, initial-scale=1, viewport-fit=cover`; keep inputs at 16px to avoid iOS focus zoom.
+- **[Security] CSP allows inline scripts** — header `script-src 'self' 'unsafe-inline'`.
+  **Fix:** move the inline bootstrap to a file or use a nonce; drop `'unsafe-inline'`.
+- **[Security] No `Permissions-Policy`, no `frame-ancestors` / `X-Frame-Options`** — `headers.json`.
+  **Fix:** `Permissions-Policy: camera=(), microphone=(), geolocation=()` and `frame-ancestors 'none'` in CSP.
+- **[Service Worker] SW script cached for an hour** — `service_worker.cache_control` = `max-age=3600`.
+  **Fix:** serve `/sw.js` with `Cache-Control: no-cache`.
+- **[Installability] No iOS install guidance** — `sig:ios_install_hint` = 0; iOS has no install prompt API.
+  **Fix:** show "Share → Add to Home Screen" when iOS and not standalone.
+
+## Passed Highlights
+
+- **Manifest:** all required fields, 192/512 + separate maskable icon, all icons 200 `image/png`; `id`, `scope`, shortcuts, categories
+- **Service worker:** Workbox precache with revisions (`sw.js:1` `__WB_MANIFEST`), CacheFirst images / NetworkFirst API / SWR assets with `ExpirationPlugin`, `CacheableResponsePlugin`, `NavigationRoute` fallback, push + `notificationclick` with actions, `SKIP_WAITING` message handler
+- **Offline & update:** offline page, `onNeedRefresh` prompt with `pwa-just-updated` suppression (`source/src/pwa/UpdateToast.tsx:18`), IndexedDB via `idb`, `storage.persist()`, Background Sync on `online`
+- **Real-time:** `reconnectionAttempts: Infinity`, `reconnectionDelayMax: 30000` (`source/src/lib/socket.ts:7`), reconnect on `visibilitychange` (`:31`), room re-join in persistent `connect` listener (`:22`)
+- **UX:** safe-area padding on header and bottom nav, `100dvh` layout, reduced-motion styles, complete light/dark pairs, view-state persistence with stale-id handling (`source/src/chat/useActiveConversation.ts:12`)
+- **Security & performance:** HTTPS with 301 redirect, HSTS 1 year, nosniff, COOP `same-origin`, Brotli, `fetchpriority="high"` hero in AVIF, no `unload` listeners
+
+---
+
+## Recommendations
+
+### High Priority
+1. Re-enable zoom in the viewport meta — +2 pts — S
+2. Strict CSP (nonce, no `'unsafe-inline'`) + `frame-ancestors` — +2 pts — M
+
+### Medium Priority
+1. Add `file_handlers` / `protocol_handlers` if the app opens files or deep links — up to +4 pts — M
+2. `screenshots` with `form_factor: "wide"` for Chrome's richer desktop install dialog — +1 pt — S
+3. Periodic sync for the inbox and `storage.estimate()` warnings — +2 pts — S
+
+### Quick Wins
+- `Cache-Control: no-cache` for `/sw.js`
+- `Permissions-Policy` header
+- iOS install hint banner
+- Navigation preload in Workbox (`navigationPreload.enable()`)
+- JSON-LD `WebApplication` block
+
+## Platform Notes
+- iOS: Web Push works only after the app is added to the Home Screen (16.4+); Declarative Web Push is available from Safari 18.4.
+- Background/Periodic Sync are Chromium-only; the `online` listener fallback already covers Safari.
+
+---
+
+<details><summary>Machine-readable summary</summary>
+
+```json
+{"version":"6.2.1","target":"https://app.example.com","date":"2026-10-22","earned":186,"applicable":206,"nominal":209,
+ "percent":90.3,"grade":"A+","provisional":false,
+ "categories":{"manifest":[22,22],"advanced_manifest":[13,14],"service_worker":[33,35],
+ "offline":[22,24],"installability":[14,15],"security":[11,14],"performance":[18,19],
+ "ux":[33,35],"seo":[7,8],"advanced":[12,19],"ios":[1,1]},
+ "na":["sri","note_taking"],"unverifiable":[],"critical":[],
+ "warnings":["zoom_disabled","csp_unsafe_inline","no_permissions_policy","no_frame_protection","sw_long_cached","no_ios_install_hint"]}
+```
+</details>
+
+*Generated by PWA Review Skill v6.2.1*

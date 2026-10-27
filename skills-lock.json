@@ -6,6 +6,16 @@
       "sourceType": "github",
       "skillPath": "skills/superfluid/SKILL.md",
       "computedHash": "d4ece33fe0cf26166f82f77b76292e4201324bd50af86e6ae82a01021a2e6f02"
+    },
+    "pwa-review": {
+      "source": "NexFabric/pwa-review-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md"
+    },
+    "pwa-expert": {
+      "source": "erichowens/some_claude_skills",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/pwa-expert/SKILL.md"
     }
   }
 }

@@ -13,6 +13,7 @@ export const walletConnectProjectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "fb48461bfb6043c40729e05706109f1a";
 
 const baseWalletId = "fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa";
+const walletSourceKey = "rvess-wallet-source";
 
 type EthereumProvider = Awaited<ReturnType<(typeof import("@walletconnect/ethereum-provider"))["default"]["init"]>>;
 type WalletConnection = {
@@ -21,9 +22,28 @@ type WalletConnection = {
   connected?: boolean;
   accounts?: readonly string[];
 };
+type WalletSource = "base" | "wallet";
 
 let providerPromise: Promise<EthereumProvider> | null = null;
+let basePromise: Promise<WalletConnection> | null = null;
 let chosen: WalletConnection | null = null;
+
+function rememberSource(source: WalletSource) {
+  try {
+    localStorage.setItem(walletSourceKey, source);
+  } catch {
+    // A private browser can block storage. The connection still works until the page reloads.
+  }
+}
+
+function rememberedSource(): WalletSource | null {
+  try {
+    const value = localStorage.getItem(walletSourceKey);
+    return value === "base" || value === "wallet" ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 function injectedProvider(): WalletConnection | null {
   const ethereum = (window as Window & { ethereum?: WalletConnection & { providers?: WalletConnection[]; isCoinbaseWallet?: boolean } }).ethereum;
@@ -32,8 +52,7 @@ function injectedProvider(): WalletConnection | null {
   return list.find((provider) => "isCoinbaseWallet" in provider && provider.isCoinbaseWallet) ?? ethereum;
 }
 
-export function walletProvider(): Promise<WalletConnection> {
-  if (chosen) return Promise.resolve(chosen);
+function walletConnectProvider(): Promise<WalletConnection> {
   providerPromise ??= (async () => {
     const { base, baseSepolia } = await import("viem/chains");
     const chain = testnet ? baseSepolia : base;
@@ -65,6 +84,40 @@ export function walletProvider(): Promise<WalletConnection> {
     });
   })();
   return providerPromise as Promise<WalletConnection>;
+}
+
+function baseAccountProvider(): Promise<WalletConnection> {
+  if (!basePromise) {
+    basePromise = (async () => {
+      const { createBaseAccountSDK } = await import("@base-org/account/browser");
+      const { base, baseSepolia } = await import("viem/chains");
+      const chain = testnet ? baseSepolia : base;
+      const sdk = createBaseAccountSDK({
+        appName: "RvessFlow",
+        appLogoUrl: `${window.location.origin}/icon-512.png`,
+        appChainIds: [chain.id],
+      });
+      const provider = sdk.getProvider();
+      return {
+        request: (args) => provider.request({ method: args.method, params: Array.isArray(args.params) || (args.params !== null && typeof args.params === "object") ? args.params : undefined }),
+      };
+    })();
+  }
+  return basePromise;
+}
+
+export function walletProvider(): Promise<WalletConnection> {
+  if (chosen) return Promise.resolve(chosen);
+  if (rememberedSource() === "base") {
+    return baseAccountProvider().then((provider) => {
+      chosen = provider;
+      return provider;
+    });
+  }
+  return walletConnectProvider().then((provider) => {
+    chosen = provider;
+    return provider;
+  });
 }
 
 export async function createPasskeyWallet(label: string): Promise<{ address: string; label: string }> {
@@ -117,18 +170,29 @@ async function accountFrom(provider: WalletConnection): Promise<string> {
   return address;
 }
 
+export async function connectBase(label = "") {
+  const provider = await baseAccountProvider();
+  const address = await accountFrom(provider);
+  chosen = provider;
+  rememberSource("base");
+  await openSession(address, "wallet", label);
+}
+
 export async function connectWallet(label = "") {
   const injected = injectedProvider();
   if (injected) {
+    const address = await accountFrom(injected);
     chosen = injected;
-    await openSession(await accountFrom(injected), "wallet", label);
+    rememberSource("wallet");
+    await openSession(address, "wallet", label);
     return;
   }
   if (!walletConnectProjectId) throw new Error("WalletConnect is not configured.");
-  const provider = await walletProvider();
-  chosen = provider;
+  const provider = await walletConnectProvider();
   if (!provider.connected) await provider.connect?.();
   const address = provider.accounts?.[0];
   if (!address || !isAddress(address)) throw new Error("The wallet did not return an account.");
+  chosen = provider;
+  rememberSource("wallet");
   await openSession(address, "wallet", label);
 }

@@ -28,11 +28,36 @@ const manrope = Manrope({
   display: "swap",
 });
 
+const site = "https://rvessflow.vercel.app";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(site),
   title: "RvessFlow",
   description: "Beta. Your money, in motion on Base.",
   applicationName: "RvessFlow",
-  appleWebApp: { capable: true, title: "RvessFlow", statusBarStyle: "default" },
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "RvessFlow",
+    description: "Beta. Savings, streams, locks, and groups on Base.",
+    url: site,
+    siteName: "RvessFlow",
+    type: "website",
+    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "RvessFlow" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "RvessFlow",
+    statusBarStyle: "default",
+    startupImage: [
+      { url: "/splash/iphone-se.png", media: "(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" },
+      { url: "/splash/iphone-14.png", media: "(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" },
+      { url: "/splash/ipad.png", media: "(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2)" },
+    ],
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-capable": "yes",
+  },
   icons: {
     icon: [
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -53,7 +78,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable} ${caveat.variable} ${manrope.variable} h-full antialiased`}>
       <body className="min-h-full bg-background font-sans text-foreground">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-full focus:bg-[#141414] focus:px-4 focus:py-2 focus:text-sm focus:text-white"
+        >
+          Skip to content
+        </a>
         <PwaRegister />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              name: "RvessFlow",
+              applicationCategory: "FinanceApplication",
+              operatingSystem: "Web",
+              url: site,
+              description: "Beta. Savings, streams, locks, and groups on Base.",
+            }),
+          }}
+        />
         {children}
       </body>
     </html>
