@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getContractAddress, isAddress, type Address } from "viem";
-import { asProtocolChain, chains, type ProtocolChain } from "./chains";
+import { chains, type ChainId, type ProtocolChain } from "./chains";
 import { ownerContract, parseOwners } from "./owners";
 import { buildDeployment, deployerBytecode, type Deployment } from "./plan";
+import { loadChainStats, type ChainStats } from "./stats";
 import { UpgradeGroups } from "./upgrade";
+import { InstalledConnect } from "./connect";
+import { installedWallets, type InstalledWallet } from "../../lib/wallet-injected";
 import { connectWallet, sendCall, sendCreate, type ConnectedWallet } from "./wallet";
 
 type Saved = {
@@ -11,7 +14,20 @@ type Saved = {
   addresses?: Deployment["addresses"];
 };
 
+type Anchor = {
+  deployer: Address;
+  alreadyCreated: number;
+  deployerReady: boolean;
+  saved: Saved | null;
+};
+
 const storageKey = (chainId: number, account: Address) => `rvessflow-deploy:${chainId}:${account.toLowerCase()}`;
+
+const probeSafe = ownerContract([
+  "0x0000000000000000000000000000000000000001",
+  "0x0000000000000000000000000000000000000002",
+  "0x0000000000000000000000000000000000000003",
+]);
 
 function readSaved(chainId: number, account: Address): Saved | null {
   const raw = localStorage.getItem(storageKey(chainId, account));
@@ -38,82 +54,119 @@ function readableError(err: unknown): string {
   return line.length > 240 ? `${line.slice(0, 240)}…` : line;
 }
 
+function hasCode(code: string | undefined): boolean {
+  return Boolean(code && code !== "0x");
+}
+
+/** Chain reads only. The signature list is built locally from this result. */
+async function readAnchor(current: ConnectedWallet, selected: ProtocolChain): Promise<{ anchor: Anchor; done: boolean }> {
+  const saved = readSaved(selected.id, current.address);
+  const [savedGroups, savedDeployerCode, walletNonce] = await Promise.all([
+    saved?.addresses ? current.getBytecode(saved.addresses.groups, selected) : Promise.resolve(undefined),
+    saved ? current.getBytecode(saved.deployer, selected) : Promise.resolve(undefined),
+    current.getTransactionCount(current.address, selected),
+  ]);
+  if (saved?.addresses && hasCode(savedGroups)) {
+    return {
+      done: true,
+      anchor: { deployer: saved.deployer, alreadyCreated: 0, deployerReady: true, saved },
+    };
+  }
+
+  let deployer: Address;
+  let alreadyCreated = 0;
+  let deployerReady = false;
+  if (saved && hasCode(savedDeployerCode)) {
+    deployer = saved.deployer;
+    const nonce = await current.getTransactionCount(deployer, selected);
+    alreadyCreated = Number(nonce - 1n);
+    deployerReady = true;
+  } else {
+    deployer = getContractAddress({ from: current.address, nonce: walletNonce });
+    const deployerCode = await current.getBytecode(deployer, selected);
+    deployerReady = hasCode(deployerCode);
+    if (deployerReady) {
+      const nonce = await current.getTransactionCount(deployer, selected);
+      alreadyCreated = Number(nonce - 1n);
+    }
+  }
+
+  const predicted = buildDeployment(deployer, 1n, selected, "", probeSafe, alreadyCreated);
+  const groupsCode = await current.getBytecode(predicted.addresses.groups, selected);
+  return {
+    done: hasCode(groupsCode),
+    anchor: { deployer, alreadyCreated, deployerReady, saved },
+  };
+}
+
+const deployChains = [chains[42220], chains[11142220]] as const;
+
 export function App() {
-  const [chainId, setChainId] = useState<84532 | 8453>(84532);
+  const [chainId, setChainId] = useState<ChainId>(42220);
+  const chain = chains[chainId];
   const [wallets, setWallets] = useState(["", "", ""]);
   const [keeper, setKeeper] = useState("");
   const [mainnetOk, setMainnetOk] = useState(false);
   const [wallet, setWallet] = useState<ConnectedWallet | null>(null);
-  const [plan, setPlan] = useState<Deployment | null>(null);
-  const [deployerReady, setDeployerReady] = useState(false);
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const [facts, setFacts] = useState<ChainStats | null>(null);
+  const [factsError, setFactsError] = useState("");
   const [done, setDone] = useState(false);
+  const [installed, setInstalled] = useState<InstalledWallet[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
-  const chain = chains[chainId];
   const owners = parseOwners(wallets);
   const ownerPreview = owners ? ownerContract(owners) : null;
 
-  async function prepare(current: ConnectedWallet, selected: ProtocolChain) {
-    const saved = readSaved(selected.id, current.address);
-    if (saved?.addresses) {
-      const code = await current.getBytecode(saved.addresses.groups, selected);
-      if (code && code !== "0x") {
-        return { deployment: null, deployer: saved.deployer, deployerReady: true, done: true, saved };
-      }
-    }
-
-    let deployer: Address;
-    let nonce = 1n;
-    const savedCode = saved ? await current.getBytecode(saved.deployer, selected) : undefined;
-    if (saved && savedCode && savedCode !== "0x") {
-      deployer = saved.deployer;
-      nonce = await current.getTransactionCount(deployer, selected);
-    } else {
-      const walletNonce = await current.getTransactionCount(current.address, selected);
-      deployer = getContractAddress({ from: current.address, nonce: walletNonce });
-    }
-    const owners = parseOwners(wallets);
-    if (!owners) {
-      const deployerCode = await current.getBytecode(deployer, selected);
+  const plan = useMemo(() => {
+    if (!anchor) return null;
+    if (done && anchor.saved?.addresses) {
       return {
-        deployment: null,
-        deployer,
-        deployerReady: Boolean(deployerCode && deployerCode !== "0x"),
-        done: false,
-        saved,
-      };
+        deployer: anchor.deployer,
+        calls: [],
+        pieces: [],
+        addresses: anchor.saved.addresses,
+      } satisfies Deployment;
     }
-    const deployment = buildDeployment(deployer, 1n, selected, keeper, ownerContract(owners), Number(nonce - 1n));
-    const created = await current.getBytecode(deployment.addresses.groups, selected);
-    const deployerCode = await current.getBytecode(deployer, selected);
-    return {
-      deployment,
-      deployer,
-      deployerReady: Boolean(deployerCode && deployerCode !== "0x"),
-      done: Boolean(created && created !== "0x"),
-      saved,
+    const parsed = parseOwners(wallets);
+    if (!parsed) return null;
+    return buildDeployment(anchor.deployer, 1n, chain, keeper, ownerContract(parsed), anchor.alreadyCreated);
+  }, [anchor, wallets, keeper, chain, done]);
+
+  useEffect(() => {
+    let cancel = false;
+    installedWallets().then((next) => {
+      if (!cancel) setInstalled(next);
+    });
+    return () => {
+      cancel = true;
     };
-  }
+  }, []);
+
+  useEffect(() => {
+    let cancel = false;
+    loadChainStats(chain)
+      .then((next) => {
+        if (!cancel) setFacts(next);
+      })
+      .catch(() => {
+        if (!cancel) setFactsError(`${chain.name} could not be read.`);
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [chain]);
 
   useEffect(() => {
     if (!wallet) return;
     let cancel = false;
-    prepare(wallet, chain)
+    readAnchor(wallet, chain)
       .then((next) => {
         if (cancel) return;
-        setPlan(next.deployment);
-        setDeployerReady(next.deployerReady);
+        setAnchor(next.anchor);
         setDone(next.done);
-        if (next.done && next.saved?.addresses && !next.deployment) {
-          setPlan({
-            deployer: next.saved.deployer,
-            calls: [],
-            pieces: [],
-            addresses: next.saved.addresses,
-          });
-        }
       })
       .catch((err: unknown) => {
         if (!cancel) setError(err instanceof Error ? err.message : "The deployment could not be prepared.");
@@ -121,16 +174,27 @@ export function App() {
     return () => {
       cancel = true;
     };
-  }, [wallet, chain, keeper, wallets]);
+  }, [wallet, chain]);
 
-  async function onConnect() {
+  function chooseChain(next: ChainId) {
+    if (next === chainId) return;
+    setChainId(next);
+    setAnchor(null);
+    setDone(false);
+    setMainnetOk(false);
+    setFacts(null);
+    setFactsError("");
+    setStatus("");
+    setError("");
+  }
+
+  async function onConnect(walletId: string) {
     setError("");
     setStatus("");
     setBusy(true);
     try {
-      const connected = await connectWallet(chain);
-      const known = asProtocolChain(connected.chainId);
-      if (known) setChainId(known.id);
+      const connected = await connectWallet(chain, walletId);
+      if ((await connected.getChainId()) !== chain.id) await connected.switchChain(chain.id);
       setWallet(connected);
     } catch (err) {
       setError(err instanceof Error ? err.message : "The wallet did not connect.");
@@ -140,13 +204,13 @@ export function App() {
   }
 
   async function onSign() {
-    if (!wallet || !plan) return;
-    const owners = parseOwners(wallets);
-    if (!owners) {
+    if (!wallet || !plan || !anchor) return;
+    const parsed = parseOwners(wallets);
+    if (!parsed) {
       setError("Enter three different wallet addresses.");
       return;
     }
-    if (!owners.some((owner) => owner.toLowerCase() === wallet.address.toLowerCase())) {
+    if (!parsed.some((owner) => owner.toLowerCase() === wallet.address.toLowerCase())) {
       setError("Connect one of the three wallets.");
       return;
     }
@@ -155,52 +219,57 @@ export function App() {
       return;
     }
     if (chain.mainnet && !mainnetOk) {
-      setError("Confirm that this deployment is going to Base mainnet.");
+      setError(`Confirm that this deployment is going to ${chain.name}.`);
+      return;
+    }
+    if (!superfluidReady) {
+      setError(`Superfluid is not on ${chain.name}, so the protocol cannot be signed here yet.`);
       return;
     }
     setError("");
     setBusy(true);
     try {
-      const fresh = await prepare(wallet, chain);
+      const fresh = await readAnchor(wallet, chain);
+      setAnchor(fresh.anchor);
       if (fresh.done) {
         setDone(true);
-        setDeployerReady(true);
-        if (fresh.saved?.addresses) {
-          setPlan({ deployer: fresh.saved.deployer, calls: [], pieces: [], addresses: fresh.saved.addresses });
-        }
         setStatus("This wallet already deployed the Rvess Protocol on this chain.");
         return;
       }
-      if (!fresh.deployment) throw new Error("The deployment could not be prepared.");
-      if (plan.addresses.allowlist !== fresh.deployment.addresses.allowlist || plan.deployer !== fresh.deployment.deployer) {
-        setPlan(fresh.deployment);
-        setDeployerReady(fresh.deployerReady);
+      const deployment = buildDeployment(
+        fresh.anchor.deployer,
+        1n,
+        chain,
+        keeper,
+        ownerContract(parsed),
+        fresh.anchor.alreadyCreated,
+      );
+      if (plan.addresses.allowlist !== deployment.addresses.allowlist || plan.deployer !== deployment.deployer) {
         setStatus("The account nonce moved. Review the new addresses, then sign again.");
         return;
       }
 
-      if (!fresh.deployerReady) {
+      if (!fresh.anchor.deployerReady) {
         setStatus("Confirm the first signature in your wallet.");
         const deployer = await sendCreate(wallet, chain, deployerBytecode);
         writeSaved(chain.id, wallet.address, { deployer });
-        setDeployerReady(true);
-        const next = await prepare(wallet, chain);
-        if (next.deployment) setPlan(next.deployment);
+        const next = await readAnchor(wallet, chain);
+        setAnchor(next.anchor);
         setStatus("First signature is in. The protocol takes a few more signatures. The addresses stay the same.");
         return;
       }
 
-      const calls = fresh.deployment.calls;
+      const calls = deployment.calls;
       if (calls.length === 0) throw new Error("Nothing left to sign.");
       for (let index = 0; index < calls.length; index += 1) {
         setStatus(`Confirm signature ${index + 1} of ${calls.length} in your wallet.`);
-        await sendCall(wallet, chain, fresh.deployment.deployer, calls[index]);
+        await sendCall(wallet, chain, deployment.deployer, calls[index]);
       }
       writeSaved(chain.id, wallet.address, {
-        deployer: fresh.deployment.deployer,
-        addresses: fresh.deployment.addresses,
+        deployer: deployment.deployer,
+        addresses: deployment.addresses,
       });
-      setPlan(fresh.deployment);
+      setAnchor({ ...fresh.anchor, deployerReady: true, saved: { deployer: deployment.deployer, addresses: deployment.addresses } });
       setDone(true);
       setStatus("The protocol is deployed. Any two of the three wallets can change it.");
     } catch (err) {
@@ -211,22 +280,46 @@ export function App() {
   }
 
   const shownAddresses = done ? plan?.addresses : null;
+  const superfluidReady = facts ? facts.host && facts.cfa && facts.gda && facts.stable && facts.native : false;
 
   return (
     <main className="page">
       <h1>Sign the deployment</h1>
       <p className="lede">
-        Any two of these three wallets can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. You connect one of them and sign. The first signature creates a small contract. The protocol takes a few more signatures, because a wallet cannot fit every contract into one transaction. The addresses stay the same. People using Rvess do not sign here. This page stores no key. A fresh deployment does not change contracts already on Base. The section below upgrades the group contract that is already live.
+        Any two of these three wallets can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. You connect one of them and sign. The first signature creates a small contract. The protocol takes a few more signatures, because a wallet cannot fit every contract into one transaction. The addresses stay the same. People using Rvess do not sign here. This page stores no key. Pick Celo or Celo Sepolia. Neither choice changes the contracts already on Base.
       </p>
 
       <div className="choices" role="group" aria-label="Network">
-        <button type="button" aria-pressed={chainId === 84532} onClick={() => setChainId(84532)} disabled={busy}>
-          Base Sepolia
-        </button>
-        <button type="button" aria-pressed={chainId === 8453} onClick={() => setChainId(8453)} disabled={busy}>
-          Base
-        </button>
+        {deployChains.map((option) => (
+          <button key={option.id} type="button" aria-pressed={option.id === chain.id} onClick={() => chooseChain(option.id)}>
+            {option.name}
+          </button>
+        ))}
       </div>
+
+      {factsError ? <p className="status warn">{factsError}</p> : null}
+      <dl className="addresses stats" aria-label={chain.name}>
+        <div>
+          <dt>Chain</dt>
+          <dd>{chain.name} · {chain.id}</dd>
+        </div>
+        <div>
+          <dt>Superfluid</dt>
+          <dd>{facts ? (superfluidReady ? "Host and forwarders are live" : `Missing on ${chain.name}`) : "Checking"}</dd>
+        </div>
+        <div>
+          <dt>{chain.stable.name}</dt>
+          <dd>{facts ? (facts.stable ? chain.stable.address : `Not on ${chain.name}`) : "Checking"}</dd>
+        </div>
+        <div>
+          <dt>{chain.eth.name}</dt>
+          <dd>{facts ? (facts.native ? chain.eth.address : `Not on ${chain.name}`) : "Checking"}</dd>
+        </div>
+        <div>
+          <dt>Signatures</dt>
+          <dd>{plan ? (done ? "Deployed" : plan.calls.length === 0 ? "Signing contract is next" : `${plan.calls.length} left`) : "Connect a wallet"}</dd>
+        </div>
+      </dl>
 
       {wallet && (
         <p className="note">
@@ -234,7 +327,7 @@ export function App() {
         </p>
       )}
 
-      {chain.mainnet && <p className="note quiet">Base mainnet. These contracts have not had an external audit.</p>}
+      {chain.mainnet && <p className="note quiet">{chain.name}. These contracts have not had an external audit.</p>}
 
       {ownerPreview && (
         <p className="note">
@@ -272,8 +365,8 @@ export function App() {
 
       <ol>
         <li>
-          {deployerReady ? "Signing contract, already deployed" : "First signature, the signing contract"}
-          {plan && <span>{plan.deployer}</span>}
+          {anchor?.deployerReady ? "Signing contract, already deployed" : "First signature, the signing contract"}
+          {anchor && <span>{anchor.deployer}</span>}
         </li>
         <li>
           {done ? "Protocol, deployed" : "Protocol signatures"}
@@ -293,18 +386,18 @@ export function App() {
       {chain.mainnet && (
         <label className="confirm">
           <input type="checkbox" checked={mainnetOk} onChange={(event) => setMainnetOk(event.target.checked)} />
-          <span>Deploy on Base mainnet.</span>
+          <span>Deploy on {chain.name}.</span>
         </label>
       )}
 
-      {!wallet && (
-        <button className="connect" type="button" onClick={onConnect} disabled={busy}>
-          Connect wallet
-        </button>
+      {!wallet && <InstalledConnect wallets={installed} busy={busy} onConnect={onConnect} />}
+      {facts && !superfluidReady && (
+        <p className="status warn">Superfluid is not on {chain.name}, so the protocol cannot be signed here yet.</p>
       )}
-      {wallet && !done && (
+
+      {wallet && !done && superfluidReady && (
         <button className="sign" type="button" onClick={onSign} disabled={busy || !plan}>
-          {deployerReady
+          {anchor?.deployerReady
             ? plan && plan.calls.length > 1
               ? `Sign the protocol, ${plan.calls.length} signatures`
               : "Sign the protocol"
@@ -326,7 +419,7 @@ export function App() {
           <div><dt>Vault code</dt><dd>{shownAddresses.vaultImplementation}</dd></div>
         </dl>
       )}
-      <UpgradeGroups chain={chain} wallet={wallet} onConnect={onConnect} />
+      <UpgradeGroups chain={chain} wallet={wallet} wallets={installed} onConnect={onConnect} />
     </main>
   );
 }

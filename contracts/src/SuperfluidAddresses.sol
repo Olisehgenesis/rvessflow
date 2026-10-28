@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 /// @notice Canonical Superfluid addresses.
 /// @dev Verified 22 Oct 2026 from superfluid-finance metadata 1.6.5 and
 ///      tokenlist 5.48.0 (timestamp 2026-10-06).
-///      Forwarders are the same address on Base and Base Sepolia.
+///      Forwarders are the same address on Base, Base Sepolia, and Celo.
 ///      There is no canonical WETH super token. ETHx is the native-asset super token
 ///      and does not wrap WETH. Base Sepolia has no Circle USDCx; the listed stable
 ///      super token is fUSDCx over Superfluid's fUSDC (18 decimals), not Circle USDC.
@@ -16,6 +16,13 @@ library SuperfluidAddresses {
     address internal constant BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address internal constant BASE_USDCX = 0xD04383398dD2426297da660F9CCA3d439AF9ce1b;
     address internal constant BASE_ETHX = 0x46fd5cfB4c12D87acD3a13e92BAa53240C661D93;
+
+    address internal constant CELO_HOST = 0xA4Ff07cF81C02CFD356184879D953970cA957585;
+    /// @dev cUSDx wraps Mento USDm (the token historically called cUSD).
+    address internal constant CELO_CUSDX = 0x3AcB9A08697b6Db4cD977e8Ab42b6f24722e6D6e;
+    address internal constant CELO_CELOX = 0x671425Ae1f272Bc6F79beC3ed5C4b00e9c628240;
+    /// @dev Celo Sepolia (11142220) is not in Superfluid metadata. The Celo host,
+    ///      forwarders, cUSDx, and CELOx have no code there (checked 28 Oct 2026).
 
     address internal constant BASE_SEPOLIA_HOST = 0x109412E3C84f0539b43d39dB691B08c90f58dC7c;
     address internal constant BASE_SEPOLIA_FUSDC = 0x6B0dacea6a72E759243c99Eaed840DEe9564C194;

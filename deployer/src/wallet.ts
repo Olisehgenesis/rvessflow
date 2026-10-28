@@ -1,16 +1,10 @@
-import EthereumProvider from "@walletconnect/ethereum-provider";
-import { clearInjectedConnection, peekInjectedConnection, showInjectedWallets, takeInjectedConnection } from "../../lib/wallet-injected";
+import { connectInstalled } from "../../lib/wallet-injected";
 import { createPublicClient, createWalletClient, custom, http, type Address, type Hex } from "viem";
-import { chains, type ProtocolChain } from "./chains";
-
-const projectId =
-  import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "fb48461bfb6043c40729e05706109f1a";
+import { asProtocolChain, type ProtocolChain } from "./chains";
 
 type Eip1193 = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
 };
-
-const baseWalletId = "fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa";
 
 export type ConnectedWallet = {
   address: Address;
@@ -40,8 +34,8 @@ export type ConnectedWallet = {
   wait: (hash: Hex, chain: ProtocolChain) => Promise<{ status: string; contractAddress: Address | null }>;
 };
 
-export async function connectWallet(chain: ProtocolChain): Promise<ConnectedWallet> {
-  const source = await walletConnect(chain);
+export async function connectWallet(chain: ProtocolChain, walletId: string): Promise<ConnectedWallet> {
+  const source = await connectInstalled(walletId);
   const wallet = createWalletClient({ chain: chain.chain, transport: custom(source) });
   const [address] = await wallet.requestAddresses();
   if (!address) throw new Error("The wallet did not return an account.");
@@ -64,34 +58,6 @@ export async function connectWallet(chain: ProtocolChain): Promise<ConnectedWall
   };
 }
 
-async function walletConnect(chain: ProtocolChain): Promise<Eip1193> {
-  const provider = await EthereumProvider.init({
-    projectId,
-    chains: [chain.id],
-    showQrModal: true,
-    metadata: {
-      name: "Rvess Protocol",
-      description: "Sign a deployment from your wallet",
-      url: window.location.origin,
-      icons: [`${window.location.origin}/icon.svg`],
-    },
-    rpcMap: { [chain.id]: chain.rpc },
-    qrModalOptions: {
-      themeMode: "light",
-      enableExplorer: true,
-      explorerRecommendedWalletIds: [baseWalletId],
-    },
-  });
-  clearInjectedConnection();
-  await showInjectedWallets((provider as { modal?: { close: () => void } }).modal);
-  try {
-    await provider.connect();
-  } catch (error) {
-    if (!peekInjectedConnection()) throw error;
-  }
-  return (takeInjectedConnection() ?? provider) as Eip1193;
-}
-
 async function switchOrAddChain(
   source: Eip1193,
   wallet: ReturnType<typeof createWalletClient>,
@@ -103,7 +69,7 @@ async function switchOrAddChain(
     const code = typeof error === "object" && error !== null && "code" in error ? Number(error.code) : 0;
     if (code === 4001) throw error;
     if (code !== 4902) throw error;
-    const selected = id === 84532 || id === 8453 ? chains[id] : null;
+    const selected = asProtocolChain(id);
     if (!selected) throw error;
     await source.request({
       method: "wallet_addEthereumChain",
@@ -111,9 +77,9 @@ async function switchOrAddChain(
         {
           chainId: `0x${id.toString(16)}`,
           chainName: selected.name,
-          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+          nativeCurrency: selected.chain.nativeCurrency,
           rpcUrls: [selected.rpc],
-          blockExplorerUrls: [selected.chain.blockExplorers?.default.url ?? "https://basescan.org"],
+          blockExplorerUrls: [selected.chain.blockExplorers?.default.url ?? "https://celoscan.io"],
         },
       ],
     });

@@ -37,3 +37,5 @@ line_length = 120
 [rpc_endpoints]
 base = "${BASE_RPC_URL}"
 base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+celo = "${CELO_RPC_URL}"
+celo_sepolia = "https://forno.celo-sepolia.celo-testnet.org"

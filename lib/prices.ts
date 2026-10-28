@@ -35,24 +35,47 @@ async function readFeed(address: Address): Promise<{ usd8: bigint; updatedAt: nu
   return { usd8: scale(round[1], decimals), updatedAt: Number(round[3]) };
 }
 
-async function ethFallback(): Promise<bigint> {
-  const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", {
+export async function coinMap(ids: string[]): Promise<Record<string, bigint>> {
+  const prices: Record<string, bigint> = {};
+  for (const id of ids) prices[id] = 0n;
+  try {
+    const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.map(encodeURIComponent).join(",")}&vs_currencies=usd`, {
+      next: { revalidate: 60 },
+    });
+    if (!response.ok) return prices;
+    const body = (await response.json()) as Record<string, { usd?: number }>;
+    for (const id of ids) {
+      const usd = body[id]?.usd;
+      if (typeof usd === "number" && usd > 0) prices[id] = BigInt(Math.round(usd * 1e8));
+    }
+  } catch {
+    return prices;
+  }
+  return prices;
+}
+
+export async function coinUsd8(id: string): Promise<bigint> {
+  const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd`, {
     next: { revalidate: 60 },
   });
-  if (!response.ok) throw new Error("The ETH price is not available.");
-  const body = (await response.json()) as { ethereum?: { usd?: number } };
-  const usd = body.ethereum?.usd;
-  if (typeof usd !== "number" || !(usd > 0)) throw new Error("The ETH price is not available.");
+  if (!response.ok) throw new Error("The price is not available.");
+  const body = (await response.json()) as Record<string, { usd?: number }>;
+  const usd = body[id]?.usd;
+  if (typeof usd !== "number" || !(usd > 0)) throw new Error("The price is not available.");
   return BigInt(Math.round(usd * 1e8));
+}
+
+async function ethFallback(): Promise<bigint> {
+  return coinUsd8("ethereum");
 }
 
 export async function loadPrices(): Promise<Prices> {
   if (cache && Date.now() - cache.at < ttlMs) return cache.prices;
   const now = Math.floor(Date.now() / 1000);
-  if (chain.id === 84532) {
+  if (chain.id === 84532 || chain.id === 42220) {
     let ethUsd8 = 0n;
     try {
-      ethUsd8 = await ethFallback();
+      ethUsd8 = chain.id === 42220 ? await coinUsd8("celo") : await ethFallback();
     } catch {
       ethUsd8 = 0n;
     }

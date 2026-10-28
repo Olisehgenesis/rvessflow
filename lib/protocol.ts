@@ -14,25 +14,48 @@ import {
   hexToString,
   formatUnits,
   parseUnits,
+  getAddress,
+  isAddress,
   zeroAddress,
   type Address,
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { base, baseSepolia } from "viem/chains";
 import { money, shortAddress } from "@/lib/display";
+import { appChain, appNetwork, appRpc, explorerUrl, networkLabel, stableName } from "@/lib/network";
 
-const testnet = (process.env.RVESS_NETWORK || process.env.NEXT_PUBLIC_RVESS_NETWORK) === "sepolia";
+const network = appNetwork();
 
-export const chain = testnet ? baseSepolia : base;
-export const rpcUrl = testnet
-  ? process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org"
-  : process.env.BASE_RPC_URL || "https://mainnet.base.org";
-export const explorer = testnet ? "https://sepolia.basescan.org" : "https://basescan.org";
-export const networkName = testnet ? "Base Sepolia" : "Base";
-export const stableLabel = testnet ? "fUSDCx" : "USDCx";
+const celoDeployed = {
+  CELO_ALLOWLIST: "0x3627815B99D045A40a189000FBf7dAE729cEF9eB",
+  CELO_FACTORY: "0xeC9f5717593f66BA703e9bdB871B24014642F3cB",
+  CELO_LOCKS: "0x1a48b3d9f38ea0B905F4731c5D3bdA081078b5ef",
+  CELO_GROUPS: "0xe98361A2D733783b20371ed6b03e93c7be7A3285",
+} as const;
 
-export const addresses = testnet
+function configured(name: keyof typeof celoDeployed): Address {
+  const value = process.env[name];
+  if (value && isAddress(value)) return getAddress(value);
+  return celoDeployed[name];
+}
+
+export const chain = appChain();
+export const rpcUrl = appRpc();
+export const explorer = explorerUrl();
+export const networkName = networkLabel();
+export const stableLabel = stableName();
+
+export const addresses = network === "celo"
+  ? {
+      allowlist: configured("CELO_ALLOWLIST"),
+      factory: configured("CELO_FACTORY"),
+      locks: configured("CELO_LOCKS"),
+      groups: configured("CELO_GROUPS"),
+      fusdcx: "0x3AcB9A08697b6Db4cD977e8Ab42b6f24722e6D6e" as Address,
+      ethx: "0x671425Ae1f272Bc6F79beC3ed5C4b00e9c628240" as Address,
+      cfa: "0xcfA132E353cB4E398080B9700609bb008eceB125" as Address,
+    }
+  : network === "sepolia"
   ? {
       allowlist: "0xed115A3Ac77036fD7f4ec4B597d655B486d7AB6D" as Address,
       factory: "0x18E484ca13A7e63511343EB474C13e04C0929354" as Address,

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPublicClient, encodeDeployData, encodeFunctionData, getAddress, hashTypedData, http, isAddress, parseAbi, zeroAddress, type Address, type Hex } from "viem";
 import { bytecode } from "./bytecode";
 import type { ProtocolChain } from "./chains";
+import { InstalledConnect } from "./connect";
 import { sendCall, sendCreate, type ConnectedWallet } from "./wallet";
 
 const abi = parseAbi([
@@ -151,11 +152,13 @@ function packSignatures(sigs: SavedSig[]): Hex {
 export function UpgradeGroups({
   chain,
   wallet,
+  wallets,
   onConnect,
 }: {
   chain: ProtocolChain;
   wallet: ConnectedWallet | null;
-  onConnect: () => void;
+  wallets: { id: string; name: string }[];
+  onConnect: (walletId: string) => void;
 }) {
   const [live, setLive] = useState<Live | null>(null);
   const [implementation, setImplementation] = useState<Address | null>(() => readImpl(chain));
@@ -174,6 +177,7 @@ export function UpgradeGroups({
     setImplementation(readImpl(chain));
     setError("");
     setStatus("");
+    if (chain.groups === zeroAddress) return;
     readLive(chain)
       .then(async (next) => {
         if (cancelled) return;
@@ -418,6 +422,15 @@ export function UpgradeGroups({
     }
   }
 
+  if (chain.groups === zeroAddress) {
+    return (
+      <section className="upgrade">
+        <h2>Upgrade the group contract</h2>
+        <p className="lede">There is no group contract on {chain.name} until this deployment is signed.</p>
+      </section>
+    );
+  }
+
   return (
     <section className="upgrade">
       <h2>Upgrade the group contract</h2>
@@ -460,11 +473,7 @@ export function UpgradeGroups({
       </dl>
       {live && live.pending !== zeroAddress && <p className="status">{scheduledSentence(chain.name, live.pending, live.readyAt)}</p>}
 
-      {!wallet && (
-        <button className="connect" type="button" onClick={onConnect} disabled={busy}>
-          Connect wallet
-        </button>
-      )}
+      {!wallet && <InstalledConnect wallets={wallets} busy={busy} onConnect={onConnect} />}
       {wallet && live && isAddress(live.allowlist) && !alreadyScheduled && (
         <button className="sign" type="button" onClick={deploy} disabled={busy}>
           Deploy the new group code

@@ -1,8 +1,8 @@
 "use server";
 
 import { createPublicClient, getAddress, http, type Address, type Hex } from "viem";
-import { base, baseSepolia } from "viem/chains";
 import { passkeyFromCookie } from "@/lib/passkey-cookie";
+import { appChain, appRpc } from "@/lib/network";
 import { passkeySignedBy, passkeySignedByHex, publicKeyHex } from "@/lib/passkey-match";
 import type { PasskeyProof, PasskeyRecord } from "@/lib/passkey-proof";
 
@@ -19,10 +19,7 @@ let scannedUntil: bigint | null = null;
 let scanTail: Promise<void> = Promise.resolve();
 
 function network() {
-  const testnet = (process.env.RVESS_NETWORK || process.env.NEXT_PUBLIC_RVESS_NETWORK) === "sepolia";
-  return testnet
-    ? { chain: baseSepolia, url: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org" }
-    : { chain: base, url: process.env.BASE_RPC_URL || "https://base-rpc.publicnode.com" };
+  return { chain: appChain(), url: appRpc() };
 }
 
 function remember(account: Address, x: bigint, y: bigint) {

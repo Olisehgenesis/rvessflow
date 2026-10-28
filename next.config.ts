@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
-const sepolia = (process.env.RVESS_NETWORK || process.env.NEXT_PUBLIC_RVESS_NETWORK) === "sepolia";
+const picked = (process.env.RVESS_NETWORK || process.env.NEXT_PUBLIC_RVESS_NETWORK || "base").toLowerCase();
+const network = picked === "sepolia" || picked === "celo" ? picked : "base";
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -16,7 +17,12 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  env: sepolia ? { NEXT_PUBLIC_RVESS_NETWORK: "sepolia" } : undefined,
+  env: {
+    NEXT_PUBLIC_RVESS_NETWORK: network,
+    NEXT_PUBLIC_BASE_RPC_URL: process.env.BASE_RPC_URL || process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org",
+    NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL: process.env.BASE_SEPOLIA_RPC_URL || process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
+    NEXT_PUBLIC_CELO_RPC_URL: process.env.CELO_RPC_URL || process.env.NEXT_PUBLIC_CELO_RPC_URL || "https://forno.celo.org",
+  },
   async headers() {
     return [
       {

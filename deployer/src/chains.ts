@@ -1,10 +1,12 @@
-import { defineChain, type Address } from "viem";
+import { defineChain, zeroAddress, type Address } from "viem";
 
 const cfa = "0xcfA132E353cB4E398080B9700609bb008eceB125" as const;
 const gda = "0x6DA13Bde224A05a288748d857b9e7DDEffd1dE08" as const;
 
+export type ChainId = 42220 | 11142220 | 8453 | 84532;
+
 export type ProtocolChain = {
-  id: 84532 | 8453;
+  id: ChainId;
   name: string;
   rpc: string;
   host: Address;
@@ -16,6 +18,22 @@ export type ProtocolChain = {
   mainnet: boolean;
   chain: ReturnType<typeof defineChain>;
 };
+
+const celo = defineChain({
+  id: 42220,
+  name: "Celo",
+  nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
+  rpcUrls: { default: { http: ["https://forno.celo.org"] } },
+  blockExplorers: { default: { name: "Celoscan", url: "https://celoscan.io" } },
+});
+
+const celoSepolia = defineChain({
+  id: 11142220,
+  name: "Celo Sepolia",
+  nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
+  rpcUrls: { default: { http: ["https://forno.celo-sepolia.celo-testnet.org"] } },
+  blockExplorers: { default: { name: "Blockscout", url: "https://celo-sepolia.blockscout.com" } },
+});
 
 const baseSepolia = defineChain({
   id: 84532,
@@ -33,7 +51,34 @@ const base = defineChain({
   blockExplorers: { default: { name: "Basescan", url: "https://basescan.org" } },
 });
 
-export const chains: Record<84532 | 8453, ProtocolChain> = {
+export const chains: Record<ChainId, ProtocolChain> = {
+  42220: {
+    id: 42220,
+    name: "Celo",
+    rpc: "https://forno.celo.org",
+    host: "0xA4Ff07cF81C02CFD356184879D953970cA957585",
+    cfa,
+    gda,
+    stable: { address: "0x3AcB9A08697b6Db4cD977e8Ab42b6f24722e6D6e", kind: 0, name: "cUSDx" },
+    eth: { address: "0x671425Ae1f272Bc6F79beC3ed5C4b00e9c628240", kind: 1, name: "CELOx" },
+    groups: "0xe98361A2D733783b20371ed6b03e93c7be7A3285",
+    mainnet: true,
+    chain: celo,
+  },
+  // Superfluid metadata does not list this chain. The Celo host, forwarders, cUSDx, and CELOx have no code here.
+  11142220: {
+    id: 11142220,
+    name: "Celo Sepolia",
+    rpc: "https://forno.celo-sepolia.celo-testnet.org",
+    host: zeroAddress,
+    cfa,
+    gda,
+    stable: { address: zeroAddress, kind: 0, name: "cUSDx" },
+    eth: { address: zeroAddress, kind: 1, name: "CELOx" },
+    groups: zeroAddress,
+    mainnet: false,
+    chain: celoSepolia,
+  },
   84532: {
     id: 84532,
     name: "Base Sepolia",
@@ -63,6 +108,6 @@ export const chains: Record<84532 | 8453, ProtocolChain> = {
 };
 
 export function asProtocolChain(chainId: number): ProtocolChain | null {
-  if (chainId === 84532 || chainId === 8453) return chains[chainId];
+  if (chainId === 42220 || chainId === 11142220 || chainId === 8453 || chainId === 84532) return chains[chainId];
   return null;
 }

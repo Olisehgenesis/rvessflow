@@ -92,7 +92,7 @@ async function HomeReady({
     groups: portfolio.groups.length,
     amounts,
   });
-  const held = holdings.rows.filter((row) => hasTokenAmount(row.amount));
+  const assets = holdings.rows;
   const openFlows = portfolio.flows.filter((flow) => !flow.settled);
   function balanceCard(layout?: "desk") {
     return (
@@ -201,25 +201,20 @@ async function HomeReady({
                 </ul>
               </section>
             ) : null}
-            {held.length > 0 ? (
-              <section>
-                <div className="mb-2 flex items-end justify-between">
-                  <h2 className="text-base font-semibold">Your assets</h2>
-                  <Link href="/home/assets" className="text-sm font-medium text-[#5C6572]">
-                    View all
-                  </Link>
-                </div>
-                <AssetList rows={held} localUnit={holdings.localUnit} desk />
-              </section>
-            ) : (
-              <section className="rounded-3xl border border-[#E6EADF] bg-white px-5 py-5 shadow-[0_1px_0_rgba(20,20,20,0.04)]">
+            <section>
+              <div className="mb-2 flex items-end justify-between">
                 <h2 className="text-base font-semibold">Your assets</h2>
-                <p className="mt-1 text-sm leading-relaxed text-[#5C6572]">Nothing is in this account yet. Top up, then a saving, stream, or lock can start.</p>
+                <Link href="/home/assets" className="text-sm font-medium text-[#5C6572]">
+                  View all
+                </Link>
+              </div>
+              <AssetList rows={assets} localUnit={holdings.localUnit} desk />
+              {funded ? null : (
                 <Link href="/home/add" className="mt-3 inline-flex h-11 items-center rounded-full bg-[#D6F34A] px-4 text-sm font-semibold text-[#17210C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]">
                   Top up
                 </Link>
-              </section>
-            )}
+              )}
+            </section>
             {starting ? (
               <StartBanner href="/home/add" title="Start building your future" body="Top up this account. A saving, stream, or lock can start after the money arrives." cta="Top up" />
             ) : openFlows.length === 0 && portfolio.locks.length === 0 && portfolio.groups.length === 0 ? (
@@ -277,17 +272,15 @@ async function HomeReady({
         </section>
       ) : null}
       {starting && incoming.length === 0 ? <GettingStarted /> : null}
-      {held.length > 0 ? (
-        <section className="mt-6">
-          <div className="mb-2 flex items-end justify-between">
-            <h2 className="text-base font-semibold">Your assets</h2>
-            <Link href="/home/assets" className="text-sm font-medium text-muted-foreground">
-              View all
-            </Link>
-          </div>
-          <AssetList rows={held} localUnit={holdings.localUnit} />
-        </section>
-      ) : null}
+      <section className="mt-6">
+        <div className="mb-2 flex items-end justify-between">
+          <h2 className="text-base font-semibold">Your assets</h2>
+          <Link href="/home/assets" className="text-sm font-medium text-muted-foreground">
+            View all
+          </Link>
+        </div>
+        <AssetList rows={assets} localUnit={holdings.localUnit} />
+      </section>
       <QuickActions />
       <Suspense fallback={<p className="mt-6 text-sm text-muted-foreground">Loading activity…</p>}>
         <RecentActivity who={who} portfolio={portfolio} quote={quote} />
@@ -444,7 +437,12 @@ export function AssetList({ rows, localUnit, desk = false }: { rows: HoldingRow[
 }
 
 function assetHref(row: HoldingRow) {
-  if (row.key === "usdc" || row.key === "usdt" || row.key === "eth") return `/home/add/crypto?pay=${row.key}`;
-  if (row.key === "ethx" || row.key === "usdcx") return "/vaults";
-  return "/home/assets";
+  if (row.parts) return `/home/assets/${row.key}`;
+  if (row.key === "usdcx" || row.key === "ethx") return "/vaults";
+  const here = row.network === networkName || row.network.startsWith(`${networkName} `);
+  if (!here) return "/home/add/receive";
+  if (row.label === "USDC") return "/home/add/crypto?pay=usdc";
+  if (row.label === "USDT") return "/home/add/crypto?pay=usdt";
+  if (row.label === "ETH" || row.label === "CELO") return "/home/add/crypto?pay=eth";
+  return "/home/add/receive";
 }

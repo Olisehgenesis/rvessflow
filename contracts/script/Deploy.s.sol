@@ -30,6 +30,8 @@ abstract contract DeployRvess is Script {
         address gda = SuperfluidAddresses.GDA_V1_FORWARDER;
         if (expectedChainId == 8453) {
             host = SuperfluidAddresses.BASE_HOST;
+        } else if (expectedChainId == 42220) {
+            host = SuperfluidAddresses.CELO_HOST;
         } else {
             host = SuperfluidAddresses.BASE_SEPOLIA_HOST;
         }
@@ -62,6 +64,9 @@ abstract contract DeployRvess is Script {
         if (expectedChainId == 8453) {
             allow.setSuperToken(SuperfluidAddresses.BASE_USDCX, true, ITokenAllowlist.TokenKind.Wrapper);
             allow.setSuperToken(SuperfluidAddresses.BASE_ETHX, true, ITokenAllowlist.TokenKind.Native);
+        } else if (expectedChainId == 42220) {
+            allow.setSuperToken(SuperfluidAddresses.CELO_CUSDX, true, ITokenAllowlist.TokenKind.Wrapper);
+            allow.setSuperToken(SuperfluidAddresses.CELO_CELOX, true, ITokenAllowlist.TokenKind.Native);
         } else {
             allow.setSuperToken(SuperfluidAddresses.BASE_SEPOLIA_FUSDCX, true, ITokenAllowlist.TokenKind.Wrapper);
             allow.setSuperToken(SuperfluidAddresses.BASE_SEPOLIA_ETHX, true, ITokenAllowlist.TokenKind.Native);
@@ -101,5 +106,11 @@ contract DeployBaseSepolia is DeployRvess {
 contract DeployBaseMainnet is DeployRvess {
     function run() external {
         _deploy(8453);
+    }
+}
+
+contract DeployCelo is DeployRvess {
+    function run() external {
+        _deploy(42220);
     }
 }

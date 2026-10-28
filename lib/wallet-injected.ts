@@ -117,7 +117,33 @@ function queryDeep(root: ParentNode | null, tag: string): HTMLElement | null {
   return null;
 }
 
-function discoverInjectedWallets(): Promise<AnnouncedWallet[]> {
+const installed = new Map<string, Eip1193>();
+
+export type InstalledWallet = { id: string; name: string };
+
+/** Browser wallets announced on this page. The deployer connects to one of these directly. */
+export function installedWallets(waitMs = 200): Promise<InstalledWallet[]> {
+  return discoverInjectedWallets(waitMs).then((wallets) => {
+    installed.clear();
+    return wallets.map((wallet) => {
+      const id = wallet.info.rdns || wallet.info.uuid;
+      installed.set(id, wallet.provider);
+      return { id, name: wallet.info.name };
+    });
+  });
+}
+
+/** Asks that installed wallet for the account it will sign with. */
+export async function connectInstalled(id: string): Promise<Eip1193> {
+  const provider = installed.get(id);
+  if (!provider) throw new Error("That wallet is not available in this browser.");
+  const accounts = await provider.request({ method: "eth_requestAccounts" });
+  const address = Array.isArray(accounts) ? String(accounts[0] ?? "") : "";
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) throw new Error("The wallet did not return an account.");
+  return provider;
+}
+
+function discoverInjectedWallets(waitMs = 50): Promise<AnnouncedWallet[]> {
   if (typeof window === "undefined") return Promise.resolve([]);
   return new Promise((resolve) => {
     const found = new Map<string, AnnouncedWallet>();
@@ -132,7 +158,7 @@ function discoverInjectedWallets(): Promise<AnnouncedWallet[]> {
       window.removeEventListener("eip6963:announceProvider", onAnnounce);
       const announced = [...found.values()];
       resolve(announced.length ? announced : legacyWallets());
-    }, 50);
+    }, waitMs);
   });
 }
 

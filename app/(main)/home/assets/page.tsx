@@ -4,7 +4,7 @@ import Loading from "../../loading";
 import { AssetList } from "@/components/home-screen";
 import { Page } from "@/components/ui-bits";
 import { loadHoldings } from "@/lib/holdings";
-import { loadPortfolio, networkName } from "@/lib/protocol";
+import { loadPortfolio } from "@/lib/protocol";
 import { loadQuote } from "@/lib/rates";
 import { viewer } from "@/lib/session";
 
@@ -22,7 +22,7 @@ async function AssetsBody() {
   const holdings = await loadHoldings(who.address, data, quote);
   return (
     <Page title="Your assets" back="/home">
-      <p className="mb-4 text-sm text-muted-foreground">Balances priced on {networkName}. Pick a currency in More and a real rate shows under each amount.</p>
+      <p className="mb-4 text-sm text-muted-foreground">USD, ETH, and CELO each open onto the tokens behind them, on Base and on Celo. Pick a currency in More and a real rate shows under each amount.</p>
       <AssetList rows={holdings.rows} localUnit={holdings.localUnit} />
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Link href="/home/add/receive" className="flex h-11 items-center justify-center rounded-full border border-border bg-card text-sm font-medium">

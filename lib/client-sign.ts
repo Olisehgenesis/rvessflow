@@ -1,21 +1,19 @@
 "use client";
 
 import { createPublicClient, encodePacked, erc20Abi, http, maxUint256, parseErc6492Signature, type Address, type Hash, type Hex } from "viem";
-import { base, baseSepolia } from "viem/chains";
 import { walletProvider } from "@/lib/auth-client";
+import { appChain, appNetwork, appRpc, walletNetwork } from "@/lib/network";
 import type { PreparedCall, SignPayload } from "@/lib/intent";
 import { readPasskeys } from "@/lib/passkey-vault";
 import { estimationSkipped, passkeyPaysWith, usdcCanPayFee, userOpCost } from "@/lib/passkey-fee";
 import { batchId, batchOutcome, batchUnsupported, walletSendCallsParam } from "@/lib/wallet-batch";
 
-const testnet = process.env.NEXT_PUBLIC_RVESS_NETWORK === "sepolia";
-const chain = testnet ? baseSepolia : base;
-const rpc = testnet
-  ? process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://sepolia.base.org"
-  : process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+const network = appNetwork();
+const chain = appChain();
+const rpc = appRpc();
 const bundlerUrl = process.env.NEXT_PUBLIC_BUNDLER_URL || `https://public.pimlico.io/v2/${chain.id}/rpc`;
-const circlePaymaster = (testnet ? "0x31BE08D380A21fc740883c0BC434FcFc88740b58" : "0x6C973eBe80dCD8660841D4356bf15c32460271C9") as Address;
-const circleUsdc = (testnet ? "0x036CbD53842c5426634e7929541eC2318f3dCF7e" : "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913") as Address;
+const circlePaymaster = (network === "sepolia" ? "0x31BE08D380A21fc740883c0BC434FcFc88740b58" : "0x6C973eBe80dCD8660841D4356bf15c32460271C9") as Address;
+const circleUsdc = (network === "sepolia" ? "0x036CbD53842c5426634e7929541eC2318f3dCF7e" : "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913") as Address;
 const permitAmount = 10_000_000n;
 const permitAbi = [
   ...erc20Abi,
@@ -47,34 +45,15 @@ function txValue(value: string | undefined): Hex | undefined {
 }
 
 async function onAppChain(provider: Awaited<ReturnType<typeof walletProvider>>) {
-  const chainId = testnet ? "0x14a34" : "0x2105";
+  const target = walletNetwork();
   const current = await provider.request({ method: "eth_chainId" });
-  if (typeof current === "string" && current.toLowerCase() === chainId) return;
+  if (typeof current === "string" && current.toLowerCase() === target.chainId.toLowerCase()) return;
   try {
-    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] });
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: target.chainId }] });
   } catch (error) {
     const code = typeof error === "object" && error && "code" in error ? Number(error.code) : 0;
     if (code !== 4902) throw error;
-    await provider.request({
-      method: "wallet_addEthereumChain",
-      params: [
-        testnet
-          ? {
-              chainId,
-              chainName: "Base Sepolia",
-              nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-              rpcUrls: ["https://sepolia.base.org"],
-              blockExplorerUrls: ["https://sepolia.basescan.org"],
-            }
-          : {
-              chainId,
-              chainName: "Base",
-              nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-              rpcUrls: ["https://mainnet.base.org"],
-              blockExplorerUrls: ["https://basescan.org"],
-            },
-      ],
-    });
+    await provider.request({ method: "wallet_addEthereumChain", params: [target] });
   }
 }
 
@@ -165,8 +144,17 @@ async function sendPasskey(calls: PreparedCall[], from: Address, onHash?: (hash:
   });
   const [ethBalance, usdcBalance] = await Promise.all([
     publicClient.getBalance({ address: account.address }),
-    publicClient.readContract({ address: circleUsdc, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }),
+    network === "celo"
+      ? Promise.resolve(0n)
+      : publicClient.readContract({ address: circleUsdc, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }),
   ]);
+  if (network === "celo") {
+    if (ethBalance === 0n) throw new Error("This account needs CELO for the network fee.");
+    const hash = await smart.sendTransaction({ calls: batched });
+    onHash?.(hash);
+    await wait(hash);
+    return hash;
+  }
   let ethCost: bigint | null = null;
   if (!usdcCanPayFee(usdcBalance) && ethBalance > 0n) {
     try {

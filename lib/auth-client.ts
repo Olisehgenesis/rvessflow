@@ -7,12 +7,8 @@ import { recoverPasskey } from "@/lib/passkey-recover";
 import type { PasskeyProof } from "@/lib/passkey-proof";
 import { samePasskeyId } from "@/lib/passkey-proof";
 import { readPasskeys, savePasskey, type SavedPasskey } from "@/lib/passkey-vault";
+import { appChain, appNetwork, appRpc, walletNetwork } from "@/lib/network";
 import { clearInjectedConnection, peekInjectedConnection, showInjectedWallets, takeInjectedConnection } from "@/lib/wallet-injected";
-
-const testnet = process.env.NEXT_PUBLIC_RVESS_NETWORK === "sepolia";
-const rpc = testnet
-  ? process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://sepolia.base.org"
-  : process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
 
 export const walletConnectProjectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "fb48461bfb6043c40729e05706109f1a";
@@ -41,9 +37,27 @@ type PasskeyLibs = {
 
 function walletConnectProvider(): Promise<WalletConnection> {
   providerPromise ??= (async () => {
-    const { base, baseSepolia } = await import("viem/chains");
-    const chain = testnet ? baseSepolia : base;
+    const chain = appChain();
     const { default: EthereumProvider } = await import("@walletconnect/ethereum-provider");
+    const baseWallets = appNetwork() === "celo"
+      ? {}
+      : {
+          explorerRecommendedWalletIds: [baseWalletId],
+          mobileWallets: [
+            {
+              id: "rvess-base",
+              name: "Base",
+              links: { native: "cbwallet://wc", universal: "https://go.cb-w.com/wc" },
+            },
+          ],
+          desktopWallets: [
+            {
+              id: "rvess-base",
+              name: "Base",
+              links: { native: "cbwallet://wc", universal: "https://go.cb-w.com/wc" },
+            },
+          ],
+        };
     return EthereumProvider.init({
       projectId: walletConnectProjectId,
       chains: [chain.id],
@@ -54,26 +68,12 @@ function walletConnectProvider(): Promise<WalletConnection> {
         url: window.location.origin,
         icons: [`${window.location.origin}/icon-512.png`],
       },
-      rpcMap: { [chain.id]: rpc },
+      rpcMap: { [chain.id]: appRpc() },
       qrModalOptions: {
         themeMode: "light",
         enableExplorer: true,
         enableMobileFullScreen: true,
-        explorerRecommendedWalletIds: [baseWalletId],
-        mobileWallets: [
-          {
-            id: "rvess-base",
-            name: "Base",
-            links: { native: "cbwallet://wc", universal: "https://go.cb-w.com/wc" },
-          },
-        ],
-        desktopWallets: [
-          {
-            id: "rvess-base",
-            name: "Base",
-            links: { native: "cbwallet://wc", universal: "https://go.cb-w.com/wc" },
-          },
-        ],
+        ...baseWallets,
       },
     });
   })();
@@ -127,7 +127,7 @@ export function createPasskeyWallet(label: string): Promise<{ address: string; l
       rpId: window.location.hostname,
     });
     const account = await ready.toKernelSmartAccount({
-      client: ready.createPublicClient({ chain: testnet ? ready.chains.baseSepolia : ready.chains.base, transport: ready.http(rpc) }),
+      client: ready.createPublicClient({ chain: appChain(), transport: ready.http(appRpc()) }),
       owners: [owner],
       version: "0.3.1",
       entryPoint: { address: ready.accountAbstraction.entryPoint07Address, version: "0.7" },
@@ -184,8 +184,8 @@ async function accountFromKey(id: string, publicKey: SavedPasskey["publicKey"], 
   });
   const account = await ready.toKernelSmartAccount({
     client: ready.createPublicClient({
-      chain: testnet ? ready.chains.baseSepolia : ready.chains.base,
-      transport: ready.http(rpc),
+      chain: appChain(),
+      transport: ready.http(appRpc()),
     }),
     owners: [owner],
     version: "0.3.1",
@@ -233,21 +233,7 @@ function rememberConnection(provider: WalletConnection, address: string) {
   return address;
 }
 
-const baseNetwork = testnet
-  ? {
-      chainId: "0x14a34",
-      chainName: "Base Sepolia",
-      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcUrls: ["https://sepolia.base.org"],
-      blockExplorerUrls: ["https://sepolia.basescan.org"],
-    }
-  : {
-      chainId: "0x2105",
-      chainName: "Base",
-      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcUrls: ["https://mainnet.base.org"],
-      blockExplorerUrls: ["https://basescan.org"],
-    };
+const baseNetwork = walletNetwork();
 
 function rejected(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && Number(error.code) === 4001;

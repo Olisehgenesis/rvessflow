@@ -31,7 +31,14 @@ export function displayName(method: AuthMethod, label: string | undefined): { na
   return { name: trimmed.slice(0, 32), needsName: false };
 }
 
-const cookie = { httpOnly: true, sameSite: "lax" as const, path: "/" };
+const year = 60 * 60 * 24 * 400;
+const cookie = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: year,
+  secure: process.env.NODE_ENV === "production",
+};
 
 function testerAt(index: number): Viewer {
   const roster = people();
