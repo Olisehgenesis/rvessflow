@@ -250,7 +250,7 @@ async function HomeReady({
       {balanceCard()}
       {portfolio.vault ? null : (
         <p className="mt-3 text-sm text-muted-foreground">
-          No savings vault on {networkName} yet. Topping up or opening a goal creates one. You can receive on {networkName} before that.
+          No savings vault on {networkName} yet. Topping up or opening a goal creates one. You can receive on Base and Celo before that.
         </p>
       )}
       {incoming.length > 0 ? (
@@ -375,7 +375,7 @@ function QuickActions() {
 
 function GettingStarted() {
   const steps = [
-    { href: "/home/add", title: "Fund your wallet", body: `Receive on ${networkName}, convert crypto you hold, or use a provider that is configured.` },
+    { href: "/home/add", title: "Fund your wallet", body: "Receive on Base and Celo, convert crypto you hold, or use a provider that is configured. Card and mobile money deliver USDC on Base." },
     { href: "/goals", title: "Choose a saving, flow, or expense", body: "Optional. You can top up before you start one." },
   ];
   return (

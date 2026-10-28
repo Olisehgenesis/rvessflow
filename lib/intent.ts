@@ -113,12 +113,15 @@ export type SignPayload = {
   intent: Intent;
   method: "wallet" | "passkey";
   address: Address;
+  /** Chain the calls must be sent on. Absent means the app network. */
+  chainId?: number;
 };
 
 export type Plan = {
   calls: PreparedCall[];
   intent: Intent;
   done: boolean;
+  chainId?: number;
   /** The call was sent, but the new state is not visible yet. */
   pending?: boolean;
   id?: string;

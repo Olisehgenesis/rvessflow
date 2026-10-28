@@ -25,9 +25,19 @@ async function ReceiveBody() {
   return (
     <main className="px-4 pb-8">
       <FlowHeader title="Receive" back="/home/add" />
-      <p className="text-sm text-muted-foreground">Send USDC, USDT, or ETH on Base to this address. It lands in your wallet. Convert crypto afterwards to move it into the vault.</p>
+      <p className="text-sm text-muted-foreground">This address is the same on Base and on Celo. Tokens land in the wallet. Savings, streams, and groups stay on the network this app uses.</p>
+      <dl className="mt-4 space-y-3 text-sm">
+        <div>
+          <dt className="font-medium">Base</dt>
+          <dd className="text-muted-foreground">USDC, USDT, USDM, ETH, USDCx, ETHx</dd>
+        </div>
+        <div>
+          <dt className="font-medium">Celo</dt>
+          <dd className="text-muted-foreground">USDC, USDT, USDm, USDM, CELO, cUSDx, CELOx</dd>
+        </div>
+      </dl>
       <section className="mt-5 rounded-3xl border border-border bg-card p-5">
-        <Image src={qr} alt="QR code for your Base address" width={224} height={224} unoptimized className="mx-auto size-56" />
+        <Image src={qr} alt="QR code for this address" width={224} height={224} unoptimized className="mx-auto size-56" />
         <p className="mt-4 break-all text-center font-mono text-sm leading-relaxed">{who.address}</p>
         <div className="mt-2 flex justify-center">
           <CopyButton value={who.address} label="Copy address" />
@@ -35,7 +45,7 @@ async function ReceiveBody() {
       </section>
       <p className="mt-4 flex gap-2 rounded-2xl bg-[#f3f0e6] px-4 py-3 text-sm leading-relaxed">
         <IconInfo className="mt-0.5 size-4 shrink-0" />
-        Base only. Send USDC, USDT, or ETH on Base. Funds sent on another network can be lost.
+        Base and Celo only. A transfer on any other network can be lost.
       </p>
     </main>
   );

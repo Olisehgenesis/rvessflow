@@ -1,6 +1,7 @@
 "use client";
 
-import { createPublicClient, encodePacked, erc20Abi, http, maxUint256, parseErc6492Signature, type Address, type Hash, type Hex } from "viem";
+import { createPublicClient, encodePacked, erc20Abi, http, maxUint256, parseErc6492Signature, type Address, type Hash, type Hex, type PublicClient } from "viem";
+import { base as baseChain, celo as celoChain } from "viem/chains";
 import { walletProvider } from "@/lib/auth-client";
 import { appChain, appNetwork, appRpc, walletNetwork } from "@/lib/network";
 import type { PreparedCall, SignPayload } from "@/lib/intent";
@@ -34,9 +35,41 @@ async function waitForBatch(provider: Awaited<ReturnType<typeof walletProvider>>
   throw new Error("The wallet accepted the transaction, but it has not confirmed yet. Refresh in a moment.");
 }
 
-async function wait(hash: Hash) {
-  const receipt = await client.waitForTransactionReceipt({ hash, timeout: 120_000 });
+async function wait(hash: Hash, reader: Pick<PublicClient, "waitForTransactionReceipt"> = client) {
+  const receipt = await reader.waitForTransactionReceipt({ hash, timeout: 120_000 });
   if (receipt.status !== "success") throw new Error("The transaction reverted.");
+}
+
+function settlement(chainId?: number) {
+  if (chainId === 42220 && chain.id !== 42220) {
+    const rpcUrl = process.env.NEXT_PUBLIC_CELO_RPC_URL || "https://forno.celo.org";
+    return {
+      id: 42220,
+      reader: createPublicClient({ chain: celoChain, transport: http(rpcUrl) }),
+      params: {
+        chainId: "0xa4ec",
+        chainName: "Celo",
+        nativeCurrency: { name: "CELO", symbol: "CELO", decimals: 18 },
+        rpcUrls: [rpcUrl],
+        blockExplorerUrls: ["https://celoscan.io"],
+      },
+    };
+  }
+  if (chainId === 8453 && chain.id !== 8453) {
+    const rpcUrl = process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+    return {
+      id: 8453,
+      reader: createPublicClient({ chain: baseChain, transport: http(rpcUrl) }),
+      params: {
+        chainId: "0x2105",
+        chainName: "Base",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: [rpcUrl],
+        blockExplorerUrls: ["https://basescan.org"],
+      },
+    };
+  }
+  return { id: chain.id, reader: client, params: walletNetwork() };
 }
 
 function txValue(value: string | undefined): Hex | undefined {
@@ -44,8 +77,10 @@ function txValue(value: string | undefined): Hex | undefined {
   return `0x${BigInt(value).toString(16)}`;
 }
 
-async function onAppChain(provider: Awaited<ReturnType<typeof walletProvider>>) {
-  const target = walletNetwork();
+async function onChain(
+  provider: Awaited<ReturnType<typeof walletProvider>>,
+  target: { chainId: string; chainName: string; nativeCurrency: { name: string; symbol: string; decimals: number }; rpcUrls: string[]; blockExplorerUrls: string[] },
+) {
   const current = await provider.request({ method: "eth_chainId" });
   if (typeof current === "string" && current.toLowerCase() === target.chainId.toLowerCase()) return;
   try {
@@ -57,10 +92,10 @@ async function onAppChain(provider: Awaited<ReturnType<typeof walletProvider>>) 
   }
 }
 
-async function sendWallet(calls: PreparedCall[], from: Address, onHash?: (hash: Hash) => void) {
+async function sendWallet(calls: PreparedCall[], from: Address, where: ReturnType<typeof settlement>, onHash?: (hash: Hash) => void) {
   const provider = await walletProvider();
   if (!provider.connected && provider.connect) await provider.connect();
-  await onAppChain(provider);
+  await onChain(provider, where.params);
   const listed = provider.accounts?.[0];
   const accounts = listed ? null : ((await provider.request({ method: "eth_accounts" })) as string[] | undefined);
   const found = listed || accounts?.[0] || "";
@@ -73,7 +108,7 @@ async function sendWallet(calls: PreparedCall[], from: Address, onHash?: (hash: 
       id = batchId(
         await provider.request({
           method: "wallet_sendCalls",
-          params: [walletSendCallsParam(from, chain.id, calls)],
+          params: [walletSendCallsParam(from, where.id, calls)],
         }),
       );
     } catch (error) {
@@ -82,7 +117,7 @@ async function sendWallet(calls: PreparedCall[], from: Address, onHash?: (hash: 
     if (id) {
       const hash = await waitForBatch(provider, id);
       onHash?.(hash);
-      await wait(hash);
+      await wait(hash, where.reader);
       return hash;
     }
   }
@@ -96,7 +131,7 @@ async function sendWallet(calls: PreparedCall[], from: Address, onHash?: (hash: 
     })) as Hash;
     last = hash;
     if (index === calls.length - 1) onHash?.(hash);
-    await wait(hash);
+    await wait(hash, where.reader);
   }
   return last;
 }
@@ -234,8 +269,12 @@ export async function depositReceipt(hash: Hash): Promise<{ status: "pending" | 
   }
 }
 
-export async function sendCalls(sign: Pick<SignPayload, "calls" | "method" | "address">, options?: { onHash?: (hash: Hash) => void }) {
+export async function sendCalls(sign: Pick<SignPayload, "calls" | "method" | "address" | "chainId">, options?: { onHash?: (hash: Hash) => void }) {
   if (!sign.calls.length) return;
-  if (sign.method === "passkey") return sendPasskey(sign.calls, sign.address, options?.onHash);
-  return sendWallet(sign.calls, sign.address, options?.onHash);
+  const where = settlement(sign.chainId);
+  if (sign.method === "passkey") {
+    if (where.id !== chain.id) throw new Error(`This passkey signs on ${chain.name}. Connect a wallet to send on ${where.params.chainName}.`);
+    return sendPasskey(sign.calls, sign.address, options?.onHash);
+  }
+  return sendWallet(sign.calls, sign.address, where, options?.onHash);
 }

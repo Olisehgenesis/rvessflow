@@ -79,6 +79,7 @@ export function SendForm({ mode, choices }: { mode: "address" | "friend"; choice
                 <TokenIcon symbol={choice.label} className="size-10" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold">{choice.label}</span>
+                  <span className="block text-xs text-muted-foreground">{choice.network}</span>
                   <span className="block text-xs text-muted-foreground tabular-nums">
                     {choice.balance} {choice.label}
                   </span>
@@ -108,8 +109,8 @@ export function SendForm({ mode, choices }: { mode: "address" | "friend"; choice
             placeholder="0.00"
             className={field}
           />
-          {picked?.asset === "eth" ? (
-            <span className="block text-xs leading-relaxed text-muted-foreground">A little ETH stays in the wallet for the network fee.</span>
+          {picked?.reserve ? (
+            <span className="block text-xs leading-relaxed text-muted-foreground">A little {picked.label} stays in the wallet for the network fee.</span>
           ) : null}
         </label>
 

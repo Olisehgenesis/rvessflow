@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import Loading from "../../../loading";
 import { FlowHeader } from "@/components/deposit-flow";
 import { WithdrawForm } from "@/components/forms";
@@ -29,7 +30,13 @@ async function WithdrawBody() {
       <FlowHeader title="Withdraw" back="/home" />
       <section>
         <h2 className="text-sm font-semibold">To another address</h2>
-        <p className="mt-1 mb-4 text-sm leading-relaxed text-muted-foreground">ETH or USDC in this account. Drag the slider to the maximum that can be sent.</p>
+        <p className="mt-1 mb-4 text-sm leading-relaxed text-muted-foreground">
+          ETH or USDC on this network. Every other token, including Celo, is on{" "}
+          <Link href="/home/send/address" className="font-medium text-foreground">
+            Send
+          </Link>
+          .
+        </p>
         <MoveOut choices={choices} />
       </section>
       <section className="mt-8">

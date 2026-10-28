@@ -53,14 +53,14 @@ function SlideSheet({
 
 export function WithdrawSheet({ savings, unit, conceal = false }: { savings: SavingBox[]; unit: string; conceal?: boolean }) {
   return (
-    <SlideSheet label="Withdraw" className={withdrawButton} title="Withdraw" description="Send ETH or USDC out, or open a saving.">
+    <SlideSheet label="Withdraw" className={withdrawButton} title="Withdraw" description="Send a token on Base or Celo, or open a saving.">
       {(close) =>
         <div className="space-y-3">
-          <Link href="/home/add/withdraw" onClick={close} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3">
+          <Link href="/home/send/address" onClick={close} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3">
             <img src="/marks/receive.png" alt="" className="size-11 shrink-0 object-contain" />
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold">Send ETH or USDC</span>
-              <span className="block text-xs text-muted-foreground">To another address. The slider goes to the maximum.</span>
+              <span className="block text-sm font-semibold">Send a token</span>
+              <span className="block text-xs text-muted-foreground">Base or Celo. Pick the token and the chain.</span>
             </span>
             <IconChevron className="size-4 shrink-0 text-muted-foreground" />
           </Link>
@@ -102,11 +102,11 @@ export function WithdrawSheet({ savings, unit, conceal = false }: { savings: Sav
   );
 }
 
-export function topUpMethods(network: string) {
+export function topUpMethods(_network: string) {
   return [
-    { href: "/home/add/receive", title: "Receive", body: "Show your address and a QR code.", src: "/marks/receive.png" },
-    { href: "/home/add/mobile", title: "Mobile money", body: "MTN MoMo or Airtel Money in Uganda.", src: "/marks/phone.png" },
-    { href: "/home/add/card", title: "Card", body: `Transak or Coinbase. USDC arrives on ${network}.`, src: "/marks/card.png" },
+    { href: "/home/add/receive", title: "Receive", body: "Same address on Base and Celo.", src: "/marks/receive.png" },
+    { href: "/home/add/mobile", title: "Mobile money", body: "MTN MoMo or Airtel Money in Uganda. USDC arrives on Base.", src: "/marks/phone.png" },
+    { href: "/home/add/card", title: "Card", body: "Transak or Coinbase. USDC arrives on Base.", src: "/marks/card.png" },
   ];
 }
 

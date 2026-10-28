@@ -10,7 +10,8 @@ import { IconCheck, IconChevron, IconClock, IconClose, IconExternal, IconEye, Ic
 import { TopBar } from "@/components/top-bar";
 import { addMoney, continueIntent, previewDeposit } from "@/lib/actions";
 import { depositReceipt, sendCalls } from "@/lib/client-sign";
-import { basescan, depositHref, matchesToken, shortHash, type DepositPreview, type TokenFilter } from "@/lib/deposit-math";
+import { depositHref, matchesToken, shortHash, type DepositPreview, type TokenFilter } from "@/lib/deposit-math";
+import { explorerUrl, networkLabel } from "@/lib/network";
 import type { DepositToken } from "@/lib/deposit-page";
 import type { Intent } from "@/lib/intent";
 import type { PayAsset } from "@/lib/pay-math";
@@ -177,7 +178,7 @@ export function CryptoDeposit({
 
       <section className="mt-6">
         <h2 className="text-base font-semibold">Choose payment token</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Select the token you want to use to add money to your wallet.</p>
+        <p className="mt-1 text-sm text-muted-foreground">This moves a token on {networkLabel()} into the savings vault. Tokens on the other chain stay in the wallet.</p>
         <div className="mt-3 space-y-2">
           {tokens.map((token) => (
             <TokenRow key={token.pay} token={token} selected={token.pay === pay} onSelect={() => setPay(token.pay)} />
@@ -603,7 +604,7 @@ export function DepositStatus({
                 <>
                   <span className="tabular-nums">{shortHash(hash)}</span>
                   <CopyButton value={hash} label="Copy" />
-                  <a href={`${basescan}/tx/${hash}`} target="_blank" rel="noreferrer" aria-label="View on Basescan" className="grid size-8 place-items-center">
+                  <a href={`${explorerUrl()}/tx/${hash}`} target="_blank" rel="noreferrer" aria-label={`View this transaction on ${networkLabel()}`} className="grid size-8 place-items-center">
                     <IconExternal className="size-4" />
                   </a>
                 </>

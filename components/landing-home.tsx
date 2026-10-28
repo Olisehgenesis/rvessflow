@@ -75,7 +75,7 @@ const links = [
 ];
 
 const stats = [
-  { value: "Base", label: "The network this beta uses" },
+  { value: "Both", label: "Base and Celo, one address" },
   { value: "USD", label: "What you see. Wrapped on chain." },
   { value: "Yours", label: "A vault signs with your key" },
 ];
@@ -195,7 +195,7 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
               in motion.
             </h1>
             <p className="mt-5 max-w-[28rem] text-[15px] leading-relaxed text-[#5C6572] sm:text-base">
-              Save for your goals, stream payments, lock your funds, and grow together. This beta runs on Base.
+              Save for your goals, stream payments, lock your funds, and grow together. One account on Base and Celo.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
               <LimeButton onClick={() => openAuth("start")} className="h-12 w-full px-5 text-[15px] sm:w-auto sm:px-6">
@@ -288,8 +288,8 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
           </div>
           <div className="hidden items-center rounded-[1.4rem] border border-[#EFECE6] bg-white px-8 py-6 shadow-[0_1px_0_rgba(20,20,20,0.03)] lg:flex">
             <div className="min-w-[14rem] pr-8">
-              <p className="text-sm font-semibold">Beta on Base</p>
-              <p className="mt-1 text-sm text-[#5C6572]">Your vault. Your signature. No second chain hiding behind this screen.</p>
+              <p className="text-sm font-semibold">Base and Celo</p>
+              <p className="mt-1 text-sm text-[#5C6572]">The same address receives on both. Savings and groups use the network this app is signed to.</p>
             </div>
             <ul className="grid flex-1 grid-cols-3">
               {stats.map((stat, index) => (

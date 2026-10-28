@@ -5,7 +5,7 @@ import { Page } from "@/components/ui-bits";
 
 const paths = [
   { href: "/home/send/friend", title: "To a person", body: "Find them by email, phone, or member code." },
-  { href: "/home/send/address", title: "To an address", body: "Send a token this wallet already holds." },
+  { href: "/home/send/address", title: "To an address", body: "Send a token this wallet holds on Base or Celo." },
 ];
 
 export default function InstantExpensePage() {

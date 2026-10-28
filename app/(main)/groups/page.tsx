@@ -8,7 +8,7 @@ import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
 import { allLabels, draftsIfReady } from "@/lib/circle";
 import { loadQuote } from "@/lib/rates";
-import { loadPortfolio } from "@/lib/protocol";
+import { loadPortfolio, networkName } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
 export default function GroupsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
@@ -49,7 +49,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
       <div className="mb-4">
         <GroupUpgradeNote />
       </div>
-      {directory.down ? <p className="mb-4 text-sm text-muted-foreground">The member directory is unavailable, so drafts cannot load. Groups already on Base still show here.</p> : null}
+      {directory.down ? <p className="mb-4 text-sm text-muted-foreground">The member directory is unavailable, so drafts cannot load. Groups already on {networkName} still show here.</p> : null}
       {empty ? (
         <EmptyGroups joined={joined} />
       ) : (

@@ -37,7 +37,9 @@ async function SettingsBody() {
   const signLabel = who.method === "passkey" ? "Passkey on this device" : who.method === "wallet" ? "Connected wallet" : "Signs on this machine";
   const upgrade = data.protocol.upgradeReadyAt ? new Date(data.protocol.upgradeReadyAt * 1000).toLocaleString() : "Not scheduled";
   const links = [
-    { href: `${explorer}/address/${data.me.address}`, label: "This account on Basescan" },
+    { href: `https://basescan.org/address/${data.me.address}`, label: "This account on Base" },
+    { href: `https://celoscan.io/address/${data.me.address}`, label: "This account on Celo" },
+    ...(explorer === "https://basescan.org" ? [] : [{ href: `${explorer}/address/${data.me.address}`, label: `This account on ${networkName}` }]),
     { href: `${explorer}/address/${addresses.factory}`, label: "Vault factory" },
     { href: `${explorer}/address/${addresses.locks}`, label: "Lock vault" },
     { href: `${explorer}/address/${addresses.groups}`, label: "Group rotation" },
@@ -72,14 +74,16 @@ async function SettingsBody() {
           <p className="text-sm text-muted-foreground">{shortAddress(data.me.address)}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <span className="rounded-full bg-[#E7F4C4] px-2.5 py-1 text-xs font-medium">{signLabel}</span>
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">{networkName}</span>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">Base and Celo</span>
           </div>
         </div>
       </div>
       <p className="mt-3 text-sm text-muted-foreground">
         {who.method === "passkey"
-          ? `${Number(data.eth).toFixed(4)} ETH in this account. This passkey pays the network fee in USDC. ETH pays it only when USDC is not there.`
-          : `${Number(data.eth).toFixed(4)} ETH for network fees`}
+          ? networkName === "Celo"
+            ? `${Number(data.eth).toFixed(4)} CELO in this account. This passkey pays the network fee in CELO.`
+            : `${Number(data.eth).toFixed(4)} ETH on ${networkName}. This passkey pays the network fee in USDC. ETH pays it only when USDC is not there.`
+          : `${Number(data.eth).toFixed(4)} ${networkName === "Celo" ? "CELO" : "ETH"} on ${networkName} for fees. A send on the other chain uses that chain's fee.`}
       </p>
       <CopyAddress address={data.me.address} />
       </section>
@@ -150,7 +154,8 @@ async function SettingsBody() {
           <span className="shrink-0 font-medium">View</span>
         </summary>
         <dl className="divide-y divide-border border-b border-border text-sm">
-          <Fact label="Network" value={networkName} />
+          <Fact label="Account" value="Base and Celo" />
+          <Fact label="Savings network" value={networkName} />
           <Fact label="Vault" value={data.vault ? shortAddress(data.vault) : "Not created yet"} />
           <Fact label="Savings on chain" value={`${money(data.total)} USD`} />
           <Fact label="USD token" value={data.protocol.tokenAllowed ? `Allowlisted (${stableLabel})` : "Not allowlisted"} />

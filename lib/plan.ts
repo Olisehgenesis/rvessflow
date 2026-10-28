@@ -5,7 +5,7 @@ import { assetByAddress } from "@/lib/assets";
 import { fundingCalls, superForUsd, superForWithdraw, withdrawCalls } from "@/lib/funding";
 import type { Intent, Plan, PreparedCall } from "@/lib/intent";
 import { readPay, type PayAsset } from "@/lib/pay-math";
-import { sendLabel, sendToken, walletBalance } from "@/lib/send";
+import { sendLabel, sendRoute, sendToken, walletBalance } from "@/lib/send";
 import { isSendAsset, parseSendAmount, spendableEth } from "@/lib/send-math";
 import { readName, stableLabel, toName } from "@/lib/protocol";
 import {
@@ -335,20 +335,21 @@ async function planSend(owner: Address, intent: Extract<Intent, { kind: "send" }
     if (balance < before && before - balance >= amount) return done(intent, { href: "/home" });
   }
   if (intent.submitted) return pending(intent);
-  const spendable = intent.asset === "eth" ? spendableEth(balance) : balance;
+  const route = sendRoute(intent.asset);
+  const spendable = route.fee === "native" ? spendableEth(balance) : balance;
   const label = sendLabel(intent.asset);
   if (amount > spendable) {
     throw new Error(
-      intent.asset === "eth" && amount <= balance
-        ? "Leave a little ETH in the wallet for the network fee."
-        : `The wallet does not have that much ${label}.`,
+      route.fee === "native" && amount <= balance
+        ? `Leave a little ${label} in the wallet for the network fee.`
+        : `The wallet does not have that much ${label} on ${route.network}.`,
     );
   }
   const token = sendToken(intent.asset);
   const calls: PreparedCall[] = token
     ? [encode(token, erc20, "transfer", [recipient, amount])]
     : [{ to: recipient, data: "0x", value: amount.toString() }];
-  return { calls, intent: { ...intent, to: recipient, seen: balance.toString(), submitted: true }, done: false };
+  return { calls, intent: { ...intent, to: recipient, seen: balance.toString(), submitted: true }, done: false, chainId: route.chainId };
 }
 
 async function planWithdraw(owner: Address, intent: Extract<Intent, { kind: "withdraw" }>): Promise<Plan> {

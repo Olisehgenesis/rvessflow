@@ -13,6 +13,7 @@ import { inferFrequency } from "@/lib/intent";
 import { goalNotes, patchGoalNote, recordActivity, saveGoalNote, type ActivityRecord } from "@/lib/notes";
 import { parseUsd, readPay, readReceive, type PayAsset } from "@/lib/pay-math";
 import { activityUnits, isSendAsset, parseSendAmount, type SendAsset } from "@/lib/send-math";
+import { sendRoute } from "@/lib/send";
 import { planIntent } from "@/lib/plan";
 import {
   addToGoal,
@@ -24,7 +25,9 @@ import {
   loadPortfolio,
   lockBreak,
   lockMature,
+  chain,
   lockTopUp,
+  networkName,
   openLock,
   openSaving,
   openStream,
@@ -81,6 +84,7 @@ function signPayload(who: Viewer, intent: Intent, calls: SignPayload["calls"]): 
       intent,
       method: who.method,
       address: who.address,
+      chainId: intent.kind === "send" && isSendAsset(intent.asset) ? sendRoute(intent.asset).chainId : undefined,
     },
   };
 }
@@ -149,6 +153,9 @@ async function finishTester(intent: Intent): Promise<ActionState> {
   for (let step = 0; step < 6; step += 1) {
     const planned = await planIntent(who.address, current);
     if (planned.pending) return { error: "That transaction is still confirming. Refresh in a moment." };
+    if (planned.chainId && planned.chainId !== chain.id) {
+      return { error: `This test account signs on ${networkName}. Connect a wallet to send on the other chain.` };
+    }
     if (planned.done || planned.calls.length === 0) {
       await rememberIntent(who.address, planned.intent, planned.id);
       refresh();

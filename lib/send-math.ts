@@ -1,13 +1,34 @@
 import { parseUnits } from "viem";
 
-export const sendAssets = ["eth", "usdc", "usdt", "usdcx", "ethx"] as const;
+export const sendAssets = [
+  "eth",
+  "usdc",
+  "usdt",
+  "usdcx",
+  "ethx",
+  "base-usdm",
+  "base-eth",
+  "base-usdc",
+  "base-usdt",
+  "base-usdcx",
+  "base-ethx",
+  "celo",
+  "celo-usdc",
+  "celo-usdt",
+  "celo-usdm",
+  "celo-mountain",
+  "celo-cusdx",
+  "celo-celox",
+] as const;
 export type SendAsset = (typeof sendAssets)[number];
 
 export type SendChoice = {
   asset: SendAsset;
   label: string;
+  network: string;
   balance: string;
   max: string;
+  reserve: boolean;
 };
 
 /** Kept in the wallet so an ETH transfer can still pay its network fee. */
@@ -32,8 +53,11 @@ export function isSendAsset(value: string): value is SendAsset {
   return (sendAssets as readonly string[]).includes(value);
 }
 
+const sixDecimal = new Set<SendAsset>(["usdc", "usdt", "base-usdc", "base-usdt", "celo-usdc", "celo-usdt"]);
+const nativeUnits = new Set<SendAsset>(["eth", "ethx", "base-eth", "base-ethx", "celo", "celo-celox"]);
+
 export function sendDecimals(asset: SendAsset): number {
-  return asset === "usdc" || asset === "usdt" ? 6 : 18;
+  return sixDecimal.has(asset) ? 6 : 18;
 }
 
 export function parseSendAmount(asset: SendAsset, value: string): bigint {
@@ -64,7 +88,7 @@ export function portion(max: bigint, step: number, steps = 1000): bigint {
 
 /** Activity stores dollar tokens at 18 decimals and ETH at 18 decimals. */
 export function activityUnits(asset: SendAsset, amount: bigint): { amount: string; asset: "usdcx" | "ethx" } {
-  if (asset === "eth" || asset === "ethx") return { amount: amount.toString(), asset: "ethx" };
-  if (asset === "usdc" || asset === "usdt") return { amount: (amount * 10n ** 12n).toString(), asset: "usdcx" };
+  if (nativeUnits.has(asset)) return { amount: amount.toString(), asset: "ethx" };
+  if (sixDecimal.has(asset)) return { amount: (amount * 10n ** 12n).toString(), asset: "usdcx" };
   return { amount: amount.toString(), asset: "usdcx" };
 }

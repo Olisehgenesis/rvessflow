@@ -25,6 +25,6 @@ export const terms = [
   },
   {
     title: "Two chains",
-    body: "This beta runs on Base. Base Sepolia is a separate deployment. A balance on one does not appear on the other.",
+    body: "The same account receives on Base and on Celo. Savings, streams, locks, and groups run on the network this app is using. A transfer on any other network can be lost.",
   },
 ] as const;
