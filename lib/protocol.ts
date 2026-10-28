@@ -183,12 +183,19 @@ export type Person = { name: string; address: Address };
 
 type Stored = { name: string; address: Address; privateKey: Hex };
 
+/** Local test keys. Production does not ship this file, and a real sign-in does not need it. */
 function storedAccounts(): Stored[] {
   const file = path.join(process.cwd(), "wallet", "testers.json");
-  const parsed = JSON.parse(readFileSync(file, "utf8")) as { accounts: Stored[] };
-  if (!Array.isArray(parsed.accounts) || parsed.accounts.length === 0) {
-    throw new Error("wallet/testers.json has no accounts.");
+  let raw: string;
+  try {
+    raw = readFileSync(file, "utf8");
+  } catch (error) {
+    const missing = typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+    if (missing) return [];
+    throw error;
   }
+  const parsed = JSON.parse(raw) as { accounts?: Stored[] };
+  if (!Array.isArray(parsed.accounts) || parsed.accounts.length === 0) return [];
   return parsed.accounts;
 }
 
