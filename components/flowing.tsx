@@ -7,7 +7,6 @@ import { Progress } from "@/components/ui/progress";
 
 let flowNow = 0;
 const flowListeners = new Set<() => void>();
-let flowRaf = 0;
 let flowInterval = 0;
 
 function emitFlowClock() {
@@ -16,25 +15,14 @@ function emitFlowClock() {
 }
 
 function startFlowClock() {
-  if (flowRaf || flowInterval) return;
+  if (flowInterval) return;
   emitFlowClock();
-  const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduce) {
-    flowInterval = window.setInterval(emitFlowClock, 1000);
-    return;
-  }
-  const loop = () => {
-    emitFlowClock();
-    flowRaf = requestAnimationFrame(loop);
-  };
-  flowRaf = requestAnimationFrame(loop);
+  flowInterval = window.setInterval(emitFlowClock, 1000);
 }
 
 function stopFlowClock() {
   if (flowListeners.size > 0) return;
-  if (flowRaf) cancelAnimationFrame(flowRaf);
   if (flowInterval) window.clearInterval(flowInterval);
-  flowRaf = 0;
   flowInterval = 0;
 }
 
@@ -117,12 +105,16 @@ function RollChar({ char }: { char: string }) {
     return () => window.clearTimeout(id);
   }, [leaving]);
 
-  if (!digit || leaving === null) return <span className="inline-block">{char}</span>;
-
   return (
     <span className="relative inline-block h-[1em] w-[1ch] overflow-hidden align-bottom">
-      <span className="absolute inset-x-0 top-0 motion-safe:animate-[digit-out_280ms_cubic-bezier(0.2,0,0,1)_both]">{leaving}</span>
-      <span className="absolute inset-x-0 top-0 motion-safe:animate-[digit-in_280ms_cubic-bezier(0.2,0,0,1)_both]">{char}</span>
+      {digit && leaving !== null ? (
+        <>
+          <span className="absolute inset-x-0 top-0 motion-safe:animate-[digit-out_280ms_cubic-bezier(0.2,0,0,1)_both]">{leaving}</span>
+          <span className="absolute inset-x-0 top-0 motion-safe:animate-[digit-in_280ms_cubic-bezier(0.2,0,0,1)_both]">{char}</span>
+        </>
+      ) : (
+        char
+      )}
     </span>
   );
 }

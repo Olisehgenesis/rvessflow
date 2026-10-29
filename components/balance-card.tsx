@@ -2,10 +2,9 @@
 
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
-import { RollingText, useFlowClock } from "@/components/flowing";
+import { useFlowClock } from "@/components/flowing";
 import { IconChevron, IconEye, IconEyeOff } from "@/components/icons";
 import { RetryButton } from "@/components/retry-button";
-import { show, streamDigits } from "@/lib/display";
 import { homeBalancePlaces, liveHomeColumns } from "@/lib/home-math";
 import type { Quote } from "@/lib/quote";
 import { TopUpSheet, WithdrawSheet, type SavingBox } from "@/components/withdraw-sheet";
@@ -143,9 +142,6 @@ export function HomeBalance({
         locked: BigInt(lockedUsd8),
         total: BigInt(availableUsd8) + BigInt(streamingUsd8) + BigInt(lockedUsd8),
       };
-  const netWei = pulse ? BigInt(pulse.inWeiPerSec) - BigInt(pulse.outWeiPerSec) : 0n;
-  const netDigits = pulse ? streamDigits(netWei < 0n ? -netWei : netWei, pulse.quote) : homeBalancePlaces;
-  const pace = pulse && netWei !== 0n ? `${netWei < 0n ? "−" : "+"}${show(netWei < 0n ? -netWei : netWei, pulse.quote, netDigits)} ${pulse.quote.unit} each second` : "";
   const places = homeBalancePlaces;
   const shownTotal = formatUsdPlaces(live.total, places);
   const shownAvailable = formatUsdPlaces(live.available, places);
@@ -158,29 +154,22 @@ export function HomeBalance({
   const availableLocal = preferLocal && localQuote ? formatLocal(live.available, localQuote, price, places) : "";
   const streamingLocal = preferLocal && localQuote ? formatLocal(live.streaming, localQuote, price, places) : "";
   const lockedLocal = preferLocal && localQuote ? formatLocal(live.locked, localQuote, price, places) : "";
-  const figure = (prefix: string, value: string, live: boolean) => {
+  const figure = (prefix: string, value: string) => {
     const lead = prefix === "$" ? "$" : `${prefix} `;
     if (conceal) return hidden;
-    return live ? (
-      <>
-        {lead}
-        <RollingText text={value} />
-      </>
-    ) : (
-      `${lead}${value}`
-    );
+    return `${lead}${value}`;
   };
   const desk = layout === "desk";
   const columns = preferLocal
     ? [
-        { label: "Available", prefix: localUnit ?? "", value: availableLocal, live: ticking, usd: shownAvailable, usdLive: ticking },
-        { label: "Streaming", prefix: localUnit ?? "", value: streamingLocal, live: ticking, usd: shownStreaming, usdLive: ticking },
-        { label: "Locked", prefix: localUnit ?? "", value: lockedLocal, live: false, usd: shownLocked, usdLive: false },
+        { label: "Available", prefix: localUnit ?? "", value: availableLocal, usd: shownAvailable },
+        { label: "Streaming", prefix: localUnit ?? "", value: streamingLocal, usd: shownStreaming },
+        { label: "Locked", prefix: localUnit ?? "", value: lockedLocal, usd: shownLocked },
       ]
     : [
-        { label: "Available", prefix: "$", value: shownAvailable, live: ticking, usd: "", usdLive: false },
-        { label: "Streaming", prefix: "$", value: shownStreaming, live: ticking, usd: "", usdLive: false },
-        { label: "Locked", prefix: "$", value: shownLocked, live: false, usd: "", usdLive: false },
+        { label: "Available", prefix: "$", value: shownAvailable, usd: "" },
+        { label: "Streaming", prefix: "$", value: shownStreaming, usd: "" },
+        { label: "Locked", prefix: "$", value: shownLocked, usd: "" },
       ];
   const actions = (
     <div className={`mt-4 grid gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
@@ -205,11 +194,10 @@ export function HomeBalance({
                 {conceal ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
               </button>
             </div>
-            <p className="mt-1 whitespace-nowrap font-[family-name:var(--font-manrope)] text-5xl font-semibold tracking-[-0.04em] tabular-nums">
-              {preferLocal ? figure(localUnit ?? "", shownLocal ?? "", ticking) : figure("$", shownTotal, ticking)}
+            <p className="mt-1 overflow-hidden whitespace-nowrap font-[family-name:var(--font-manrope)] text-5xl font-semibold tracking-[-0.04em] tabular-nums">
+              {preferLocal ? figure(localUnit ?? "", shownLocal ?? "") : figure("$", shownTotal)}
             </p>
-            {preferLocal ? <p className="mt-0.5 whitespace-nowrap text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal, ticking)}</p> : null}
-            {ticking && pace ? <p className="mt-1 text-xs font-medium text-[#3C4A2E] tabular-nums">{pace}</p> : null}
+            {preferLocal ? <p className="mt-0.5 overflow-hidden whitespace-nowrap text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal)}</p> : null}
           </div>
           <img src="/marks/saving.png" alt="" className="pointer-events-none hidden w-28 shrink-0 xl:block" />
         </div>
@@ -218,8 +206,8 @@ export function HomeBalance({
             <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#141414]/10 px-3"}>
               <dt className="text-xs text-[#3C4A2E]">{column.label}</dt>
               <dd className="mt-1 text-base font-semibold whitespace-nowrap tabular-nums">
-                {figure(column.prefix, column.value, column.live)}
-                {preferLocal && column.usd ? <span className="mt-0.5 block text-[11px] font-medium text-[#3C4A2E]">{figure("$", column.usd, column.usdLive)}</span> : null}
+                {figure(column.prefix, column.value)}
+                {preferLocal && column.usd ? <span className="mt-0.5 block text-[11px] font-medium text-[#3C4A2E]">{figure("$", column.usd)}</span> : null}
               </dd>
             </div>
           ))}
@@ -250,18 +238,17 @@ export function HomeBalance({
           </Link>
         </div>
       </div>
-      <p className="mt-2 whitespace-nowrap font-display text-4xl font-semibold tracking-tight tabular-nums">
-        {preferLocal ? figure(localUnit ?? "", shownLocal ?? "", ticking) : figure("$", shownTotal, ticking)}
+      <p className="mt-2 overflow-hidden whitespace-nowrap font-display text-4xl font-semibold tracking-tight tabular-nums">
+        {preferLocal ? figure(localUnit ?? "", shownLocal ?? "") : figure("$", shownTotal)}
       </p>
       {preferLocal ? (
-        <p className="mt-0.5 whitespace-nowrap text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal, ticking)}</p>
+        <p className="mt-0.5 overflow-hidden whitespace-nowrap text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal)}</p>
       ) : null}
-      {ticking && pace ? <p className="mt-1 text-xs font-medium text-[#3C4A2E] tabular-nums">{pace}</p> : null}
       <dl className="mt-4 grid grid-cols-3">
         {columns.map((column, index) => (
           <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#141414]/10 px-3"}>
             <dt className="text-xs text-[#3C4A2E]">{column.label}</dt>
-            <dd className="mt-1 text-sm font-semibold whitespace-nowrap tabular-nums">{figure(column.prefix, column.value, column.live)}</dd>
+            <dd className="mt-1 overflow-hidden text-sm font-semibold whitespace-nowrap tabular-nums">{figure(column.prefix, column.value)}</dd>
           </div>
         ))}
       </dl>
