@@ -9,17 +9,9 @@ import { coinMap, loadPrices } from "@/lib/prices";
 import { addresses, chain, erc20, factoryAbi, lockAbi, networkName, publicClient, stableLabel, vaultAbi, type Portfolio } from "@/lib/protocol";
 import { cashTokens, finderTokens, type FinderToken } from "@/lib/stables";
 import type { Quote } from "@/lib/quote";
+import type { HoldingRow } from "@/lib/holding-row";
 
-export type HoldingRow = {
-  key: string;
-  label: string;
-  network: string;
-  amount: string;
-  usd: string;
-  local?: string;
-  /** Tokens inside this balance. USD opens onto USDC, USDT, and the other dollar tokens. */
-  parts?: HoldingRow[];
-};
+export type { HoldingRow };
 
 export type PayChoice = {
   pay: PayAsset;
@@ -271,7 +263,9 @@ function groupRow(key: "usd" | "eth" | "celo", label: string, pieces: Piece[], q
     amount,
     usd: money(value),
     local: localText(value, quote, usdcUsd8),
-    parts: pieces.map((piece) => partOf(piece, quote, usdcUsd8)),
+    parts: [...pieces]
+      .sort((left, right) => (right.value > left.value ? 1 : right.value < left.value ? -1 : 0))
+      .map((piece) => partOf(piece, quote, usdcUsd8)),
   };
 }
 

@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import Loading from "../../loading";
-import { AssetList } from "@/components/home-screen";
+import { AssetList } from "@/components/asset-list";
 import { Page } from "@/components/ui-bits";
 import { loadHoldings } from "@/lib/holdings";
 import { loadPortfolio } from "@/lib/protocol";

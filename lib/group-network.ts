@@ -39,7 +39,7 @@ export const groupChainFacts: Record<
   celo: {
     title: "Celo",
     recommend: true,
-    fee: "A connected wallet can pay the network fee in USDC, USDT, or another dollar token. You do not need CELO in the wallet for an ordinary group signature.",
+    fee: "A connected wallet pays the Celo fee in USDT, then USDC, then USDm, when that token is in the account. CELO is used only if none of those cover it.",
     turn: "Paid each turn is already live. A new group can send the contribution as a transfer.",
     token: "The pot is cUSDx. Members need that token on Celo, at this same address.",
     passkey: "A passkey on Celo still needs a little CELO for the bundler. Connect a wallet if you want to pay the fee in a dollar token.",

@@ -83,7 +83,7 @@ async function SettingsBody() {
           ? networkName === "Celo"
             ? `${Number(data.eth).toFixed(4)} CELO in this account. This passkey pays the network fee in CELO.`
             : `${Number(data.eth).toFixed(4)} ETH on ${networkName}. This passkey pays the network fee in USDC. ETH pays it only when USDC is not there.`
-          : `${Number(data.eth).toFixed(4)} ${networkName === "Celo" ? "CELO" : "ETH"} on ${networkName} for fees. A send on the other chain uses that chain's fee.`}
+          : "A connected wallet on Celo pays the fee in USDT, then USDC, then USDm, when that token is in the account. CELO is used only if none of those cover it. On Base the wallet uses ETH."}
       </p>
       <CopyAddress address={data.me.address} />
       </section>

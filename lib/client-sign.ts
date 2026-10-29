@@ -7,6 +7,7 @@ import { appChain, appNetwork, appRpc, walletNetwork } from "@/lib/network";
 import type { PreparedCall, SignPayload } from "@/lib/intent";
 import { readPasskeys } from "@/lib/passkey-vault";
 import { estimationSkipped, passkeyPaysWith, usdcCanPayFee, userOpCost } from "@/lib/passkey-fee";
+import { celoFeeTx, pickCeloFee } from "@/lib/celo-fee";
 import { batchId, batchOutcome, batchUnsupported, walletSendCallsParam } from "@/lib/wallet-batch";
 
 const network = appNetwork();
@@ -102,7 +103,9 @@ async function sendWallet(calls: PreparedCall[], from: Address, where: ReturnTyp
   if (!found || found.toLowerCase() !== from.toLowerCase()) {
     throw new Error("Reconnect the wallet for this account.");
   }
-  if (calls.length > 1) {
+  const fee = where.id === 42220 ? await pickCeloFee(where.reader, from) : null;
+  const feeFields = celoFeeTx(fee?.feeCurrency);
+  if (calls.length > 1 && !fee) {
     let id: string | null = null;
     try {
       id = batchId(
@@ -127,7 +130,7 @@ async function sendWallet(calls: PreparedCall[], from: Address, where: ReturnTyp
     const value = txValue(call.value);
     const hash = (await provider.request({
       method: "eth_sendTransaction",
-      params: [{ from, to: call.to, data: call.data, ...(value ? { value } : {}) }],
+      params: [{ from, to: call.to, data: call.data, ...(value ? { value } : {}), ...feeFields }],
     })) as Hash;
     last = hash;
     if (index === calls.length - 1) onHash?.(hash);

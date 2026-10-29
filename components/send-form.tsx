@@ -25,6 +25,9 @@ export function SendForm({ mode, choices }: { mode: "address" | "friend"; choice
   const [state, send, pending] = useSignedAction(sendFunds);
   const picked = choices.find((choice) => choice.asset === asset) ?? choices[0];
   const match = lookup?.address && lookup.query === who.trim() ? lookup : null;
+  const [all, setAll] = useState(false);
+  const funded = choices.filter((choice) => Number(choice.balance.replace(/,/g, "")) > 0);
+  const shown = all || funded.length === 0 ? choices : funded;
 
   if (choices.length === 0) {
     return <p className="text-sm leading-relaxed text-muted-foreground">This wallet has nothing it can send yet.</p>;
@@ -66,7 +69,7 @@ export function SendForm({ mode, choices }: { mode: "address" | "friend"; choice
 
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">Token</legend>
-          {choices.map((choice) => {
+          {shown.map((choice) => {
             const on = choice.asset === picked?.asset;
             return (
               <button
@@ -76,7 +79,7 @@ export function SendForm({ mode, choices }: { mode: "address" | "friend"; choice
                 onClick={() => setAsset(choice.asset)}
                 className={`flex w-full items-center gap-3 rounded-2xl bg-card px-3 py-3 text-left ${on ? "border-2 border-foreground" : "border border-border"}`}
               >
-                <TokenIcon symbol={choice.label} className="size-10" />
+                <TokenIcon symbol={choice.label} network={choice.network} className="size-10" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold">{choice.label}</span>
                   <span className="block text-xs text-muted-foreground">{choice.network}</span>
@@ -87,6 +90,11 @@ export function SendForm({ mode, choices }: { mode: "address" | "friend"; choice
               </button>
             );
           })}
+          {funded.length > 0 && funded.length < choices.length ? (
+            <button type="button" onClick={() => setAll((current) => !current)} className="w-full text-center text-sm font-medium">
+              {all ? "Hide empty" : `View all (${choices.length - funded.length} with no balance)`}
+            </button>
+          ) : null}
         </fieldset>
 
         <label className="block space-y-1.5">

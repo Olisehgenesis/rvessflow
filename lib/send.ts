@@ -5,6 +5,7 @@ import { base, celo } from "viem/chains";
 import { baseMarket } from "@/lib/base-market";
 import { formatAmount } from "@/lib/pay-math";
 import { addresses, chain, erc20, networkName, publicClient, stableLabel } from "@/lib/protocol";
+import { pickCeloFee } from "@/lib/celo-fee";
 import { type MoveChoice, type SendAsset, type SendChoice, sendDecimals, spendableEth, spendableUsdc, usdcFeeReserve } from "@/lib/send-math";
 
 export type { SendChoice };
@@ -132,12 +133,19 @@ function listedAssets(): SendAsset[] {
 
 export async function loadSendChoices(owner: Address): Promise<SendChoice[]> {
   const assets = listedAssets();
-  const amounts = await Promise.all(assets.map((asset) => walletBalance(owner, asset)));
+  const [amounts, celoFee] = await Promise.all([
+    Promise.all(assets.map((asset) => walletBalance(owner, asset))),
+    pickCeloFee(celoReader, owner),
+  ]);
   return assets
     .map((asset, index) => {
       const route = sendRoute(asset);
       const balance = amounts[index] ?? 0n;
-      const spendable = route.fee === "native" ? spendableEth(balance) : balance;
+      const feeToken = Boolean(route.chainId === 42220 && celoFee && route.token && route.token.toLowerCase() === celoFee.token.toLowerCase());
+      let spendable = balance;
+      if (feeToken && celoFee) spendable = balance > celoFee.min ? balance - celoFee.min : 0n;
+      else if (route.chainId === 42220 && celoFee && route.fee === "native") spendable = balance;
+      else if (route.fee === "native") spendable = spendableEth(balance);
       const digits = route.fee === "native" || asset === "ethx" || asset === "base-ethx" || asset === "celo-celox" ? 6 : 2;
       return {
         asset,
@@ -145,10 +153,11 @@ export async function loadSendChoices(owner: Address): Promise<SendChoice[]> {
         network: route.network,
         balance: formatAmount(balance, sendDecimals(asset), digits),
         max: plain(spendable, sendDecimals(asset)),
-        reserve: route.fee === "native",
+        reserve: feeToken || (route.fee === "native" && !celoFee),
+        value: balance,
         chainId: route.chainId,
       };
     })
-    .sort((left, right) => left.chainId - right.chainId || left.label.localeCompare(right.label))
-    .map(({ chainId: _chainId, ...choice }) => choice);
+    .sort((left, right) => (right.value > left.value ? 1 : right.value < left.value ? -1 : left.label.localeCompare(right.label)))
+    .map(({ chainId: _chainId, value: _value, ...choice }) => choice);
 }

@@ -228,3 +228,28 @@ Forwarders are the same on Base and Base Sepolia.
 | Base Sepolia ETHx | `0x143ea239159155B408e71CDbE836e8CFD6766732` |
 
 Source of those constants: `src/SuperfluidAddresses.sol`.
+
+### Celo mainnet
+
+Chain id 42220. Explorer: [celoscan.io](https://celoscan.io). Deployed 28 October 2026. The owner is the same 2-of-3 Safe as Base. cUSDx and CELOx are allowlisted. Sourcify has a match on the proxies and on the implementations except the live group implementation after the paid-each-turn upgrade. Celoscan still shows those as unverified until the explorer imports Sourcify; that import needs a Celoscan API key.
+
+| | Address |
+| --- | --- |
+| Owner | `0x780c78D104090477300eb148148b3329f8959899` |
+| Allowlist | `0x3627815B99D045A40a189000FBf7dAE729cEF9eB` |
+| Allowlist implementation | `0x955f3b4b38E9575fCf2f9dD1a6fda08468D7ba0A` |
+| Factory | `0xeC9f5717593f66BA703e9bdB871B24014642F3cB` |
+| Factory implementation | `0xE714E09d121e6786fD36433bddB826d94D886fAb` |
+| Lock vault | `0x1a48b3d9f38ea0B905F4731c5D3bdA081078b5ef` |
+| Lock vault implementation | `0xAe5F5F088D89f0EA97B759eC0716b22BEF6E34A4` |
+| Group | `0xe98361A2D733783b20371ed6b03e93c7be7A3285` |
+| Group implementation (live) | `0x61bF299C75736EACD82a6c35eaAA675EdFD0B8b2` |
+| Vault implementation | `0x6BF40BCF49e4958dE6d82d549b584952Df964fe4` |
+| Conduit implementation | `0xE6d0b5bf6a68d3C4Fd216fc2F074ad1bbCCAE38D` |
+| cUSDx | `0x3AcB9A08697b6Db4cD977e8Ab42b6f24722e6D6e` |
+| CELOx | `0x671425Ae1f272Bc6F79beC3ed5C4b00e9c628240` |
+| Host | `0xA4Ff07cF81C02CFD356184879D953970cA957585` |
+
+Sourcify: [allowlist](https://sourcify.dev/server/v2/contract/42220/0x3627815B99D045A40a189000FBf7dAE729cEF9eB), [factory](https://sourcify.dev/server/v2/contract/42220/0xeC9f5717593f66BA703e9bdB871B24014642F3cB), [locks](https://sourcify.dev/server/v2/contract/42220/0x1a48b3d9f38ea0B905F4731c5D3bdA081078b5ef), [group proxy](https://sourcify.dev/server/v2/contract/42220/0xe98361A2D733783b20371ed6b03e93c7be7A3285).
+
+Celo fee currencies used by a connected wallet, in order: USDT adapter `0x0E2A3e05bc9A16F5292A6170456A710cb89C6f72`, USDC adapter `0x2F25deB3848C207fc8E0c34035B3Ba7fC157602B`, USDm `0x765DE816845861e75A25fCA122bb6898B8B1282a`. Passkeys still pay the bundler in CELO.

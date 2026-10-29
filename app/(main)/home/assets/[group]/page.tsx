@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Loading from "../../../loading";
-import { AssetList } from "@/components/home-screen";
+import { AssetList } from "@/components/asset-list";
 import { Page } from "@/components/ui-bits";
 import { loadHoldings } from "@/lib/holdings";
 import { loadPortfolio } from "@/lib/protocol";
@@ -29,8 +29,8 @@ async function GroupBody({ params }: { params: Promise<{ group: string }> }) {
   if (!row?.parts) notFound();
   return (
     <Page title={title} back="/home">
-      <p className="mb-4 text-sm text-muted-foreground">These add up to the {title} balance. Each line is one token on one chain.</p>
-      <AssetList rows={row.parts} localUnit={holdings.localUnit} />
+      <p className="mb-4 text-sm text-muted-foreground">Tokens with a balance show first. View all to see empty lines on Base and Celo.</p>
+      <AssetList rows={row.parts} localUnit={holdings.localUnit} hideEmpty />
     </Page>
   );
 }
