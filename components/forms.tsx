@@ -6,9 +6,8 @@ import { IconInfo } from "@/components/icons";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { TokenIcon } from "@/components/token-icon";
 import { useGoalName } from "@/components/goal-name";
-import { ChainField } from "@/components/chain-field";
 import { PayWith, ReceiveWith, type PayChoice } from "@/components/pay-with";
-import { parseGroupKey, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
+import { parseGroupKey } from "@/lib/group-network";
 import { RecipientField } from "@/components/recipient-field";
 import { useSignedAction } from "@/components/sign-action";
 import { Button } from "@/components/ui/button";
@@ -88,22 +87,11 @@ function When({ start, end, onStart, onEnd }: { start: Date; end: Date; onStart:
   );
 }
 
-function onChain(choices: PayChoice[], network: GroupNet) {
-  const label = network === "celo" ? "Celo" : "Base";
-  const matched = choices.filter((choice) => (choice.network ?? "").startsWith(label));
-  return matched.length ? matched : choices;
-}
-
-function forKey(choices: PayChoice[], id: string) {
-  return onChain(choices, parseGroupKey(id).net);
-}
-
 export function SavingForm({ me, choices }: { me: string; choices: PayChoice[] }) {
   const [state, save, pending] = useSignedAction(createSaving);
   const today = startOfDay(new Date());
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(() => addDays(today, 180));
-  const [network, setNetwork] = useState<GroupNet>(recommendedGroupNet);
   const window = streamWindow(start, end);
   const problem = startOfDay(end) < startOfDay(start) ? "The end date has to be on or after the start date." : dateProblem(window.duration, FLOW_MIN);
   const draftName = useGoalName();
@@ -111,8 +99,7 @@ export function SavingForm({ me, choices }: { me: string; choices: PayChoice[] }
     <form action={save} className="space-y-4">
       <input type="hidden" name="name" value={draftName} />
       <input type="hidden" name="recipient" value={me} />
-      <ChainField value={network} onChange={setNetwork} hint="Same address on both. This saving stays on the chain you pick." />
-      <PayWith key={network} choices={onChain(choices, network)} mode="vault" />
+      <PayWith choices={choices} mode="vault" />
       <When start={start} end={end} onStart={setStart} onEnd={setEnd} />
       <input type="hidden" name="startAt" value={problem ? "" : window.startAt} />
       <input type="hidden" name="duration" value={problem ? "" : window.duration} />
@@ -128,7 +115,6 @@ export function StreamForm({ kind, me, choices }: { kind: "flow" | "expense"; me
   const today = startOfDay(new Date());
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(() => addDays(today, 180));
-  const [network, setNetwork] = useState<GroupNet>(recommendedGroupNet);
   const window = streamWindow(start, end);
   const problem = startOfDay(end) < startOfDay(start) ? "The end date has to be on or after the start date." : dateProblem(window.duration, FLOW_MIN);
   const [recipient, setRecipient] = useState("");
@@ -139,8 +125,7 @@ export function StreamForm({ kind, me, choices }: { kind: "flow" | "expense"; me
       <input type="hidden" name="kind" value={kind} />
       <input type="hidden" name="name" value={draftName} />
       {kind === "flow" ? <input type="hidden" name="recipient" value={me} /> : null}
-      <ChainField value={network} onChange={setNetwork} hint="Same address on both. This stream stays on the chain you pick." />
-      <PayWith key={network} choices={onChain(choices, network)} mode="stream" duration={problem ? undefined : window.duration} />
+      <PayWith choices={choices} mode="stream" duration={problem ? undefined : window.duration} />
       {kind === "expense" ? <RecipientField name="recipient" me={me} value={recipient} onValue={setRecipient} /> : null}
       <When start={start} end={end} onStart={setStart} onEnd={setEnd} />
       <input type="hidden" name="startAt" value={problem ? "" : window.startAt} />
@@ -167,7 +152,6 @@ export function LockForm({ penalty, quote, choices }: { penalty: number; quote: 
   const [state, action, pending] = useSignedAction(createLock);
   const [earn, setEarn] = useState(false);
   const [amount, setAmount] = useState("");
-  const [network, setNetwork] = useState<GroupNet>(recommendedGroupNet);
   const [end, setEnd] = useState(() => addDays(startOfDay(new Date()), 180));
   const duration = secondsUntilEnd(end);
   const problem = dateProblem(duration, LOCK_MIN);
@@ -176,8 +160,7 @@ export function LockForm({ penalty, quote, choices }: { penalty: number; quote: 
   const badAmount = amount.trim() !== "" && !/^\d+(\.\d{1,2})?$/.test(amount.replace(/,/g, "").trim());
   return (
     <form action={action} className="space-y-4">
-      <ChainField value={network} onChange={setNetwork} hint="Same address on both. This lock stays on the chain you pick." />
-      <PayWith key={network} choices={onChain(choices, network)} mode="wallet" protocolOnTop onAmount={setAmount} />
+      <PayWith choices={choices} mode="wallet" protocolOnTop onAmount={setAmount} />
       <DateField label="Unlock date" presentation="unlock" value={end} onChange={setEnd} min={today} max={addDays(today, 30 * 365 - 1)} />
       <input type="hidden" name="duration" value={problem ? "" : duration} />
       {problem ? <p className="text-sm text-destructive">{problem}</p> : null}
@@ -212,11 +195,9 @@ export function TokenMark({ symbol, network }: { symbol: string; network?: strin
 
 export function AddMoneyForm({ choices }: { choices: PayChoice[] }) {
   const [state, action, pending] = useSignedAction(addMoney);
-  const [network, setNetwork] = useState<GroupNet>(recommendedGroupNet);
   return (
     <form action={action} className="space-y-4">
-      <ChainField value={network} onChange={setNetwork} hint="Same address on both. This top-up goes into the vault on the chain you pick." />
-      <PayWith key={network} choices={onChain(choices, network)} mode="vault" full />
+      <PayWith choices={choices} mode="vault" full />
       <ErrorNote error={state?.error} />
       <Submit pending={pending}>Top up</Submit>
     </form>
@@ -251,6 +232,7 @@ export function AddFunds(props: { id: string }) {
 
 export function AddToGoal({ id, choices }: { id: string; choices: PayChoice[] }) {
   const [open, setOpen] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [state, run, pending] = useSignedAction(doAddFunds);
   if (!open) {
     return (
@@ -262,9 +244,9 @@ export function AddToGoal({ id, choices }: { id: string; choices: PayChoice[] })
   return (
     <form action={run} className="space-y-3">
       <input type="hidden" name="id" value={id} />
-      <PayWith choices={forKey(choices, id)} mode="vault" />
+      <PayWith choices={choices} mode="vault" stayOn={parseGroupKey(id).net} onBlocked={setBlocked} />
       <ErrorNote error={state?.error} />
-      <Submit pending={pending}>Add to goal</Submit>
+      <Submit pending={pending} hold={blocked}>Add to goal</Submit>
     </form>
   );
 }
@@ -277,13 +259,14 @@ export function TopUpLock({ id, choices }: { id: string; choices?: PayChoice[] }
 }
 
 function TopUpUsd({ id, choices }: { id: string; choices: PayChoice[] }) {
+  const [blocked, setBlocked] = useState(false);
   const [state, run, pending] = useSignedAction(doLockTop);
   return (
     <form action={run} className="space-y-3">
       <input type="hidden" name="id" value={id} />
-      <PayWith choices={forKey(choices, id)} mode="wallet" protocolOnTop />
+      <PayWith choices={choices} mode="wallet" protocolOnTop stayOn={parseGroupKey(id).net} onBlocked={setBlocked} />
       <ErrorNote error={state?.error} />
-      <Submit pending={pending}>Top up</Submit>
+      <Submit pending={pending} hold={blocked}>Top up</Submit>
     </form>
   );
 }
@@ -347,14 +330,15 @@ export function GroupPay({
   superWei: string;
   choices: PayChoice[];
 }) {
+  const [blocked, setBlocked] = useState(false);
   const [state, run, pending] = useSignedAction(doGroup);
   return (
     <form action={run} className="space-y-3">
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="fn" value={fn} />
-      <PayWith choices={forKey(choices, id)} mode="wallet" fixedSuper={superWei} protocolOnTop />
+      <PayWith choices={choices} mode="wallet" fixedSuper={superWei} protocolOnTop stayOn={parseGroupKey(id).net} onBlocked={setBlocked} />
       <ErrorNote error={state?.error} />
-      <Submit pending={pending}>{label}</Submit>
+      <Submit pending={pending} hold={blocked}>{label}</Submit>
     </form>
   );
 }

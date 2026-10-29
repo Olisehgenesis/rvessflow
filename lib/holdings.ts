@@ -22,6 +22,7 @@ export type PayChoice = {
   usd: string;
   maxUsd: string;
   network?: string;
+  id?: string;
 };
 
 export type HoldingsView = {
@@ -279,10 +280,10 @@ function take(pieces: Map<string, Piece>, keys: string[]): Piece[] {
   });
 }
 
-function superChoice(amount: bigint, price8: bigint, label = stableLabel, network?: string): PayChoice {
+function superChoice(amount: bigint, price8: bigint, label = stableLabel, network?: string, id?: string): PayChoice {
   const shown = formatAmount(amount / 10n ** 12n, 6, 2);
   const value = valueOf(amount, 18, price8);
-  return { pay: "usdcx", label, balance: shown, usd: money(value), maxUsd: maxUsdInput(value), network };
+  return { pay: "usdcx", label, balance: shown, usd: money(value), maxUsd: maxUsdInput(value), network, id };
 }
 
 async function spendableSuperOn(net: GroupNet, owner: Address): Promise<bigint> {
@@ -446,27 +447,30 @@ function payChoices(
   usdtListed: boolean,
   superAmount: bigint,
   network?: string,
+  net?: GroupNet,
 ): PayChoice[] {
   const choices: PayChoice[] = [];
-  choices.push(superChoice(superAmount, prices.usdcUsd8, network?.startsWith("Celo") ? "cUSDx" : stableLabel, network));
-  if (eth > 0n || !network?.startsWith("Celo")) {
-    choices.push({
-      pay: "eth",
-      label: network?.startsWith("Celo") ? "CELO" : chain.nativeCurrency.symbol,
-      balance: formatAmount(eth, 18, 6),
-      usd: money(valueOf(eth, 18, prices.ethUsd8)),
-      maxUsd: maxUsdInput(valueOf(eth, 18, prices.ethUsd8)),
-      network,
-    });
-  }
+  const celo = Boolean(network?.startsWith("Celo"));
+  const tag = (pay: PayAsset) => (net ? `${net}-${pay}` : pay);
+  choices.push(superChoice(superAmount, prices.usdcUsd8, celo ? "cUSDx" : stableLabel, network, tag("usdcx")));
+  choices.push({
+    pay: "eth",
+    label: celo ? "CELO" : chain.nativeCurrency.symbol,
+    balance: formatAmount(eth, 18, 6),
+    usd: money(valueOf(eth, 18, prices.ethUsd8)),
+    maxUsd: maxUsdInput(valueOf(eth, 18, prices.ethUsd8)),
+    network,
+    id: tag("eth"),
+  });
   if (usdcListed) {
     choices.push({
       pay: "usdc",
-      label: network?.startsWith("Celo") ? "USDm" : "USDC",
-      balance: formatAmount(usdc, network?.startsWith("Celo") ? 18 : 6, network?.startsWith("Celo") ? 4 : 2),
-      usd: money(valueOf(usdc, network?.startsWith("Celo") ? 18 : 6, prices.usdcUsd8)),
-      maxUsd: maxUsdInput(valueOf(usdc, network?.startsWith("Celo") ? 18 : 6, prices.usdcUsd8)),
+      label: celo ? "USDm" : "USDC",
+      balance: formatAmount(usdc, celo ? 18 : 6, celo ? 4 : 2),
+      usd: money(valueOf(usdc, celo ? 18 : 6, prices.usdcUsd8)),
+      maxUsd: maxUsdInput(valueOf(usdc, celo ? 18 : 6, prices.usdcUsd8)),
       network,
+      id: tag("usdc"),
     });
   }
   if (usdtListed) {
@@ -477,6 +481,7 @@ function payChoices(
       usd: money(valueOf(usdt, 6, prices.usdtUsd8)),
       maxUsd: maxUsdInput(valueOf(usdt, 6, prices.usdtUsd8)),
       network,
+      id: tag("usdt"),
     });
   }
   return choices;
@@ -507,11 +512,12 @@ export async function loadPayChoices(owner: Address): Promise<PayChoice[]> {
         readAmount(reads, 1),
         native,
         reads[0]?.status === "success",
-        wrapIsSix && reads[1]?.status === "success",
+        reads[1]?.status === "success",
         superAmount,
         site.name,
+        net,
       );
     }),
   );
-  return lists.flat();
+  return lists.flat().sort((left, right) => Number(right.usd.replace(/,/g, "")) - Number(left.usd.replace(/,/g, "")));
 }

@@ -7,6 +7,14 @@ export function isGroupNet(value: string): value is GroupNet {
   return (groupNets as readonly string[]).includes(value);
 }
 
+/** Celo / Base labels from token rows, form fields, or group ids. */
+export function netFromLabel(value?: string): GroupNet {
+  if (value && /celo/i.test(value)) return "celo";
+  if (value && /base/i.test(value)) return "base";
+  if (value && isGroupNet(value)) return value;
+  return "celo";
+}
+
 /** The chain this app build writes savings to. Base Sepolia counts as Base. */
 export function appGroupNet(): GroupNet {
   return appNetwork() === "celo" ? "celo" : "base";

@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { IconCheck, IconChevron } from "@/components/icons";
 import { TokenIcon } from "@/components/token-icon";
+import Link from "next/link";
 import { previewPay, previewReceive } from "@/lib/actions";
+import { groupNetLabel, netFromLabel, type GroupNet } from "@/lib/group-network";
 import { networkLabel } from "@/lib/network";
 import type { PayAsset, ReceiveAsset } from "@/lib/pay-math";
 
@@ -15,6 +17,7 @@ export type PayChoice = {
   /** Spendable dollar value of this token, floored to a USD input. */
   maxUsd?: string;
   network?: string;
+  id?: string;
 };
 
 type Line = { label: string; value: string };
@@ -65,13 +68,17 @@ function moneyOf(value: string) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
-function richest(choices: PayChoice[]): PayAsset {
+function choiceId(choice: PayChoice) {
+  return choice.id || `${choice.network ?? ""}-${choice.pay}`;
+}
+
+function richest(choices: PayChoice[]): PayChoice | undefined {
   const ranked = choices.reduce<PayChoice | undefined>((best, choice) => {
     if (!best || moneyOf(choice.usd) > moneyOf(best.usd)) return choice;
     return best;
   }, undefined);
-  if (ranked && moneyOf(ranked.usd) > 0) return ranked.pay;
-  return choices[0]?.pay ?? "usdc";
+  if (ranked && moneyOf(ranked.usd) > 0) return ranked;
+  return choices.find((choice) => netFromLabel(choice.network) === "celo" && choice.pay === "usdcx") ?? choices[0];
 }
 
 function capOf(choice: PayChoice | undefined) {
@@ -131,9 +138,9 @@ function AmountShare({
   );
 }
 
-function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value: PayAsset; onChange: (pay: PayAsset) => void }) {
+function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
-  const picked = choices.find((choice) => choice.pay === value) ?? choices[0];
+  const picked = choices.find((choice) => choiceId(choice) === value) ?? choices[0];
   if (!picked) return <p className="text-sm text-muted-foreground">No token is available in this wallet.</p>;
   return (
     <div>
@@ -148,6 +155,7 @@ function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold">{picked.label}</span>
           <span className="block text-xs text-muted-foreground tabular-nums">
+            {picked.network ? `${picked.network} · ` : ""}
             {picked.balance} available
           </span>
         </span>
@@ -157,15 +165,15 @@ function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value
       {open ? (
         <ul role="listbox" aria-label="Pay with" className="mt-2 overflow-hidden rounded-2xl border border-border bg-white">
           {choices.map((choice) => {
-            const selected = choice.pay === picked.pay;
+            const selected = choiceId(choice) === choiceId(picked);
             return (
-              <li key={choice.pay}>
+              <li key={choiceId(choice)}>
                 <button
                   type="button"
                   role="option"
                   aria-selected={selected}
                   onClick={() => {
-                    onChange(choice.pay);
+                    onChange(choiceId(choice));
                     setOpen(false);
                   }}
                   className={`flex w-full items-center gap-3 px-3 py-2.5 text-left ${selected ? "bg-[#F4F8E8]" : ""}`}
@@ -173,7 +181,10 @@ function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value
                   <TokenIcon symbol={choice.label} network={choice.network ?? networkLabel()} className="size-8" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold">{choice.label}</span>
-                    <span className="block text-xs text-muted-foreground tabular-nums">{choice.balance} available</span>
+                    <span className="block text-xs text-muted-foreground tabular-nums">
+                      {choice.network ? `${choice.network} · ` : ""}
+                      {choice.balance} available
+                    </span>
                   </span>
                   <span className="text-sm font-medium tabular-nums">${choice.usd}</span>
                   {selected ? <IconCheck className="size-4 text-[#141414]" /> : <span className="size-4" />}
@@ -195,6 +206,8 @@ export function PayWith({
   protocolOnTop,
   full,
   onAmount,
+  stayOn,
+  onBlocked,
 }: {
   choices: PayChoice[];
   mode: "vault" | "wallet" | "stream";
@@ -203,16 +216,32 @@ export function PayWith({
   protocolOnTop?: boolean;
   full?: boolean;
   onAmount?: (usd: string) => void;
+  /** When set, a token on the other chain asks the user to swap instead of paying. */
+  stayOn?: GroupNet;
+  onBlocked?: (blocked: boolean) => void;
 }) {
-  const [pay, setPay] = useState<PayAsset>(() => richest(choices));
+  const start = richest(choices);
+  const [pickedId, setPickedId] = useState(() => (start ? choiceId(start) : ""));
   const [usd, setUsd] = useState("");
   const [share, setShare] = useState(0);
   const [lines, setLines] = useState<Line[]>([]);
   const [error, setError] = useHeldError();
   const ticket = useRef(0);
+  const picked = choices.find((choice) => choiceId(choice) === pickedId) ?? start;
+  const tokenNet = netFromLabel(picked?.network);
+  const swap = Boolean(stayOn && picked && tokenNet !== stayOn);
+
+  useEffect(() => {
+    onBlocked?.(swap);
+  }, [swap, onBlocked]);
 
   useEffect(() => {
     const mine = ++ticket.current;
+    if (swap) {
+      setLines([]);
+      setError("");
+      return;
+    }
     const hasAmount = Boolean(fixedSuper && fixedSuper !== "0") || Boolean(usd.trim());
     if (!hasAmount) {
       setError("");
@@ -220,14 +249,14 @@ export function PayWith({
     }
     const handle = setTimeout(() => {
       void previewPay({
-        pay,
+        pay: picked?.pay ?? "usdc",
         usd: fixedSuper ? undefined : usd,
         superWei: fixedSuper,
         mode,
         duration,
         protocolOnTop,
         full,
-        network: choices.find((choice) => choice.pay === pay)?.network,
+        network: picked?.network,
       }).then((result) => {
         if (mine !== ticket.current) return;
         setLines(result.lines);
@@ -235,9 +264,8 @@ export function PayWith({
       });
     }, 350);
     return () => clearTimeout(handle);
-  }, [pay, usd, duration, fixedSuper, mode, protocolOnTop, full]);
+  }, [pickedId, usd, duration, fixedSuper, mode, protocolOnTop, full, swap, picked?.pay, picked?.network]);
 
-  const picked = choices.find((choice) => choice.pay === pay);
   const cap = capOf(picked);
 
   function writeUsd(next: string) {
@@ -246,23 +274,37 @@ export function PayWith({
     onAmount?.(next);
   }
 
-  function choose(next: PayAsset) {
-    const nextCap = capOf(choices.find((choice) => choice.pay === next));
-    const amount = dollars(nextCap, share);
-    setPay(next);
+  function choose(id: string) {
+    const next = choices.find((choice) => choiceId(choice) === id);
+    const amount = dollars(capOf(next), share);
+    setPickedId(id);
     setUsd(amount);
     onAmount?.(amount);
   }
 
+  const here = stayOn ? groupNetLabel(stayOn) : "";
+  const there = picked?.network || groupNetLabel(tokenNet);
+
   return (
     <div className="space-y-3">
-      <input type="hidden" name="pay" value={pay} />
+      <input type="hidden" name="pay" value={picked?.pay ?? ""} />
+      <input type="hidden" name="network" value={tokenNet} />
       <div className="space-y-1.5">
         <p className="text-sm font-medium">Pay with</p>
-        <TokenSelect choices={choices} value={pay} onChange={choose} />
+        <TokenSelect choices={choices} value={picked ? choiceId(picked) : ""} onChange={choose} />
       </div>
-      {fixedSuper ? null : <AmountShare cap={cap} usd={usd} onUsd={writeUsd} />}
-      <QuoteList lines={lines} error={error} />
+      {swap ? (
+        <div className="rounded-2xl bg-muted px-4 py-3 text-sm leading-relaxed">
+          <p>
+            This is on {here}. You picked a {there} token. Swap it to a {here} dollar, then come back to top up.
+          </p>
+          <Link href="/home/send" className="mt-2 inline-block font-medium underline">
+            Swap or send
+          </Link>
+        </div>
+      ) : null}
+      {swap || fixedSuper ? null : <AmountShare cap={cap} usd={usd} onUsd={writeUsd} />}
+      {swap ? null : <QuoteList lines={lines} error={error} />}
     </div>
   );
 }

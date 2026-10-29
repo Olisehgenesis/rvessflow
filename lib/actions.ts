@@ -15,7 +15,7 @@ import { goalNotes, patchGoalNote, recordActivity, saveGoalNote, type ActivityRe
 import { parseUsd, readPay, readReceive, type PayAsset } from "@/lib/pay-math";
 import { activityUnits, isSendAsset, parseSendAmount, type SendAsset } from "@/lib/send-math";
 import { sendRoute } from "@/lib/send";
-import { appGroupNet, groupNetLabel, isGroupNet, parseGroupKey, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
+import { appGroupNet, groupNetLabel, netFromLabel, parseGroupKey, type GroupNet } from "@/lib/group-network";
 import { vaultSite } from "@/lib/vault-site";
 import { planIntent } from "@/lib/plan";
 import {
@@ -140,8 +140,15 @@ function rethrowRedirect(error: unknown) {
 }
 
 function networkField(formData: FormData): GroupNet {
-  const raw = String(formData.get("network") ?? "");
-  return isGroupNet(raw) ? raw : recommendedGroupNet;
+  return netFromLabel(String(formData.get("network") ?? ""));
+}
+
+function wrongChain(id: string, formData: FormData): string | null {
+  if (!formData.get("pay")) return null;
+  const here = parseGroupKey(id).net;
+  const token = networkField(formData);
+  if (here === token) return null;
+  return `This is on ${groupNetLabel(here)}. Swap to a ${groupNetLabel(here)} token first.`;
 }
 
 function payField(formData: FormData): PayAsset | undefined {
@@ -796,6 +803,8 @@ export async function doAddFunds(_prev: ActionState, formData: FormData): Promis
     const who = await viewer();
     const id = String(formData.get("id") ?? "");
     const pay = payField(formData);
+    const crossed = wrongChain(id, formData);
+    if (crossed) return { error: crossed };
     const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const [data, notes] = await Promise.all([loadPortfolio(who), goalNotes(who.address)]);
     const flow = data.flows.find((item) => item.id === id);
@@ -876,6 +885,8 @@ export async function doLockTop(_prev: ActionState, formData: FormData): Promise
     const who = await viewer();
     const id = String(formData.get("id") ?? "");
     const pay = payField(formData);
+    const crossed = wrongChain(id, formData);
+    if (crossed) return { error: crossed };
     const data = await loadPortfolio(who);
     const lock = data.locks.find((item) => item.id === id);
     const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""), lock ? assetKind(lock.token) === "ethx" : false);
@@ -943,6 +954,8 @@ export async function doGroup(_prev: ActionState, formData: FormData): Promise<A
     const who = await viewer();
     const id = String(formData.get("id") ?? "");
     const pay = payField(formData);
+    const crossed = wrongChain(id, formData);
+    if (crossed) return { error: crossed };
     const intent = refIntent({ kind: "group" as const, fn, id, pay, ref: "" });
     if (who.method === "tester") {
       if (pay) return await finishTester(intent);
