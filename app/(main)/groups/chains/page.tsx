@@ -11,7 +11,7 @@ export default async function GroupChainsPage() {
   return (
     <Page title="Base and Celo" back="/groups/new">
       <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
-        One address holds tokens on both chains. A group lives on the chain you pick when you create it. Members pay in that chain&apos;s dollar token. You cannot move a running group across.
+        One address holds tokens on both chains. A saving, stream, lock, top-up, or group lives on the chain you pick when you create it. Pay in that chain&apos;s dollar token. You cannot move a running position across.
       </p>
       <ul className="space-y-4">
         {(["celo", "base"] as const).map((net) => {

@@ -24,6 +24,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { money, shortAddress } from "@/lib/display";
 import { appGroupNet, groupKey, type GroupNet } from "@/lib/group-network";
 import { groupPlainOn, groupsOfOn, groupSite, otherGroupNet } from "@/lib/group-site";
+import { vaultSite } from "@/lib/vault-site";
 import { appChain, appNetwork, appRpc, explorerUrl, networkLabel, stableName } from "@/lib/network";
 
 const network = appNetwork();
@@ -311,6 +312,7 @@ const kindName = ["expense", "saving", "flow"] as const;
 
 export type FlowRow = {
   id: string;
+  network: GroupNet;
   name: string;
   kind: "expense" | "saving" | "flow";
   token: Address;
@@ -333,6 +335,7 @@ export type FlowRow = {
 
 export type LockRow = {
   id: string;
+  network: GroupNet;
   name: string;
   token: Address;
   principal: string;
@@ -429,11 +432,12 @@ type FlowRecord = {
   goalAmount: bigint;
 };
 
-function toFlowRow(id: bigint, flow: FlowRecord, now: bigint): FlowRow {
+function toFlowRow(id: bigint, flow: FlowRecord, now: bigint, net: GroupNet = appGroupNet()): FlowRow {
   const kind = Number(flow.kind);
   const remaining = kind === 1 && !flow.settled ? flow.reserved : streamRemaining({ ...flow, kind }, now);
   return {
-    id: id.toString(),
+    id: groupKey(net, id),
+    network: net,
     name: readName(flow.name) || "Untitled",
     kind: kindName[kind] ?? "flow",
     token: flow.token,
@@ -473,6 +477,85 @@ function streamRemaining(flow: {
   const elapsed = now >= flow.end ? flow.duration : now - flow.start;
   const streamed = flow.rate * elapsed;
   return flow.reserved > streamed ? flow.reserved - streamed : 0n;
+}
+
+async function loadSitePositions(net: GroupNet, owner: Address, now: bigint) {
+  const site = vaultSite(net);
+  const vault = await site.client.readContract({ address: site.factory, abi: factoryAbi, functionName: "vaultOf", args: [owner] });
+  const lockIds = await site.client.readContract({ address: site.locks, abi: lockAbi, functionName: "locksOf", args: [owner] });
+  let idle = 0n;
+  let held = 0n;
+  let streaming = 0n;
+  let flows: FlowRow[] = [];
+  if (vault !== zeroAddress) {
+    const [sheet, count] = await Promise.all([
+      site.client.readContract({ address: vault, abi: vaultAbi, functionName: "balanceSheet", args: [site.fusdcx] }),
+      site.client.readContract({ address: vault, abi: vaultAbi, functionName: "flowCount" }),
+    ]);
+    idle = sheet[0];
+    held = sheet[1];
+    streaming = sheet[2];
+    const totalFlows = Number(count);
+    if (totalFlows > 0) {
+      const ids = await site.client.multicall({
+        contracts: Array.from({ length: totalFlows }, (_, i) => ({
+          address: vault,
+          abi: vaultAbi,
+          functionName: "flowIdAt" as const,
+          args: [BigInt(i)] as const,
+        })),
+        allowFailure: false,
+      });
+      const records = await site.client.multicall({
+        contracts: ids.map((id) => ({
+          address: vault,
+          abi: vaultAbi,
+          functionName: "getFlow" as const,
+          args: [id] as const,
+        })),
+        allowFailure: false,
+      });
+      flows = records.map((flow, i) => toFlowRow(ids[i], flow, now, net));
+    }
+  }
+  const lockRecords = lockIds.length
+    ? await site.client.multicall({
+        contracts: lockIds.flatMap((id) => [
+          { address: site.locks, abi: lockAbi, functionName: "locks" as const, args: [id] as const },
+          { address: site.locks, abi: lockAbi, functionName: "previewBreak" as const, args: [id] as const },
+          { address: site.locks, abi: lockAbi, functionName: "previewMature" as const, args: [id] as const },
+        ]),
+        allowFailure: false,
+      })
+    : [];
+  const locks: LockRow[] = [];
+  let locked = 0n;
+  for (let i = 0; i < lockIds.length; i++) {
+    const entry = lockRecords[i * 3] as readonly [Address, Address, bigint, bigint, bigint, bigint, bigint, boolean, number, Hex, bigint, bigint];
+    const preview = lockRecords[i * 3 + 1] as readonly [bigint, bigint];
+    const mature = lockRecords[i * 3 + 2] as readonly [bigint, bigint];
+    const principal = entry[2];
+    const settled = entry[7];
+    const token = entry[1];
+    if (!settled && token.toLowerCase() === site.fusdcx.toLowerCase()) locked += principal;
+    locks.push({
+      id: groupKey(net, lockIds[i]),
+      network: net,
+      name: readName(entry[9]) || "Lock",
+      token,
+      principal: principal.toString(),
+      target: entry[10].toString(),
+      start: Number(entry[3]),
+      end: Number(entry[4]),
+      settled,
+      penaltyBps: Number(entry[8]),
+      yieldRate: entry[6].toString(),
+      breakPayout: preview[0].toString(),
+      breakPenalty: preview[1].toString(),
+      matureBonus: mature[1].toString(),
+    });
+  }
+  return { vault, idle, held, streaming, locked, flows, locks };
 }
 
 export const loadPortfolio = cache(async (who: { address: Address; name: string; index: number }, scope: "full" | "home" = "full"): Promise<Portfolio> => {
@@ -538,7 +621,7 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
       });
       readAt = Math.floor(Date.now() / 1000);
       const now = BigInt(readAt);
-      flows = records.map((flow, i) => toFlowRow(ids[i], flow, now));
+      flows = records.map((flow, i) => toFlowRow(ids[i], flow, now, appGroupNet()));
     }
   }
 
@@ -564,7 +647,8 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
     const token = entry[1];
     if (!settled && token.toLowerCase() === addresses.fusdcx.toLowerCase()) locked += principal;
     locks.push({
-      id: lockIds[i].toString(),
+      id: groupKey(appGroupNet(), lockIds[i]),
+      network: appGroupNet(),
       name: readName(entry[9]) || "Lock",
       token,
       principal: principal.toString(),
@@ -579,6 +663,22 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
       matureBonus: mature[1].toString(),
     });
   }
+
+  const otherBook = await loadSitePositions(otherGroupNet(), me.address, BigInt(readAt)).catch(() => ({
+    vault: zeroAddress as Address,
+    idle: 0n,
+    held: 0n,
+    streaming: 0n,
+    locked: 0n,
+    flows: [] as FlowRow[],
+    locks: [] as LockRow[],
+  }));
+  idle += otherBook.idle;
+  held += otherBook.held;
+  streaming += otherBook.streaming;
+  locked += otherBook.locked;
+  flows = [...flows, ...otherBook.flows];
+  locks.push(...otherBook.locks);
 
   const total = walletBal + idle + held + streaming + locked;
   const [groupRows, otherRows, upgradeReadyAt] = await Promise.all([
@@ -662,7 +762,7 @@ export const loadIncoming = cache(async (me: Address): Promise<IncomingItem[]> =
       });
       const items: IncomingItem[] = [];
       records.forEach((record, position) => {
-        const flow = toFlowRow(ids[position], record, now);
+        const flow = toFlowRow(ids[position], record, now, appGroupNet());
         if (flow.settled || flow.recipient.toLowerCase() !== mine) return;
         items.push({ flow, vault, from: person.name });
       });

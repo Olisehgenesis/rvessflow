@@ -160,7 +160,7 @@ export function GoalLink({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate font-medium">{flow.name}</p>
-              <p className="text-xs text-muted-foreground">{caption ?? label}</p>
+              <p className="text-xs text-muted-foreground">{caption ?? `${label} · ${flow.network === "celo" ? "Celo" : "Base"}`}</p>
             </div>
             <IconChevron className="mt-1 size-4 shrink-0 text-muted-foreground" />
           </div>
@@ -188,15 +188,15 @@ export function GoalLink({
 
 export function LockLink({ lock, quote }: { lock: LockRow; quote: Quote }) {
   const asset = assetByAddress(lock.token);
-  const symbol = asset.symbol === "USDCx" ? "USD" : asset.symbol;
-  const name = asset.symbol === "USDCx" ? "US Dollar" : asset.name;
+  const symbol = asset.symbol === "USDCx" || asset.symbol === "cUSDx" ? "USD" : asset.symbol;
+  const name = asset.symbol === "USDCx" || asset.symbol === "cUSDx" ? "US Dollar" : asset.name;
   const penalty = `${(lock.penaltyBps / 100).toFixed(2).replace(/\.00$/, "")}%`;
   const amount = asset.symbol === "ETHx" ? `${show(lock.principal, { ...quote, code: "fusdcx", unit: "ETH", perToken: 1, digits: 4 })} ETH` : `${quote.unit} ${show(lock.principal, quote)}`;
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
       <Link href={`/vaults/${lock.id}`} className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <TokenMark symbol={symbol} network={networkLabel()} />
+          <TokenMark symbol={symbol} network={lock.network === "celo" ? "Celo" : "Base"} />
           <div>
             <p className="font-medium">{symbol}</p>
             <p className="text-xs text-muted-foreground">{name}</p>

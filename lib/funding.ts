@@ -22,6 +22,7 @@ import {
 } from "@/lib/pay-math";
 import { loadPrices, type Prices } from "@/lib/prices";
 import { addresses, erc20, factoryAbi, publicClient, stableLabel, streamNeed, vaultAbi } from "@/lib/protocol";
+import type { VaultSite } from "@/lib/vault-site";
 
 const quoterAbi = parseAbi([
   "function quoteExactOutputSingle((address tokenIn, address tokenOut, uint256 amount, uint24 fee, uint160 sqrtPriceLimitX96) params) returns (uint256 amountIn, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
@@ -171,8 +172,110 @@ async function requireSpendable(owner: Address, pay: PayAsset, needed: bigint) {
   if (problem) throw new Error(problem);
 }
 
-export async function fundingCalls(owner: Address, vault: Address, pay: PayAsset, needed: bigint, mode: "vault" | "wallet"): Promise<PreparedCall[]> {
+const wrapAbi = parseAbi([
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function depositUnderlying(address token, uint256 underlyingAmount)",
+  "function depositSuper(address token, uint256 amount)",
+  "function upgrade(uint256 amount)",
+]);
+
+function fundCall(
+  to: Address,
+  functionName: "approve" | "depositSuper" | "depositUnderlying" | "upgrade",
+  args: readonly unknown[],
+): PreparedCall {
+  return {
+    to,
+    data: encodeFunctionData({ abi: wrapAbi, functionName, args: args as never }),
+    value: "0",
+  };
+}
+
+/** Celo (and any site without Uniswap wrap) deposits super or the Superfluid underlying. */
+async function wrapSiteCalls(
+  site: VaultSite,
+  owner: Address,
+  vault: Address,
+  pay: PayAsset,
+  needed: bigint,
+  mode: "vault" | "wallet",
+): Promise<PreparedCall[]> {
   if (needed <= 0n) return [];
+  if (pay === "usdcx") {
+    if (mode === "wallet") return [];
+    const due = needed + protocolFeeOf(needed);
+    const allowanceNow = await site.client.readContract({
+      address: site.fusdcx,
+      abi: wrapAbi,
+      functionName: "allowance",
+      args: [owner, vault],
+    });
+    const calls: PreparedCall[] = [];
+    if (allowanceNow < due) calls.push(fundCall(site.fusdcx, "approve", [vault, due]));
+    calls.push(fundCall(vault, "depositSuper", [site.fusdcx, needed]));
+    return calls;
+  }
+  if (pay === "eth") {
+    throw new Error(
+      site.net === "celo"
+        ? "A Celo saving takes cUSDx. Pay with cUSDx or USDm, or convert CELO first."
+        : "Pay with the savings token on this chain, or convert first.",
+    );
+  }
+  const token = pay === "usdt" ? site.usdt : site.net === "celo" ? site.wrap : site.usdc;
+  if (pay === "usdt" && token.toLowerCase() !== site.wrap.toLowerCase()) {
+    throw new Error(
+      site.net === "celo"
+        ? "This Celo vault wraps USDm into cUSDx. Pay with cUSDx or USDm, or convert USDT first."
+        : "Convert that token to the savings dollar first.",
+    );
+  }
+  const decimals = Number(
+    await site.client.readContract({ address: token, abi: wrapAbi, functionName: "decimals" }),
+  );
+  const dueSuper = needed + protocolFeeOf(needed);
+  const underlying = decimals >= 18 ? dueSuper : dueSuper / 10n ** BigInt(18 - decimals);
+  if (underlying <= 0n) throw new Error("Enter a larger amount.");
+  const balance = await site.client.readContract({ address: token, abi: wrapAbi, functionName: "balanceOf", args: [owner] });
+  const symbol = site.net === "celo" && token.toLowerCase() === site.wrap.toLowerCase() ? "USDm" : pay.toUpperCase();
+  const problem = spendableProblem({
+    symbol,
+    balance,
+    needed: underlying,
+    scale: decimals,
+    digits: decimals > 6 ? 4 : 2,
+    leaveFee: false,
+  });
+  if (problem) throw new Error(problem);
+  const spender = mode === "vault" ? vault : site.fusdcx;
+  const allowanceNow = await site.client.readContract({
+    address: token,
+    abi: wrapAbi,
+    functionName: "allowance",
+    args: [owner, spender],
+  });
+  const calls: PreparedCall[] = [];
+  if (allowanceNow < underlying) calls.push(fundCall(token, "approve", [spender, underlying]));
+  if (mode === "vault") calls.push(fundCall(vault, "depositUnderlying", [site.fusdcx, underlying]));
+  else calls.push(fundCall(site.fusdcx, "upgrade", [underlying]));
+  return calls;
+}
+
+export async function fundingCalls(
+  owner: Address,
+  vault: Address,
+  pay: PayAsset,
+  needed: bigint,
+  mode: "vault" | "wallet",
+  site?: VaultSite,
+): Promise<PreparedCall[]> {
+  if (needed <= 0n) return [];
+  if (site && site.chainId !== 8453 && site.chainId !== 84532) {
+    return wrapSiteCalls(site, owner, vault, pay, needed, mode);
+  }
   const quote = await quoteFund(pay, needed, mode);
   await requireSpendable(owner, pay, quote.amountInMax);
   if (pay === "usdcx") {
@@ -291,6 +394,7 @@ export async function previewLines(input: {
   coveredWei?: string;
   /** Add money deposits the full amount even when the vault already holds some. */
   full?: boolean;
+  network?: string;
 }): Promise<QuoteLine[]> {
   const prices = await loadPrices();
   let face = 0n;
@@ -318,6 +422,19 @@ export async function previewLines(input: {
     ]);
   }
   const mode = input.mode === "wallet" ? "wallet" : "vault";
+  if (input.network && /celo/i.test(input.network)) {
+    const short = needed - covered;
+    const fee = protocolFeeOf(short);
+    const symbol = input.pay === "usdcx" ? "cUSDx" : input.pay === "usdc" ? "USDm" : input.pay.toUpperCase();
+    if (input.pay === "eth" || input.pay === "usdt") {
+      throw new Error("On Celo pay with cUSDx or USDm. Convert USDT or CELO first.");
+    }
+    return shownQuote([
+      { label: "You spend", value: `${formatAmount(short + fee, 18, 4)} ${symbol}` },
+      { label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(fee, prices.usdcUsd8))}` },
+      { label: "Slippage", value: "No swap" },
+    ]);
+  }
   if (input.pay !== "usdc" && input.pay !== "usdcx") {
     const code = await publicClient.getCode({ address: baseMarket.quoterV2 });
     if (!code || code === "0x") return [];

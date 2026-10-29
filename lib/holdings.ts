@@ -7,6 +7,8 @@ import { balanceColumns, holdingCaption } from "@/lib/home-math";
 import { formatAmount, formatUsd8, type PayAsset } from "@/lib/pay-math";
 import { coinMap, loadPrices } from "@/lib/prices";
 import { addresses, chain, erc20, factoryAbi, lockAbi, networkName, publicClient, stableLabel, vaultAbi, type Portfolio } from "@/lib/protocol";
+import { vaultSite } from "@/lib/vault-site";
+import type { GroupNet } from "@/lib/group-network";
 import { cashTokens, finderTokens, type FinderToken } from "@/lib/stables";
 import type { Quote } from "@/lib/quote";
 import type { HoldingRow } from "@/lib/holding-row";
@@ -19,6 +21,7 @@ export type PayChoice = {
   balance: string;
   usd: string;
   maxUsd: string;
+  network?: string;
 };
 
 export type HoldingsView = {
@@ -276,10 +279,25 @@ function take(pieces: Map<string, Piece>, keys: string[]): Piece[] {
   });
 }
 
-function superChoice(amount: bigint, price8: bigint): PayChoice {
+function superChoice(amount: bigint, price8: bigint, label = stableLabel, network?: string): PayChoice {
   const shown = formatAmount(amount / 10n ** 12n, 6, 2);
   const value = valueOf(amount, 18, price8);
-  return { pay: "usdcx", label: stableLabel, balance: shown, usd: money(value), maxUsd: maxUsdInput(value) };
+  return { pay: "usdcx", label, balance: shown, usd: money(value), maxUsd: maxUsdInput(value), network };
+}
+
+async function spendableSuperOn(net: GroupNet, owner: Address): Promise<bigint> {
+  const site = vaultSite(net);
+  try {
+    const [wallet, vault] = await Promise.all([
+      site.client.readContract({ address: site.fusdcx, abi: erc20, functionName: "balanceOf", args: [owner] }),
+      site.client.readContract({ address: site.factory, abi: factoryAbi, functionName: "vaultOf", args: [owner] }),
+    ]);
+    if (vault === zeroAddress) return wallet;
+    const idle = await site.client.readContract({ address: vault, abi: vaultAbi, functionName: "unallocated", args: [site.fusdcx] });
+    return wallet + idle;
+  } catch {
+    return 0n;
+  }
 }
 
 export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: Quote): Promise<HoldingsView> {
@@ -427,23 +445,28 @@ function payChoices(
   usdcListed: boolean,
   usdtListed: boolean,
   superAmount: bigint,
+  network?: string,
 ): PayChoice[] {
   const choices: PayChoice[] = [];
-  if (superAmount > 0n) choices.push(superChoice(superAmount, prices.usdcUsd8));
-  choices.push({
-    pay: "eth",
-    label: chain.nativeCurrency.symbol,
-    balance: formatAmount(eth, 18, 6),
-    usd: money(valueOf(eth, 18, prices.ethUsd8)),
-    maxUsd: maxUsdInput(valueOf(eth, 18, prices.ethUsd8)),
-  });
+  choices.push(superChoice(superAmount, prices.usdcUsd8, network?.startsWith("Celo") ? "cUSDx" : stableLabel, network));
+  if (eth > 0n || !network?.startsWith("Celo")) {
+    choices.push({
+      pay: "eth",
+      label: network?.startsWith("Celo") ? "CELO" : chain.nativeCurrency.symbol,
+      balance: formatAmount(eth, 18, 6),
+      usd: money(valueOf(eth, 18, prices.ethUsd8)),
+      maxUsd: maxUsdInput(valueOf(eth, 18, prices.ethUsd8)),
+      network,
+    });
+  }
   if (usdcListed) {
     choices.push({
       pay: "usdc",
-      label: "USDC",
-      balance: formatAmount(usdc, 6, 2),
-      usd: money(valueOf(usdc, 6, prices.usdcUsd8)),
-      maxUsd: maxUsdInput(valueOf(usdc, 6, prices.usdcUsd8)),
+      label: network?.startsWith("Celo") ? "USDm" : "USDC",
+      balance: formatAmount(usdc, network?.startsWith("Celo") ? 18 : 6, network?.startsWith("Celo") ? 4 : 2),
+      usd: money(valueOf(usdc, network?.startsWith("Celo") ? 18 : 6, prices.usdcUsd8)),
+      maxUsd: maxUsdInput(valueOf(usdc, network?.startsWith("Celo") ? 18 : 6, prices.usdcUsd8)),
+      network,
     });
   }
   if (usdtListed) {
@@ -453,20 +476,42 @@ function payChoices(
       balance: formatAmount(usdt, 6, 2),
       usd: money(valueOf(usdt, 6, prices.usdtUsd8)),
       maxUsd: maxUsdInput(valueOf(usdt, 6, prices.usdtUsd8)),
+      network,
     });
   }
   return choices;
 }
 
 export async function loadPayChoices(owner: Address): Promise<PayChoice[]> {
-  const [prices, balances, superAmount] = await Promise.all([loadPrices(), walletBalances(owner), spendableSuper(owner)]);
-  return payChoices(
-    prices,
-    readAmount(balances.reads, 0),
-    readAmount(balances.reads, 1),
-    balances.eth,
-    balances.reads[0]?.status === "success",
-    balances.reads[1]?.status === "success",
-    superAmount,
+  const prices = await loadPrices();
+  const nets: GroupNet[] = ["celo", "base"];
+  const lists = await Promise.all(
+    nets.map(async (net) => {
+      const site = vaultSite(net);
+      const wrapIsSix = site.wrap.toLowerCase() === site.usdc.toLowerCase();
+      const dollar = wrapIsSix ? site.usdc : site.wrap;
+      const [reads, native, superAmount] = await Promise.all([
+        site.client.multicall({
+          contracts: [
+            { address: dollar, abi: erc20, functionName: "balanceOf" as const, args: [owner] as const },
+            { address: site.usdt, abi: erc20, functionName: "balanceOf" as const, args: [owner] as const },
+          ],
+          allowFailure: true,
+        }),
+        site.client.getBalance({ address: owner }).catch(() => 0n),
+        spendableSuperOn(net, owner),
+      ]);
+      return payChoices(
+        prices,
+        readAmount(reads, 0),
+        readAmount(reads, 1),
+        native,
+        reads[0]?.status === "success",
+        wrapIsSix && reads[1]?.status === "success",
+        superAmount,
+        site.name,
+      );
+    }),
   );
+  return lists.flat();
 }

@@ -1,5 +1,6 @@
 import type { Address, Hex } from "viem";
 import type { PayAsset, ReceiveAsset } from "@/lib/pay-math";
+import type { GroupNet } from "@/lib/group-network";
 
 export const frequencies = ["Once", "Daily", "Weekly", "Monthly", "Yearly"] as const;
 export type Frequency = (typeof frequencies)[number];
@@ -49,6 +50,7 @@ export type Intent = (
       startAt?: number;
       /** When set, `amount` is USD and the wallet pays with this asset. */
       pay?: PayAsset;
+      network?: GroupNet;
     }
   | {
       kind: "stream";
@@ -62,6 +64,7 @@ export type Intent = (
       frequency: Frequency;
       startedAt: number;
       pay?: PayAsset;
+      network?: GroupNet;
     }
   | {
       kind: "lock";
@@ -72,9 +75,10 @@ export type Intent = (
       earnYield: boolean;
       startedAt: number;
       pay?: PayAsset;
+      network?: GroupNet;
     }
-  | { kind: "deposit"; token: string; amount: string; pay?: PayAsset }
-  | { kind: "withdraw"; amount: string; receive?: ReceiveAsset }
+  | { kind: "deposit"; token: string; amount: string; pay?: PayAsset; network?: GroupNet }
+  | { kind: "withdraw"; amount: string; receive?: ReceiveAsset; network?: GroupNet }
   | { kind: "send"; asset: string; amount: string; to: string; label: string }
   | {
       kind: "goal";
@@ -82,8 +86,9 @@ export type Intent = (
       id: string;
       amount: string;
       pay?: PayAsset;
+      network?: GroupNet;
     }
-  | { kind: "lockAct"; fn: "topup" | "break" | "mature"; id: string; amount: string; pay?: PayAsset }
+  | { kind: "lockAct"; fn: "topup" | "break" | "mature"; id: string; amount: string; pay?: PayAsset; network?: GroupNet }
   | {
       kind: "group";
       fn: "postCollateral" | "start" | "contribute" | "exitBeforeStart" | "cancelBeforeStart" | "claimCollateral";

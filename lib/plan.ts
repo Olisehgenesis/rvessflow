@@ -9,10 +9,12 @@ import { sendLabel, sendRoute, sendToken, walletBalance } from "@/lib/send";
 import { isSendAsset, parseSendAmount, spendableEth } from "@/lib/send-math";
 import { appGroupNet, groupKey, isGroupNet, parseGroupKey, type GroupNet } from "@/lib/group-network";
 import { groupSite } from "@/lib/group-site";
+import { vaultSite, type VaultSite } from "@/lib/vault-site";
 import { readName, stableLabel, toName } from "@/lib/protocol";
 import {
   addresses,
   allowAbi,
+  cfaAbi,
   readGroup,
   erc20,
   factoryAbi,
@@ -21,7 +23,6 @@ import {
   publicClient,
   vaultAbi,
   parseAmount,
-  streamNeed,
   withProtocolFee,
 } from "@/lib/protocol";
 
@@ -43,38 +44,64 @@ function done(intent: Intent, extra: { id?: string; href?: string } = {}): Plan 
   return { calls: [], intent, done: true, ...extra };
 }
 
-async function vaultOf(owner: Address): Promise<Address> {
-  return publicClient.readContract({
-    address: addresses.factory,
+function productNet(intent: { network?: string; id?: string }): GroupNet {
+  if (intent.network && isGroupNet(intent.network)) return intent.network;
+  if (intent.id) return parseGroupKey(intent.id).net;
+  return appGroupNet();
+}
+
+async function vaultOf(site: VaultSite, owner: Address): Promise<Address> {
+  return site.client.readContract({
+    address: site.factory,
     abi: factoryAbi,
     functionName: "vaultOf",
     args: [owner],
   });
 }
 
-async function balanceOf(owner: Address, token: Address) {
-  return publicClient.readContract({ address: token, abi: erc20, functionName: "balanceOf", args: [owner] });
+async function balanceOf(site: VaultSite, owner: Address, token: Address) {
+  return site.client.readContract({ address: token, abi: erc20, functionName: "balanceOf", args: [owner] });
 }
 
 async function sizedAmount(pay: PayAsset | undefined, amount: string): Promise<bigint> {
   return pay ? superForUsd(amount) : parseAmount(amount);
 }
 
-async function coverVault(calls: PreparedCall[], owner: Address, vault: Address, pay: PayAsset | undefined, shortfall: bigint) {
-  if (shortfall <= 0n) return;
-  if (!pay || pay === "usdcx") {
-    await approveIfNeeded(calls, owner, addresses.fusdcx, vault, withProtocolFee(shortfall));
-    calls.push(encode(vault, vaultAbi, "depositSuper", [addresses.fusdcx, shortfall]));
-    return;
-  }
-  calls.push(...(await fundingCalls(owner, vault, pay, shortfall, "vault")));
+async function streamNeedOn(site: VaultSite, amount: bigint, duration: bigint): Promise<bigint> {
+  const perSecond = amount / duration;
+  if (perSecond === 0n) throw new Error("That duration is too long for this amount. The stream would be less than 1 wei per second.");
+  const reserved = perSecond * duration;
+  const buffer = await site.client.readContract({
+    address: site.cfa,
+    abi: cfaAbi,
+    functionName: "getBufferAmountByFlowrate",
+    args: [site.fusdcx, perSecond],
+  });
+  return reserved + buffer * 2n + perSecond * 3600n;
 }
 
-async function coverWallet(calls: PreparedCall[], owner: Address, pay: PayAsset, due: bigint) {
-  const balance = await balanceOf(owner, addresses.fusdcx);
+async function coverVault(
+  calls: PreparedCall[],
+  site: VaultSite,
+  owner: Address,
+  vault: Address,
+  pay: PayAsset | undefined,
+  shortfall: bigint,
+) {
+  if (shortfall <= 0n) return;
+  if (!pay || pay === "usdcx") {
+    await approveIfNeeded(calls, owner, site.fusdcx, vault, withProtocolFee(shortfall), site.client);
+    calls.push(encode(vault, vaultAbi, "depositSuper", [site.fusdcx, shortfall]));
+    return;
+  }
+  calls.push(...(await fundingCalls(owner, vault, pay, shortfall, "vault", site)));
+}
+
+async function coverWallet(calls: PreparedCall[], site: VaultSite, owner: Address, pay: PayAsset, due: bigint) {
+  const balance = await balanceOf(site, owner, site.fusdcx);
   if (balance >= due) return;
-  if (pay === "usdcx") throw new Error(`Not enough ${stableLabel} in this wallet.`);
-  calls.push(...(await fundingCalls(owner, owner, pay, due - balance, "wallet")));
+  if (pay === "usdcx") throw new Error(`Not enough ${site.net === "celo" ? "cUSDx" : stableLabel} in this wallet.`);
+  calls.push(...(await fundingCalls(owner, owner, pay, due - balance, "wallet", site)));
 }
 
 async function approveIfNeeded(
@@ -94,12 +121,12 @@ async function approveIfNeeded(
   if (allowance < amount) calls.push(encode(token, erc20, "approve", [spender, amount]));
 }
 
-async function flows(owner: Address) {
-  const vault = await vaultOf(owner);
+async function flows(site: VaultSite, owner: Address) {
+  const vault = await vaultOf(site, owner);
   if (vault === zeroAddress) return { vault, rows: [] as FlowSnap[] };
-  const count = await publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "flowCount" });
+  const count = await site.client.readContract({ address: vault, abi: vaultAbi, functionName: "flowCount" });
   if (count === 0n) return { vault, rows: [] as FlowSnap[] };
-  const ids = await publicClient.multicall({
+  const ids = await site.client.multicall({
     contracts: Array.from({ length: Number(count) }, (_, index) => ({
       address: vault,
       abi: vaultAbi,
@@ -108,7 +135,7 @@ async function flows(owner: Address) {
     })),
     allowFailure: false,
   });
-  const records = await publicClient.multicall({
+  const records = await site.client.multicall({
     contracts: ids.map((id) => ({
       address: vault,
       abi: vaultAbi,
@@ -150,30 +177,35 @@ function recentMatch(rows: FlowSnap[], name: string, kind: number, startedAt: nu
 }
 
 async function planSaving(owner: Address, intent: Extract<Intent, { kind: "saving" }>): Promise<Plan> {
-  const found = await flows(owner);
+  const net = productNet(intent);
+  const site = vaultSite(net);
+  const found = await flows(site, owner);
   const match = recentMatch(found.rows, intent.name, 1, intent.startedAt);
-  if (match) return done(intent, { id: match.id.toString(), href: `/goals/${match.id.toString()}?fresh=1` });
+  if (match) {
+    const id = groupKey(net, match.id);
+    return done(intent, { id, href: `/goals/${id}?fresh=1` });
+  }
   if (intent.submitted) return pending(intent);
   if (found.vault === zeroAddress) {
-    return { calls: [encode(addresses.factory, factoryAbi, "createVault")], intent, done: false };
+    return { calls: [encode(site.factory, factoryAbi, "createVault")], intent, done: false, chainId: site.chainId };
   }
   const pay = intent.pay ? readPay(intent.pay) : undefined;
   const amount = await sizedAmount(pay, intent.amount);
-  const idle = await publicClient.readContract({
+  const idle = await site.client.readContract({
     address: found.vault,
     abi: vaultAbi,
     functionName: "unallocated",
-    args: [addresses.fusdcx],
+    args: [site.fusdcx],
   });
   const calls: PreparedCall[] = [];
-  if (idle < amount) await coverVault(calls, owner, found.vault, pay, amount - idle);
+  if (idle < amount) await coverVault(calls, site, owner, found.vault, pay, amount - idle);
   const startAt = intent.startAt ?? 0;
   const later = startAt > Math.floor(Date.now() / 1000);
   calls.push(
     later
       ? encode(found.vault, vaultAbi, "createFlow", [
           {
-            token: addresses.fusdcx,
+            token: site.fusdcx,
             recipient: owner,
             kind: 1,
             amount,
@@ -187,9 +219,9 @@ async function planSaving(owner: Address, intent: Extract<Intent, { kind: "savin
             name: toName(intent.name),
           },
         ])
-      : encode(found.vault, vaultAbi, "openSavings", [addresses.fusdcx, amount, BigInt(intent.duration), toName(intent.name), amount]),
+      : encode(found.vault, vaultAbi, "openSavings", [site.fusdcx, amount, BigInt(intent.duration), toName(intent.name), amount]),
   );
-  return { calls, intent: { ...intent, submitted: true }, done: false };
+  return { calls, intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
 }
 
 async function planStream(owner: Address, intent: Extract<Intent, { kind: "stream" }>): Promise<Plan> {
@@ -198,9 +230,12 @@ async function planStream(owner: Address, intent: Extract<Intent, { kind: "strea
   if (intent.flowKind === "expense" && recipient.toLowerCase() === owner.toLowerCase()) {
     throw new Error("An expense streams to someone else. Pick another account.");
   }
-  const found = await flows(owner);
+  const net = productNet(intent);
+  const site = vaultSite(net);
+  const found = await flows(site, owner);
   const match = recentMatch(found.rows, intent.name, intent.flowKind === "expense" ? 0 : 2, intent.startedAt);
   if (match) {
+    const id = groupKey(net, match.id);
     const ready = intent.startAt === 0 || intent.startAt <= Math.floor(Date.now() / 1000);
     if (ready && !match.active && !match.paused && !match.settled) {
       if (intent.submitted && intent.seen === "activate") return pending(intent);
@@ -208,32 +243,33 @@ async function planStream(owner: Address, intent: Extract<Intent, { kind: "strea
         calls: [encode(found.vault, vaultAbi, "activate", [match.id])],
         intent: { ...intent, submitted: true, seen: "activate" },
         done: false,
+        chainId: site.chainId,
       };
     }
-    return done(intent, { id: match.id.toString(), href: `/goals/${match.id.toString()}?fresh=1` });
+    return done(intent, { id, href: `/goals/${id}?fresh=1` });
   }
   if (intent.submitted) return pending(intent);
   if (found.vault === zeroAddress) {
-    return { calls: [encode(addresses.factory, factoryAbi, "createVault")], intent, done: false };
+    return { calls: [encode(site.factory, factoryAbi, "createVault")], intent, done: false, chainId: site.chainId };
   }
   const pay = intent.pay ? readPay(intent.pay) : undefined;
   const amount = await sizedAmount(pay, intent.amount);
   const duration = BigInt(intent.duration);
-  const need = await streamNeed(amount, duration);
-  const idle = await publicClient.readContract({
+  const need = await streamNeedOn(site, amount, duration);
+  const idle = await site.client.readContract({
     address: found.vault,
     abi: vaultAbi,
     functionName: "unallocated",
-    args: [addresses.fusdcx],
+    args: [site.fusdcx],
   });
   const calls: PreparedCall[] = [];
-  if (idle < need) await coverVault(calls, owner, found.vault, pay, need - idle);
+  if (idle < need) await coverVault(calls, site, owner, found.vault, pay, need - idle);
   const perSecond = amount / duration;
   const reserved = perSecond * duration;
   calls.push(
     encode(found.vault, vaultAbi, "createFlow", [
       {
-        token: addresses.fusdcx,
+        token: site.fusdcx,
         recipient,
         kind: intent.flowKind === "expense" ? 0 : 2,
         amount,
@@ -248,7 +284,7 @@ async function planStream(owner: Address, intent: Extract<Intent, { kind: "strea
       },
     ]),
   );
-  return { calls, intent: { ...intent, submitted: true }, done: false };
+  return { calls, intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
 }
 
 type LockSnap = readonly [Address, Address, bigint, bigint, bigint, bigint, bigint, boolean, number, Hex, bigint, bigint];
@@ -258,20 +294,22 @@ function asLock(entry: unknown): LockSnap {
 }
 
 async function planLock(owner: Address, intent: Extract<Intent, { kind: "lock" }>): Promise<Plan> {
+  const net = productNet(intent);
+  const site = vaultSite(net);
   const pay = intent.pay ? readPay(intent.pay) : undefined;
   if (!pay && !isAddress(intent.token)) throw new Error("Pick an asset.");
-  const token = pay ? addresses.fusdcx : getAddress(intent.token);
-  const allowed = await publicClient.readContract({
-    address: addresses.allowlist,
+  const token = pay ? site.fusdcx : getAddress(intent.token);
+  const allowed = await site.client.readContract({
+    address: site.allowlist,
     abi: allowAbi,
     functionName: "isAllowed",
     args: [token],
   });
   if (!allowed) throw new Error(`${assetByAddress(token).symbol} is not on the allowlist.`);
-  const ids = await publicClient.readContract({ address: addresses.locks, abi: lockAbi, functionName: "locksOf", args: [owner] });
+  const ids = await site.client.readContract({ address: site.locks, abi: lockAbi, functionName: "locksOf", args: [owner] });
   if (ids.length) {
-    const records = await publicClient.multicall({
-      contracts: ids.map((id) => ({ address: addresses.locks, abi: lockAbi, functionName: "locks" as const, args: [id] as const })),
+    const records = await site.client.multicall({
+      contracts: ids.map((id) => ({ address: site.locks, abi: lockAbi, functionName: "locks" as const, args: [id] as const })),
       allowFailure: false,
     });
     for (let index = records.length - 1; index >= 0; index -= 1) {
@@ -280,7 +318,8 @@ async function planLock(owner: Address, intent: Extract<Intent, { kind: "lock" }
       const settled = entry[7];
       if (settled || entry[1].toLowerCase() !== token.toLowerCase()) continue;
       if (readName(entry[9]) === intent.name.trim() && start >= intent.startedAt - slack) {
-        return done(intent, { id: ids[index].toString(), href: `/vaults/${ids[index].toString()}?fresh=1` });
+        const id = groupKey(net, ids[index]);
+        return done(intent, { id, href: `/vaults/${id}?fresh=1` });
       }
     }
   }
@@ -289,46 +328,46 @@ async function planLock(owner: Address, intent: Extract<Intent, { kind: "lock" }
   if (amount > BigInt("0xffffffffffffffffffffffffffffffff")) throw new Error("That amount is too large for a lock.");
   const calls: PreparedCall[] = [];
   const due = withProtocolFee(amount);
-  if (pay) await coverWallet(calls, owner, pay, due);
-  await approveIfNeeded(calls, owner, token, addresses.locks, due);
-  calls.push(
-    encode(addresses.locks, lockAbi, "lockGoal", [token, amount, BigInt(intent.duration), intent.earnYield, toName(intent.name), amount]),
-  );
-  return { calls, intent: { ...intent, submitted: true }, done: false };
+  if (pay) await coverWallet(calls, site, owner, pay, due);
+  await approveIfNeeded(calls, owner, token, site.locks, due, site.client);
+  calls.push(encode(site.locks, lockAbi, "lockGoal", [token, amount, BigInt(intent.duration), intent.earnYield, toName(intent.name), amount]));
+  return { calls, intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
 }
 
 async function planDeposit(owner: Address, intent: Extract<Intent, { kind: "deposit" }>): Promise<Plan> {
+  const chainNet = productNet(intent);
+  const site = vaultSite(chainNet);
   const pay = intent.pay ? readPay(intent.pay) : undefined;
   if (pay) {
     const net = await superForUsd(intent.amount);
-    const vault = await vaultOf(owner);
-    if (vault === zeroAddress) return { calls: [encode(addresses.factory, factoryAbi, "createVault")], intent, done: false };
-    const idle = await publicClient.readContract({
+    const vault = await vaultOf(site, owner);
+    if (vault === zeroAddress) return { calls: [encode(site.factory, factoryAbi, "createVault")], intent, done: false, chainId: site.chainId };
+    const idle = await site.client.readContract({
       address: vault,
       abi: vaultAbi,
       functionName: "unallocated",
-      args: [addresses.fusdcx],
+      args: [site.fusdcx],
     });
     if (intent.seen && idle > BigInt(intent.seen)) return done(intent, { href: "/home/add/status?done=1" });
     if (intent.submitted) return pending(intent);
-    const calls = await fundingCalls(owner, vault, pay, net, "vault");
-    return { calls, intent: { ...intent, seen: idle.toString(), submitted: true }, done: false };
+    const calls = await fundingCalls(owner, vault, pay, net, "vault", site);
+    return { calls, intent: { ...intent, seen: idle.toString(), submitted: true }, done: false, chainId: site.chainId };
   }
   if (!isAddress(intent.token)) throw new Error("Pick an asset.");
   const token = getAddress(intent.token);
   const amount = parseAmount(intent.amount);
-  const balance = await balanceOf(owner, token);
+  const balance = await balanceOf(site, owner, token);
   if (intent.seen && balance <= BigInt(intent.seen) - amount) return done(intent, { href: "/home/add/status?done=1" });
-  const vault = await vaultOf(owner);
+  const vault = await vaultOf(site, owner);
   const next = { ...intent, seen: intent.seen ?? balance.toString() };
-  if (vault === zeroAddress) return { calls: [encode(addresses.factory, factoryAbi, "createVault")], intent: next, done: false };
+  if (vault === zeroAddress) return { calls: [encode(site.factory, factoryAbi, "createVault")], intent: next, done: false, chainId: site.chainId };
   if (balance < withProtocolFee(amount)) {
     throw new Error(`This needs ${assetByAddress(token).symbol} in the wallet, including the 0.3% protocol fee.`);
   }
   const calls: PreparedCall[] = [];
-  await approveIfNeeded(calls, owner, token, vault, withProtocolFee(amount));
+  await approveIfNeeded(calls, owner, token, vault, withProtocolFee(amount), site.client);
   calls.push(encode(vault, vaultAbi, "depositSuper", [token, amount]));
-  return { calls, intent: { ...next, submitted: true }, done: false };
+  return { calls, intent: { ...next, submitted: true }, done: false, chainId: site.chainId };
 }
 
 async function planSend(owner: Address, intent: Extract<Intent, { kind: "send" }>): Promise<Plan> {
@@ -362,34 +401,40 @@ async function planSend(owner: Address, intent: Extract<Intent, { kind: "send" }
 }
 
 async function planWithdraw(owner: Address, intent: Extract<Intent, { kind: "withdraw" }>): Promise<Plan> {
-  const vault = await vaultOf(owner);
+  const net = productNet(intent);
+  const site = vaultSite(net);
+  const vault = await vaultOf(site, owner);
   if (vault === zeroAddress) throw new Error("Open a goal first. That creates your vault.");
   const receive = intent.receive;
   const amount = receive ? await superForWithdraw(intent.amount) : BigInt(intent.amount);
   if (amount <= 0n) throw new Error("Enter the amount in USD.");
-  const idle = await publicClient.readContract({
+  const idle = await site.client.readContract({
     address: vault,
     abi: vaultAbi,
     functionName: "unallocated",
-    args: [addresses.fusdcx],
+    args: [site.fusdcx],
   });
   if (intent.seen && BigInt(intent.seen) - idle >= amount) return done(intent, { href: "/home" });
   if (idle < amount) throw new Error("The vault does not have that much idle USD.");
   if (intent.submitted) return pending(intent);
+  if (receive && net !== appGroupNet()) {
+    throw new Error(`This vault is on ${site.name}. Withdraw as ${site.net === "celo" ? "cUSDx" : stableLabel} there, then convert.`);
+  }
   const calls = receive
     ? await withdrawCalls(owner, vault, amount, receive)
-    : [encode(vault, vaultAbi, "withdraw", [addresses.fusdcx, amount])];
+    : [encode(vault, vaultAbi, "withdraw", [site.fusdcx, amount])];
   return {
     calls,
     intent: { ...intent, seen: idle.toString(), submitted: true },
     done: false,
+    chainId: site.chainId,
   };
 }
 
-async function oneFlow(owner: Address, id: bigint) {
-  const found = await flows(owner);
+async function oneFlow(site: VaultSite, owner: Address, id: bigint) {
+  const found = await flows(site, owner);
   if (found.vault === zeroAddress) throw new Error("Open a goal first. That creates your vault.");
-  const flow = await publicClient.readContract({
+  const flow = await site.client.readContract({
     address: found.vault,
     abi: vaultAbi,
     functionName: "getFlow",
@@ -399,24 +444,26 @@ async function oneFlow(owner: Address, id: bigint) {
 }
 
 async function planGoal(owner: Address, intent: Extract<Intent, { kind: "goal" }>): Promise<Plan> {
-  const id = BigInt(intent.id);
-  const { vault, flow } = await oneFlow(owner, id);
+  const parsed = parseGroupKey(intent.id);
+  const id = parsed.id;
+  const site = vaultSite(parsed.net);
+  const { vault, flow } = await oneFlow(site, owner, id);
   const href = `/goals/${intent.id}`;
   if (intent.fn === "pause") {
     if (Number(flow.kind) === 1) throw new Error("A saving goal does not stream. Pause it from the app.");
     if (flow.paused) return done(intent, { href });
     if (intent.submitted) return pending(intent);
-    return { calls: [encode(vault, vaultAbi, "pause", [id])], intent: { ...intent, submitted: true }, done: false };
+    return { calls: [encode(vault, vaultAbi, "pause", [id])], intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
   }
   if (intent.fn === "resume") {
     if (!flow.paused) return done(intent, { href });
     if (intent.submitted) return pending(intent);
-    return { calls: [encode(vault, vaultAbi, "resume", [id])], intent: { ...intent, submitted: true }, done: false };
+    return { calls: [encode(vault, vaultAbi, "resume", [id])], intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
   }
   if (intent.fn === "cancel" || intent.fn === "settle") {
     if (flow.settled) return done(intent, { href: "/goals" });
     if (intent.submitted) return pending(intent);
-    return { calls: [encode(vault, vaultAbi, intent.fn, [id])], intent: { ...intent, submitted: true }, done: false };
+    return { calls: [encode(vault, vaultAbi, intent.fn, [id])], intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
   }
   const pay = intent.pay ? readPay(intent.pay) : undefined;
   const amount = await sizedAmount(pay, intent.amount);
@@ -427,41 +474,44 @@ async function planGoal(owner: Address, intent: Extract<Intent, { kind: "goal" }
       calls: [encode(vault, vaultAbi, "release", [id, amount])],
       intent: { ...intent, seen: flow.reserved.toString(), submitted: true },
       done: false,
+      chainId: site.chainId,
     };
   }
   if (intent.seen && flow.reserved > BigInt(intent.seen)) return done(intent, { href });
   if (intent.submitted) return pending(intent);
-  const idle = await publicClient.readContract({
+  const idle = await site.client.readContract({
     address: vault,
     abi: vaultAbi,
     functionName: "unallocated",
-    args: [addresses.fusdcx],
+    args: [site.fusdcx],
   });
   const calls: PreparedCall[] = [];
   if (idle < amount) {
     if (!pay) {
       const deposit = amount - idle;
-      const balance = await balanceOf(owner, addresses.fusdcx);
+      const balance = await balanceOf(site, owner, site.fusdcx);
       if (balance < withProtocolFee(deposit)) {
         throw new Error("The wallet does not have enough USD for this, including the 0.3% protocol fee.");
       }
     }
-    await coverVault(calls, owner, vault, pay, amount - idle);
+    await coverVault(calls, site, owner, vault, pay, amount - idle);
   }
   calls.push(encode(vault, vaultAbi, "topUp", [id, amount]));
-  return { calls, intent: { ...intent, seen: flow.reserved.toString(), submitted: true }, done: false };
+  return { calls, intent: { ...intent, seen: flow.reserved.toString(), submitted: true }, done: false, chainId: site.chainId };
 }
 
 async function planLockAct(owner: Address, intent: Extract<Intent, { kind: "lockAct" }>): Promise<Plan> {
-  const id = BigInt(intent.id);
-  const entry = asLock(await publicClient.readContract({ address: addresses.locks, abi: lockAbi, functionName: "locks", args: [id] }));
+  const parsed = parseGroupKey(intent.id);
+  const id = parsed.id;
+  const site = vaultSite(parsed.net);
+  const entry = asLock(await site.client.readContract({ address: site.locks, abi: lockAbi, functionName: "locks", args: [id] }));
   if (entry[0].toLowerCase() !== owner.toLowerCase()) throw new Error("That lock belongs to another account.");
   const href = "/vaults";
   if (intent.fn === "break" || intent.fn === "mature") {
     if (entry[7]) return done(intent, { href });
     if (intent.submitted) return pending(intent);
     const fn = intent.fn === "break" ? "breakEarly" : "withdrawMature";
-    return { calls: [encode(addresses.locks, lockAbi, fn, [id])], intent: { ...intent, submitted: true }, done: false };
+    return { calls: [encode(site.locks, lockAbi, fn, [id])], intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
   }
   if (intent.seen && entry[2] > BigInt(intent.seen)) return done(intent, { href: `/vaults/${intent.id}` });
   if (intent.submitted) return pending(intent);
@@ -471,12 +521,12 @@ async function planLockAct(owner: Address, intent: Extract<Intent, { kind: "lock
   const calls: PreparedCall[] = [];
   const due = withProtocolFee(amount);
   if (pay) {
-    if (entry[1].toLowerCase() !== addresses.fusdcx.toLowerCase()) throw new Error("This lock is not in USD.");
-    await coverWallet(calls, owner, pay, due);
+    if (entry[1].toLowerCase() !== site.fusdcx.toLowerCase()) throw new Error("This lock is not in USD.");
+    await coverWallet(calls, site, owner, pay, due);
   }
-  await approveIfNeeded(calls, owner, entry[1], addresses.locks, due);
-  calls.push(encode(addresses.locks, lockAbi, "topUp", [id, amount]));
-  return { calls, intent: { ...intent, seen: entry[2].toString(), submitted: true }, done: false };
+  await approveIfNeeded(calls, owner, entry[1], site.locks, due, site.client);
+  calls.push(encode(site.locks, lockAbi, "topUp", [id, amount]));
+  return { calls, intent: { ...intent, seen: entry[2].toString(), submitted: true }, done: false, chainId: site.chainId };
 }
 
 function netOf(value: { id?: string; network?: string }): GroupNet {
@@ -534,10 +584,7 @@ async function planGroup(owner: Address, intent: Extract<Intent, { kind: "group"
     if (intent.submitted) return pending(intent);
     const calls: PreparedCall[] = [];
     const due = withProtocolFee(group[4]);
-    if (intent.pay) {
-      if (net !== appGroupNet()) throw new Error(`This group takes ${site.name} tokens. Convert there first.`);
-      await coverWallet(calls, owner, readPay(intent.pay), due);
-    }
+    if (intent.pay) await coverWallet(calls, vaultSite(net), owner, readPay(intent.pay), due);
     await approveIfNeeded(calls, owner, site.token, site.groups, due, site.client);
     calls.push(encode(site.groups, groupAbi, "postCollateral", [id]));
     return { calls, intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
@@ -552,10 +599,7 @@ async function planGroup(owner: Address, intent: Extract<Intent, { kind: "group"
   if (intent.submitted) return pending(intent);
   const calls: PreparedCall[] = [];
   const due = withProtocolFee(group[3]);
-  if (intent.pay) {
-    if (net !== appGroupNet()) throw new Error(`This group takes ${site.name} tokens. Convert there first.`);
-    await coverWallet(calls, owner, readPay(intent.pay), due);
-  }
+  if (intent.pay) await coverWallet(calls, vaultSite(net), owner, readPay(intent.pay), due);
   await approveIfNeeded(calls, owner, site.token, site.groups, due, site.client);
   calls.push(encode(site.groups, groupAbi, "contribute", [id]));
   return { calls, intent: { ...intent, seen: given.toString(), submitted: true }, done: false, chainId: site.chainId };

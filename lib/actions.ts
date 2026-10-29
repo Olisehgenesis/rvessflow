@@ -15,7 +15,8 @@ import { goalNotes, patchGoalNote, recordActivity, saveGoalNote, type ActivityRe
 import { parseUsd, readPay, readReceive, type PayAsset } from "@/lib/pay-math";
 import { activityUnits, isSendAsset, parseSendAmount, type SendAsset } from "@/lib/send-math";
 import { sendRoute } from "@/lib/send";
-import { appGroupNet, groupNetLabel, parseGroupKey } from "@/lib/group-network";
+import { appGroupNet, groupNetLabel, isGroupNet, parseGroupKey, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
+import { vaultSite } from "@/lib/vault-site";
 import { planIntent } from "@/lib/plan";
 import {
   addToGoal,
@@ -136,6 +137,11 @@ function rethrowRedirect(error: unknown) {
   if (typeof error === "object" && error !== null && "digest" in error && String((error as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")) {
     throw error;
   }
+}
+
+function networkField(formData: FormData): GroupNet {
+  const raw = String(formData.get("network") ?? "");
+  return isGroupNet(raw) ? raw : recommendedGroupNet;
 }
 
 function payField(formData: FormData): PayAsset | undefined {
@@ -386,10 +392,11 @@ export async function createSaving(_prev: ActionState, formData: FormData): Prom
       startedAt: Math.floor(Date.now() / 1000),
       startAt: start,
       pay,
+      network: networkField(formData),
       ref: "",
     });
     if (who.method === "tester") {
-      if (pay) return await finishTester(intent);
+      if (pay || intent.network !== appGroupNet()) return await finishTester(intent);
       const id = await openSaving(await accountIndex(), { name, amount, target: "", duration, startAt: start });
       await rememberIntent(who.address, intent, id);
       refresh();
@@ -428,10 +435,11 @@ export async function createStream(_prev: ActionState, formData: FormData): Prom
       frequency: inferFrequency(duration),
       startedAt: now,
       pay,
+      network: networkField(formData),
       ref: "",
     });
     if (who.method === "tester") {
-      if (pay) return await finishTester(intent);
+      if (pay || intent.network !== appGroupNet()) return await finishTester(intent);
       const id = await openStream(await accountIndex(), {
         name,
         amount,
@@ -457,7 +465,8 @@ export async function createLock(_prev: ActionState, formData: FormData): Promis
     const who = await viewer();
     const duration = readSpan(formData, LOCK_MIN);
     const pay = payField(formData);
-    const token = pay ? "0xD04383398dD2426297da660F9CCA3d439AF9ce1b" : String(formData.get("token") ?? "");
+    const network = networkField(formData);
+    const token = pay ? vaultSite(network).fusdcx : String(formData.get("token") ?? "");
     const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const name = pay ? "USD" : String(formData.get("name") ?? "USD");
     const intent = refIntent({
@@ -469,10 +478,11 @@ export async function createLock(_prev: ActionState, formData: FormData): Promis
       earnYield: formData.get("yield") === "on",
       startedAt: Math.floor(Date.now() / 1000),
       pay,
+      network,
       ref: "",
     });
     if (who.method === "tester") {
-      if (pay) return await finishTester(intent);
+      if (pay || network !== appGroupNet()) return await finishTester(intent);
       const id = await openLock(await accountIndex(), {
         name,
         amount,
@@ -497,16 +507,18 @@ export async function addMoney(_prev: ActionState, formData: FormData): Promise<
     await requireTerms();
     const who = await viewer();
     const pay = payField(formData);
+    const network = networkField(formData);
     const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const intent = refIntent({
       kind: "deposit" as const,
-      token: "0xD04383398dD2426297da660F9CCA3d439AF9ce1b",
+      token: vaultSite(network).fusdcx,
       amount,
       pay,
+      network,
       ref: "",
     });
     if (who.method === "tester") {
-      if (pay) return await finishTester(intent);
+      if (pay || network !== appGroupNet()) return await finishTester(intent);
       const { depositIdle } = await import("@/lib/protocol");
       await depositIdle(await accountIndex(), amount);
       await rememberIntent(who.address, intent);
@@ -792,8 +804,8 @@ export async function doAddFunds(_prev: ActionState, formData: FormData): Promis
     }
     const intent = refIntent({ kind: "goal" as const, fn: "topup" as const, id, amount, pay, ref: "" });
     if (who.method === "tester") {
-      if (pay) return await finishTester(intent);
-      await addToGoal(await accountIndex(), BigInt(id), amount);
+      if (pay || parseGroupKey(id).net !== appGroupNet()) return await finishTester(intent);
+      await addToGoal(await accountIndex(), parseGroupKey(id).id, amount);
       await rememberIntent(who.address, intent);
       refresh();
       return null;
@@ -813,7 +825,8 @@ export async function doRelease(_prev: ActionState, formData: FormData): Promise
     const amount = await quotedAmount(String(formData.get("amount") ?? ""));
     const intent = refIntent({ kind: "goal" as const, fn: "release" as const, id, amount, ref: "" });
     if (who.method === "tester") {
-      await releaseGoal(await accountIndex(), BigInt(id), amount);
+      if (parseGroupKey(id).net !== appGroupNet()) return await finishTester(intent);
+      await releaseGoal(await accountIndex(), parseGroupKey(id).id, amount);
       await rememberIntent(who.address, intent);
       refresh();
       return null;
@@ -845,7 +858,8 @@ export async function doVault(_prev: ActionState, formData: FormData): Promise<A
         : { kind: "goal" as const, fn, id: raw, amount: "", ref: "" },
     );
     if (who.method === "tester") {
-      await vaultCall(await accountIndex(), fn, BigInt(raw));
+      if (fn !== "withdraw" && parseGroupKey(raw).net !== appGroupNet()) return await finishTester(intent);
+      await vaultCall(await accountIndex(), fn, fn === "withdraw" ? BigInt(raw) : parseGroupKey(raw).id);
       if (fn === "withdraw") await rememberIntent(who.address, intent);
       refresh();
       return null;
@@ -867,8 +881,8 @@ export async function doLockTop(_prev: ActionState, formData: FormData): Promise
     const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""), lock ? assetKind(lock.token) === "ethx" : false);
     const intent = refIntent({ kind: "lockAct" as const, fn: "topup" as const, id, amount, pay, ref: "" });
     if (who.method === "tester") {
-      if (pay) return await finishTester(intent);
-      await lockTopUp(await accountIndex(), BigInt(id), amount);
+      if (pay || parseGroupKey(id).net !== appGroupNet()) return await finishTester(intent);
+      await lockTopUp(await accountIndex(), parseGroupKey(id).id, amount);
       await rememberIntent(who.address, intent);
       refresh();
       return null;
@@ -887,7 +901,8 @@ export async function doBreak(_prev: ActionState, formData: FormData): Promise<A
     const id = String(formData.get("id") ?? "");
     const intent = refIntent({ kind: "lockAct" as const, fn: "break" as const, id, amount: "", ref: "" });
     if (who.method === "tester") {
-      await lockBreak(await accountIndex(), BigInt(id));
+      if (parseGroupKey(id).net !== appGroupNet()) return await finishTester(intent);
+      await lockBreak(await accountIndex(), parseGroupKey(id).id);
       refresh();
       redirect("/vaults");
     }
@@ -904,7 +919,8 @@ export async function doMature(_prev: ActionState, formData: FormData): Promise<
     const id = String(formData.get("id") ?? "");
     const intent = refIntent({ kind: "lockAct" as const, fn: "mature" as const, id, amount: "", ref: "" });
     if (who.method === "tester") {
-      await lockMature(await accountIndex(), BigInt(id));
+      if (parseGroupKey(id).net !== appGroupNet()) return await finishTester(intent);
+      await lockMature(await accountIndex(), parseGroupKey(id).id);
       refresh();
       redirect("/vaults");
     }
@@ -1030,6 +1046,7 @@ export async function previewPay(input: {
   duration?: number;
   protocolOnTop?: boolean;
   full?: boolean;
+  network?: string;
 }): Promise<{ lines: { label: string; value: string }[]; error?: string }> {
   try {
     const who = await viewer();
@@ -1044,6 +1061,7 @@ export async function previewPay(input: {
       protocolOnTop: input.protocolOnTop,
       coveredWei: covered.toString(),
       full: input.full,
+      network: input.network,
     });
     return { lines };
   } catch (error) {
