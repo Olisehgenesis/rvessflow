@@ -17,6 +17,9 @@ function explain(error: unknown): string {
   if (/0x4239717c/i.test(message)) {
     return "This account already has a vault. Wait a moment and create the flow again.";
   }
+  if (/0x1dc930eb/i.test(message)) {
+    return "The vault did not receive enough after the protocol fee to open the stream. Try again.";
+  }
   const line = message.split("\n").find((item) => item.trim()) ?? message;
   return line.replace(/^Error:\s*/, "").slice(0, 220);
 }

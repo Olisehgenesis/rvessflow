@@ -6,6 +6,7 @@ import { buildFundCalls, buildWithdrawCalls } from "@/lib/pay-build";
 import {
   formatPrice8,
   fundForNet,
+  grossForNet,
   netSuperForUsd,
   parseUsd,
   protocolFeeOf,
@@ -26,6 +27,14 @@ const routerAbi = parseAbi([
   "function unwrapWETH9(uint256 amountMinimum, address recipient) payable",
 ]);
 const erc20 = parseAbi(["function approve(address spender, uint256 amount) returns (bool)"]);
+
+test("grossing up the Celo wrap leaves the stream amount after the 0.30% skim", () => {
+  const net = 63n * 10n ** 16n;
+  const stacked = net + protocolFeeOf(net);
+  assert.ok(stacked - protocolFeeOf(stacked) < net);
+  const minted = grossForNet(net);
+  assert.ok(minted - protocolFeeOf(minted) >= net);
+});
 
 test("a $100 deposit at a $1 USDC price keeps a full dollar after the 0.30% skim", () => {
   const net = netSuperForUsd(parseUsd("100"), 100_000_000n);

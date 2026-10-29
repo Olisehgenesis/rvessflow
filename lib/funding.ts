@@ -7,10 +7,12 @@ import { buildDepositPreview, depositGasUnits, networkFeeUsd8, type DepositPrevi
 import type { PreparedCall } from "@/lib/intent";
 import { buildFundCalls, buildWithdrawCalls, quoteDeadline } from "@/lib/pay-build";
 import {
+  ceilDiv,
   formatAmount,
   formatPrice8,
   formatUsd8,
   fundForNet,
+  grossForNet,
   netSuperForUsd,
   parseUsd,
   protocolFeeOf,
@@ -261,11 +263,12 @@ async function wrapSiteCalls(
     calls.push(fundCall(vault, "depositSuper", [site.fusdcx, needed]));
     return calls;
   }
-  const dueSuper = needed + protocolFeeOf(needed);
+  const minted = grossForNet(needed);
   const wrapDecimals = Number(
     await site.client.readContract({ address: site.wrap, abi: wrapAbi, functionName: "decimals" }),
   );
-  const usdmOut = wrapDecimals >= 18 ? dueSuper : dueSuper / 10n ** BigInt(18 - wrapDecimals);
+  const wrapScale = wrapDecimals >= 18 ? 1n : 10n ** BigInt(18 - wrapDecimals);
+  const usdmOut = wrapDecimals >= 18 ? minted : ceilDiv(minted, wrapScale);
   if (usdmOut <= 0n) throw new Error("Enter a larger amount.");
   const spender = mode === "vault" ? vault : site.fusdcx;
   const calls: PreparedCall[] = [];
@@ -273,7 +276,8 @@ async function wrapSiteCalls(
   const direct = pay === "usdc" && site.net === "celo" ? site.wrap : pay === "usdc" ? site.usdc : null;
   if (direct) {
     const decimals = Number(await site.client.readContract({ address: direct, abi: wrapAbi, functionName: "decimals" }));
-    const underlying = decimals >= 18 ? dueSuper : dueSuper / 10n ** BigInt(18 - decimals);
+    const scale = decimals >= 18 ? 1n : 10n ** BigInt(18 - decimals);
+    const underlying = decimals >= 18 ? minted : ceilDiv(minted, scale);
     const balance = await site.client.readContract({ address: direct, abi: wrapAbi, functionName: "balanceOf", args: [owner] });
     const symbol = site.net === "celo" ? "USDm" : "USDC";
     const problem = spendableProblem({ symbol, balance, needed: underlying, scale: decimals, digits: decimals > 6 ? 4 : 2, leaveFee: false });
@@ -281,7 +285,7 @@ async function wrapSiteCalls(
     const allowanceNow = await site.client.readContract({ address: direct, abi: wrapAbi, functionName: "allowance", args: [owner, spender] });
     if (allowanceNow < underlying) calls.push(fundCall(direct, "approve", [spender, underlying]));
     if (mode === "vault") calls.push(fundCall(vault, "depositUnderlying", [site.fusdcx, underlying]));
-    else calls.push(fundCall(site.fusdcx, "upgrade", [dueSuper]));
+    else calls.push(fundCall(site.fusdcx, "upgrade", [minted]));
     return calls;
   }
 
@@ -342,7 +346,7 @@ async function wrapSiteCalls(
   });
   if (wrapAllowance < usdmOut) calls.push(fundCall(site.wrap, "approve", [spender, usdmOut]));
   if (mode === "vault") calls.push(fundCall(vault, "depositUnderlying", [site.fusdcx, usdmOut]));
-  else calls.push(fundCall(site.fusdcx, "upgrade", [dueSuper]));
+  else calls.push(fundCall(site.fusdcx, "upgrade", [minted]));
   return calls;
 }
 
@@ -509,17 +513,18 @@ export async function previewLines(input: {
   const mode = input.mode === "wallet" ? "wallet" : "vault";
   if (input.network && /celo/i.test(input.network)) {
     const short = needed - covered;
-    const fee = protocolFeeOf(short);
+    const minted = grossForNet(short);
+    const fee = protocolFeeOf(minted);
     if (input.pay === "usdcx" || input.pay === "usdc") {
       const symbol = input.pay === "usdcx" ? "cUSDx" : "USDm";
       return shownQuote([
-        { label: "You spend", value: `${formatAmount(short + fee, 18, 4)} ${symbol}` },
+        { label: "You spend", value: `${formatAmount(minted, 18, 4)} ${symbol}` },
         { label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(fee, prices.usdcUsd8))}` },
         { label: "Slippage", value: "No swap" },
       ]);
     }
     const site = vaultSite("celo");
-    const quoted = await quoteCeloToUsdm(site, input.pay === "eth" ? "eth" : "usdt", short + fee);
+    const quoted = await quoteCeloToUsdm(site, input.pay === "eth" ? "eth" : "usdt", minted);
     const amountInMax = slippageCeiling(quoted.amountIn);
     const scale = input.pay === "eth" ? 18 : 6;
     const digits = input.pay === "eth" ? 6 : 2;
