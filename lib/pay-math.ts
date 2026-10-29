@@ -1,11 +1,15 @@
 import { PROTOCOL_FEE_BPS, SLIPPAGE_BPS, SUPER_UNIT } from "@/lib/base-market";
 
-export type PayAsset = "usdc" | "usdt" | "eth" | "usdcx";
+export type PayAsset = "usdc" | "usdt" | "eth" | "usdcx" | "gdx";
 export type ReceiveAsset = "usdc" | "usdt" | "eth";
 
 export function readPay(value: string): PayAsset {
-  if (value === "usdc" || value === "usdt" || value === "eth" || value === "usdcx") return value;
-  throw new Error("Pick USDC, USDT, ETH, or the savings token.");
+  if (value === "usdc" || value === "usdt" || value === "eth" || value === "usdcx" || value === "gdx") return value;
+  throw new Error("Pick USDC, USDT, ETH, G$, or the savings token.");
+}
+
+export function isSuperPay(pay: PayAsset | undefined): boolean {
+  return pay === "usdcx" || pay === "gdx";
 }
 
 export function readReceive(value: string): ReceiveAsset {
@@ -92,6 +96,12 @@ export function netSuperForUsd(usdMicros: bigint, usdcUsd8: bigint): bigint {
   if (usdcUsd8 <= 0n) throw new Error("The USDC price is not available.");
   const usdc = ceilDiv(usdMicros * 100_000_000n, usdcUsd8);
   return usdc * SUPER_UNIT;
+}
+
+/** 18-decimal Super Token amount for a USD input at a CoinGecko 8-decimal price. */
+export function netToken18ForUsd(usdMicros: bigint, tokenUsd8: bigint): bigint {
+  if (tokenUsd8 <= 0n) throw new Error("The G$ price is not available.");
+  return ceilDiv(usdMicros * 100n * 10n ** 18n, tokenUsd8);
 }
 
 export function formatGrouped(value: bigint): string {

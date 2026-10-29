@@ -4,12 +4,12 @@ import { encodeFunctionData, getAddress, isAddress, zeroAddress, type Address, t
 import { assetByAddress } from "@/lib/assets";
 import { fundingCalls, superForUsd, superForWithdraw, withdrawCalls } from "@/lib/funding";
 import type { Intent, Plan, PreparedCall } from "@/lib/intent";
-import { readPay, type PayAsset } from "@/lib/pay-math";
+import { isSuperPay, readPay, type PayAsset } from "@/lib/pay-math";
 import { sendLabel, sendRoute, sendToken, walletBalance } from "@/lib/send";
 import { isSendAsset, parseSendAmount, spendableEth } from "@/lib/send-math";
 import { appGroupNet, groupKey, netFromLabel, parseGroupKey, type GroupNet } from "@/lib/group-network";
 import { groupSite } from "@/lib/group-site";
-import { vaultSite, type VaultSite } from "@/lib/vault-site";
+import { siteSuper, vaultSite, type VaultSite } from "@/lib/vault-site";
 import { readName, stableLabel, toName } from "@/lib/protocol";
 import {
   addresses,
@@ -93,10 +93,10 @@ async function balanceOf(site: VaultSite, owner: Address, token: Address) {
 }
 
 async function sizedAmount(pay: PayAsset | undefined, amount: string): Promise<bigint> {
-  return pay ? superForUsd(amount) : parseAmount(amount);
+  return pay ? superForUsd(amount, pay) : parseAmount(amount);
 }
 
-async function streamNeedOn(site: VaultSite, amount: bigint, duration: bigint): Promise<bigint> {
+async function streamNeedOn(site: VaultSite, amount: bigint, duration: bigint, token: Address): Promise<bigint> {
   const perSecond = amount / duration;
   if (perSecond === 0n) throw new Error("That duration is too long for this amount. The stream would be less than 1 wei per second.");
   const reserved = perSecond * duration;
@@ -104,7 +104,7 @@ async function streamNeedOn(site: VaultSite, amount: bigint, duration: bigint): 
     address: site.cfa,
     abi: cfaAbi,
     functionName: "getBufferAmountByFlowrate",
-    args: [site.fusdcx, perSecond],
+    args: [token, perSecond],
   });
   return reserved + buffer * 2n + perSecond * 3600n;
 }
@@ -118,18 +118,20 @@ async function coverVault(
   shortfall: bigint,
 ) {
   if (shortfall <= 0n) return;
-  if (!pay || pay === "usdcx") {
-    await approveIfNeeded(calls, owner, site.fusdcx, vault, withProtocolFee(shortfall), site.client);
-    calls.push(encode(vault, vaultAbi, "depositSuper", [site.fusdcx, shortfall]));
+  if (!pay || isSuperPay(pay)) {
+    const token = siteSuper(site, pay);
+    await approveIfNeeded(calls, owner, token, vault, withProtocolFee(shortfall), site.client);
+    calls.push(encode(vault, vaultAbi, "depositSuper", [token, shortfall]));
     return;
   }
   calls.push(...(await fundingCalls(owner, vault, pay, shortfall, "vault", site)));
 }
 
 async function coverWallet(calls: PreparedCall[], site: VaultSite, owner: Address, pay: PayAsset, due: bigint) {
-  const balance = await balanceOf(site, owner, site.fusdcx);
+  const token = siteSuper(site, pay);
+  const balance = await balanceOf(site, owner, token);
   if (balance >= due) return;
-  if (pay === "usdcx") throw new Error(`Not enough ${site.net === "celo" ? "cUSDx" : stableLabel} in this wallet.`);
+  if (isSuperPay(pay)) throw new Error(`Not enough ${pay === "gdx" ? "G$" : site.net === "celo" ? "cUSDx" : stableLabel} in this wallet.`);
   calls.push(...(await fundingCalls(owner, owner, pay, due - balance, "wallet", site)));
 }
 
@@ -218,12 +220,13 @@ async function planSaving(owner: Address, intent: Extract<Intent, { kind: "savin
   if (vault === zeroAddress) return createVaultStep(site, intent);
   if (intent.submitted) return pending(intent);
   const pay = intent.pay ? readPay(intent.pay) : undefined;
+  const token = siteSuper(site, pay);
   const amount = await sizedAmount(pay, intent.amount);
   const idle = await site.client.readContract({
     address: vault,
     abi: vaultAbi,
     functionName: "unallocated",
-    args: [site.fusdcx],
+    args: [token],
   });
   const calls: PreparedCall[] = [];
   if (idle < amount) await coverVault(calls, site, owner, vault, pay, amount - idle);
@@ -233,7 +236,7 @@ async function planSaving(owner: Address, intent: Extract<Intent, { kind: "savin
     later
       ? encode(vault, vaultAbi, "createFlow", [
           {
-            token: site.fusdcx,
+            token,
             recipient: owner,
             kind: 1,
             amount,
@@ -247,7 +250,7 @@ async function planSaving(owner: Address, intent: Extract<Intent, { kind: "savin
             name: toName(intent.name),
           },
         ])
-      : encode(vault, vaultAbi, "openSavings", [site.fusdcx, amount, BigInt(intent.duration), toName(intent.name), amount]),
+      : encode(vault, vaultAbi, "openSavings", [token, amount, BigInt(intent.duration), toName(intent.name), amount]),
   );
   return { calls, intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
 }
@@ -280,14 +283,15 @@ async function planStream(owner: Address, intent: Extract<Intent, { kind: "strea
   if (vault === zeroAddress) return createVaultStep(site, intent);
   if (intent.submitted) return pending(intent);
   const pay = intent.pay ? readPay(intent.pay) : undefined;
+  const token = siteSuper(site, pay);
   const amount = await sizedAmount(pay, intent.amount);
   const duration = BigInt(intent.duration);
-  const need = await streamNeedOn(site, amount, duration);
+  const need = await streamNeedOn(site, amount, duration, token);
   const idle = await site.client.readContract({
     address: vault,
     abi: vaultAbi,
     functionName: "unallocated",
-    args: [site.fusdcx],
+    args: [token],
   });
   const calls: PreparedCall[] = [];
   if (idle < need) await coverVault(calls, site, owner, vault, pay, need - idle);
@@ -296,7 +300,7 @@ async function planStream(owner: Address, intent: Extract<Intent, { kind: "strea
   calls.push(
     encode(vault, vaultAbi, "createFlow", [
       {
-        token: site.fusdcx,
+        token,
         recipient,
         kind: intent.flowKind === "expense" ? 0 : 2,
         amount,
@@ -325,7 +329,7 @@ async function planLock(owner: Address, intent: Extract<Intent, { kind: "lock" }
   const site = vaultSite(net);
   const pay = intent.pay ? readPay(intent.pay) : undefined;
   if (!pay && !isAddress(intent.token)) throw new Error("Pick an asset.");
-  const token = pay ? site.fusdcx : getAddress(intent.token);
+  const token = pay ? siteSuper(site, pay) : getAddress(intent.token);
   const allowed = await site.client.readContract({
     address: site.allowlist,
     abi: allowAbi,
@@ -366,14 +370,14 @@ async function planDeposit(owner: Address, intent: Extract<Intent, { kind: "depo
   const site = vaultSite(chainNet);
   const pay = intent.pay ? readPay(intent.pay) : undefined;
   if (pay) {
-    const net = await superForUsd(intent.amount);
+    const net = await superForUsd(intent.amount, pay);
     const vault = await readyVault(site, owner, intent.seen);
     if (vault === zeroAddress) return createVaultStep(site, intent);
     const idle = await site.client.readContract({
       address: vault,
       abi: vaultAbi,
       functionName: "unallocated",
-      args: [site.fusdcx],
+      args: [siteSuper(site, pay)],
     });
     if (intent.seen && idle > BigInt(intent.seen)) return done(intent, { href: "/home/add/status?done=1" });
     if (intent.submitted) return pending(intent);
@@ -510,15 +514,15 @@ async function planGoal(owner: Address, intent: Extract<Intent, { kind: "goal" }
     address: vault,
     abi: vaultAbi,
     functionName: "unallocated",
-    args: [site.fusdcx],
+    args: [flow.token],
   });
   const calls: PreparedCall[] = [];
   if (idle < amount) {
     if (!pay) {
       const deposit = amount - idle;
-      const balance = await balanceOf(site, owner, site.fusdcx);
+      const balance = await balanceOf(site, owner, flow.token);
       if (balance < withProtocolFee(deposit)) {
-        throw new Error("The wallet does not have enough USD for this, including the 0.3% protocol fee.");
+        throw new Error("The wallet does not have enough of this token, including the 0.3% protocol fee.");
       }
     }
     await coverVault(calls, site, owner, vault, pay, amount - idle);
@@ -548,7 +552,7 @@ async function planLockAct(owner: Address, intent: Extract<Intent, { kind: "lock
   const calls: PreparedCall[] = [];
   const due = withProtocolFee(amount);
   if (pay) {
-    if (entry[1].toLowerCase() !== site.fusdcx.toLowerCase()) throw new Error("This lock is not in USD.");
+    if (entry[1].toLowerCase() !== siteSuper(site, pay).toLowerCase()) throw new Error("This lock is not in that token.");
     await coverWallet(calls, site, owner, pay, due);
   }
   await approveIfNeeded(calls, owner, entry[1], site.locks, due, site.client);

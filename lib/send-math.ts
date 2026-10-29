@@ -19,6 +19,7 @@ export const sendAssets = [
   "celo-mountain",
   "celo-cusdx",
   "celo-celox",
+  "celo-gdx",
 ] as const;
 export type SendAsset = (typeof sendAssets)[number];
 

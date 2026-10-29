@@ -11,6 +11,7 @@ const sources: Record<string, string> = {
   USDT: "/tokens/usdt.png",
   CELO: "/tokens/celo.svg",
   CELOx: "/tokens/celo.svg",
+  "G$": "/tokens/celo.svg",
 };
 
 const chainMark: Record<"base" | "celo", { src: string; round: string }> = {
@@ -25,7 +26,7 @@ function chainKeys(network?: string, symbol?: string): ("base" | "celo")[] {
     if (/\bcelo\b/i.test(network)) keys.push("celo");
     return keys;
   }
-  if (symbol === "CELO" || symbol === "CELOx" || symbol === "cUSDx") return ["celo"];
+  if (symbol === "CELO" || symbol === "CELOx" || symbol === "cUSDx" || symbol === "G$") return ["celo"];
   if (symbol === "ETH" || symbol === "ETHx" || symbol === "USDCx" || symbol === "fUSDCx") return ["base"];
   return [];
 }

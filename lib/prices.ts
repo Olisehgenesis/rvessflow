@@ -13,6 +13,7 @@ export type Prices = {
   ethUsd8: bigint;
   usdcUsd8: bigint;
   usdtUsd8: bigint;
+  gdxUsd8: bigint;
   updatedAt: number;
 };
 
@@ -69,6 +70,14 @@ async function ethFallback(): Promise<bigint> {
   return coinUsd8("ethereum");
 }
 
+async function gdxFallback(): Promise<bigint> {
+  try {
+    return await coinUsd8("gooddollar");
+  } catch {
+    return 0n;
+  }
+}
+
 export async function loadPrices(): Promise<Prices> {
   if (cache && Date.now() - cache.at < ttlMs) return cache.prices;
   const now = Math.floor(Date.now() / 1000);
@@ -79,7 +88,7 @@ export async function loadPrices(): Promise<Prices> {
     } catch {
       ethUsd8 = 0n;
     }
-    const prices: Prices = { ethUsd8, usdcUsd8: 100_000_000n, usdtUsd8: 100_000_000n, updatedAt: now };
+    const prices: Prices = { ethUsd8, usdcUsd8: 100_000_000n, usdtUsd8: 100_000_000n, gdxUsd8: await gdxFallback(), updatedAt: now };
     cache = { at: Date.now(), prices };
     return prices;
   }
@@ -94,6 +103,7 @@ export async function loadPrices(): Promise<Prices> {
       ethUsd8: fresh(eth.updatedAt) ? eth.usd8 : await ethFallback(),
       usdcUsd8: fresh(usdc.updatedAt) ? usdc.usd8 : 100_000_000n,
       usdtUsd8: fresh(usdt.updatedAt) ? usdt.usd8 : 100_000_000n,
+      gdxUsd8: await gdxFallback(),
       updatedAt: Math.min(eth.updatedAt, usdc.updatedAt, usdt.updatedAt),
     };
     cache = { at: Date.now(), prices };

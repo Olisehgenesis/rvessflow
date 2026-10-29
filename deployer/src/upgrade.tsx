@@ -269,7 +269,7 @@ export function UpgradeGroups({
         }),
       );
       setImplementation(created);
-      setStatus("The new code is deployed. Two owner wallets sign the schedule next. The live contract changes two days after that schedule is sent.");
+      setStatus("The new code is deployed. Two owner wallets sign the schedule next. The live contract changes six hours after that schedule is sent.");
     } catch (err) {
       setError(err instanceof Error ? err.message.split("\n")[0] ?? "The wallet did not sign." : "The wallet did not sign.");
       setStatus("");
@@ -320,7 +320,7 @@ export function UpgradeGroups({
     if (!wallet || !live || !safe || !scheduleData || !implementation) return;
     setBusy(true);
     setError("");
-    setStatus("Confirm the transaction that sends the schedule. The new code waits two days after this.");
+    setStatus("Confirm the transaction that sends the schedule. The new code waits six hours after this.");
     try {
       const message = safeMessage(chain, scheduleData, safe.nonce);
       const data = encodeFunctionData({
@@ -437,7 +437,7 @@ export function UpgradeGroups({
       <p className="lede">
         {alreadyScheduled && live
           ? `The schedule is already signed. Nothing else is signed until ${when(live.readyAt)}. After that, two of the three owner wallets sign the finish. One wallet is not enough.`
-          : `This deploys the group code that can pay each turn as a transfer, then prepares the upgrade for the group contract already on ${chain.name}. When the owner is a group of wallets, two of them sign here. The new code waits two days after that schedule is sent.`}
+          : `This deploys the group code that can pay each turn as a transfer, then prepares the upgrade for the group contract already on ${chain.name}. When the owner is a group of wallets, two of them sign here. The new code waits six hours after that schedule is sent.`}
       </p>
       <dl className="addresses">
         <div>
@@ -498,7 +498,7 @@ export function UpgradeGroups({
         <button
           className="sign"
           type="button"
-          onClick={() => send(scheduleData, "Scheduled. The upgrade can be finished two days from now.")}
+          onClick={() => send(scheduleData, "Scheduled. The upgrade can be finished six hours from now.")}
           disabled={busy}
         >
           Schedule the upgrade
@@ -523,7 +523,7 @@ export function UpgradeGroups({
       {scheduleData && !ownerIsWallet && !alreadyScheduled && (
         <div className="calldata">
           <p className="note">
-            Two owner wallets sign above. The raw schedule call is below if you send it from the owner wallet yourself. Two days later, the second line finishes the upgrade.
+            Two owner wallets sign above. The raw schedule call is below if you send it from the owner wallet yourself. Six hours later, the second line finishes the upgrade.
           </p>
           <p className="mono">{scheduleData}</p>
           <p className="mono">{finishData}</p>

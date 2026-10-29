@@ -41,6 +41,8 @@ const initializeAllowlist = [
       { name: "stableKind", type: "uint8" },
       { name: "eth", type: "address" },
       { name: "ethKind", type: "uint8" },
+      { name: "extra", type: "address" },
+      { name: "extraKind", type: "uint8" },
     ],
     outputs: [],
   },
@@ -191,7 +193,7 @@ export function buildDeployment(
       encodeFunctionData({
         abi: initializeAllowlist,
         functionName: "initialize",
-        args: [owner, chain.stable.address, chain.stable.kind, chain.eth.address, chain.eth.kind],
+        args: [owner, chain.stable.address, chain.stable.kind, chain.eth.address, chain.eth.kind, chain.goodDollar, 2],
       }),
     ),
   );

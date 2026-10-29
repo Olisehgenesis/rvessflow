@@ -25,14 +25,14 @@ const stream: Intent = {
 describe("sign steps", () => {
   it("labels vault, fee skim, swap, and createFlow", () => {
     const rows = describeCalls([
-      { to: "0xeC9f5717593f66BA703e9bdB871B24014642F3cB", data: `${createVaultSelector}`, value: "0" },
+      { to: "0x0060f57E447e5E2D310b61cAD372Ae83959aF3B7", data: `${createVaultSelector}`, value: "0" },
       {
         to: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e",
         data: `0xa9059cbb${celoGasTreasury.slice(2).toLowerCase().padStart(64, "0")}${"1".padStart(64, "0")}`,
         value: "0",
       },
       { to: celoMarket.swapRouter02, data: "0x5ae401dc", value: "0" },
-      { to: "0x1a48b3d9f38ea0B905F4731c5D3bdA081078b5ef", data: "0xd7e05f44", value: "0" },
+      { to: "0x0A55056218036f3396b00115e44569eb7D33e951", data: "0xd7e05f44", value: "0" },
     ]);
     assert.deepEqual(
       rows.map((row) => row.id),

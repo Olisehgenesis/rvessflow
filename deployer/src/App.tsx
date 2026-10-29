@@ -4,6 +4,7 @@ import { chains, type ChainId, type ProtocolChain } from "./chains";
 import { ownerContract, parseOwners } from "./owners";
 import { buildDeployment, deployerBytecode, type Deployment } from "./plan";
 import { loadChainStats, type ChainStats } from "./stats";
+import { AllowGoodDollar } from "./allow";
 import { UpgradeGroups } from "./upgrade";
 import { InstalledConnect } from "./connect";
 import { installedWallets, type InstalledWallet } from "../../lib/wallet-injected";
@@ -45,6 +46,10 @@ function writeSaved(chainId: number, account: Address, saved: Saved) {
   localStorage.setItem(storageKey(chainId, account), JSON.stringify(saved));
 }
 
+function clearSaved(chainId: number, account: Address) {
+  localStorage.removeItem(storageKey(chainId, account));
+}
+
 function readableError(err: unknown): string {
   const message = err instanceof Error ? err.message : "The wallet did not sign.";
   const line = message.split("\n")[0] ?? message;
@@ -59,14 +64,18 @@ function hasCode(code: string | undefined): boolean {
 }
 
 /** Chain reads only. The signature list is built locally from this result. */
-async function readAnchor(current: ConnectedWallet, selected: ProtocolChain): Promise<{ anchor: Anchor; done: boolean }> {
+async function readAnchor(
+  current: ConnectedWallet,
+  selected: ProtocolChain,
+  fresh = false,
+): Promise<{ anchor: Anchor; done: boolean }> {
   const saved = readSaved(selected.id, current.address);
   const [savedGroups, savedDeployerCode, walletNonce] = await Promise.all([
     saved?.addresses ? current.getBytecode(saved.addresses.groups, selected) : Promise.resolve(undefined),
     saved ? current.getBytecode(saved.deployer, selected) : Promise.resolve(undefined),
     current.getTransactionCount(current.address, selected),
   ]);
-  if (saved?.addresses && hasCode(savedGroups)) {
+  if (!fresh && saved?.addresses && hasCode(savedGroups)) {
     return {
       done: true,
       anchor: { deployer: saved.deployer, alreadyCreated: 0, deployerReady: true, saved },
@@ -116,6 +125,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [fresh, setFresh] = useState(false);
 
   const owners = parseOwners(wallets);
   const ownerPreview = owners ? ownerContract(owners) : null;
@@ -162,11 +172,14 @@ export function App() {
   useEffect(() => {
     if (!wallet) return;
     let cancel = false;
-    readAnchor(wallet, chain)
+    readAnchor(wallet, chain, fresh)
       .then((next) => {
         if (cancel) return;
         setAnchor(next.anchor);
         setDone(next.done);
+        if (next.done && !fresh) {
+          setStatus("This wallet already deployed the protocol on Celo. Those contracts stay live. Sign a new protocol to get G$ and the six-hour wait. That creates new addresses.");
+        }
       })
       .catch((err: unknown) => {
         if (!cancel) setError(err instanceof Error ? err.message : "The deployment could not be prepared.");
@@ -174,7 +187,7 @@ export function App() {
     return () => {
       cancel = true;
     };
-  }, [wallet, chain]);
+  }, [wallet, chain, fresh]);
 
   function chooseChain(next: ChainId) {
     if (next === chainId) return;
@@ -186,6 +199,7 @@ export function App() {
     setFactsError("");
     setStatus("");
     setError("");
+    setFresh(false);
   }
 
   async function onConnect(walletId: string) {
@@ -229,31 +243,31 @@ export function App() {
     setError("");
     setBusy(true);
     try {
-      const fresh = await readAnchor(wallet, chain);
-      setAnchor(fresh.anchor);
-      if (fresh.done) {
+      const nextAnchor = await readAnchor(wallet, chain, fresh);
+      setAnchor(nextAnchor.anchor);
+      if (nextAnchor.done) {
         setDone(true);
         setStatus("This wallet already deployed the Rvess Protocol on this chain.");
         return;
       }
       const deployment = buildDeployment(
-        fresh.anchor.deployer,
+        nextAnchor.anchor.deployer,
         1n,
         chain,
         keeper,
         ownerContract(parsed),
-        fresh.anchor.alreadyCreated,
+        nextAnchor.anchor.alreadyCreated,
       );
       if (plan.addresses.allowlist !== deployment.addresses.allowlist || plan.deployer !== deployment.deployer) {
         setStatus("The account nonce moved. Review the new addresses, then sign again.");
         return;
       }
 
-      if (!fresh.anchor.deployerReady) {
+      if (!nextAnchor.anchor.deployerReady) {
         setStatus("Confirm the first signature in your wallet.");
         const deployer = await sendCreate(wallet, chain, deployerBytecode);
         writeSaved(chain.id, wallet.address, { deployer });
-        const next = await readAnchor(wallet, chain);
+        const next = await readAnchor(wallet, chain, fresh);
         setAnchor(next.anchor);
         setStatus("First signature is in. The protocol takes a few more signatures. The addresses stay the same.");
         return;
@@ -269,7 +283,8 @@ export function App() {
         deployer: deployment.deployer,
         addresses: deployment.addresses,
       });
-      setAnchor({ ...fresh.anchor, deployerReady: true, saved: { deployer: deployment.deployer, addresses: deployment.addresses } });
+      setAnchor({ ...nextAnchor.anchor, deployerReady: true, saved: { deployer: deployment.deployer, addresses: deployment.addresses } });
+      setFresh(false);
       setDone(true);
       setStatus("The protocol is deployed. Any two of the three wallets can change it.");
     } catch (err) {
@@ -395,6 +410,29 @@ export function App() {
         <p className="status warn">Superfluid is not on {chain.name}, so the protocol cannot be signed here yet.</p>
       )}
 
+      {wallet && !done && superfluidReady && !plan && (
+        <p className="note">Enter the three owner wallets. Then this page can sign the protocol. G$ is included in that deploy. You do not allow G$ first.</p>
+      )}
+
+      {wallet && done && !fresh && (
+        <button
+          className="sign"
+          type="button"
+          onClick={() => {
+            if (!wallet) return;
+            clearSaved(chain.id, wallet.address);
+            setDone(false);
+            setAnchor(null);
+            setError("");
+            setStatus("This creates new addresses. The protocol already on Celo stays where it is. Confirm Deploy on Celo, then sign the first transaction.");
+            setFresh(true);
+          }}
+          disabled={busy}
+        >
+          Sign a new protocol
+        </button>
+      )}
+
       {wallet && !done && superfluidReady && (
         <button className="sign" type="button" onClick={onSign} disabled={busy || !plan}>
           {anchor?.deployerReady
@@ -419,7 +457,12 @@ export function App() {
           <div><dt>Vault code</dt><dd>{shownAddresses.vaultImplementation}</dd></div>
         </dl>
       )}
-      <UpgradeGroups chain={chain} wallet={wallet} wallets={installed} onConnect={onConnect} />
+      {done && (
+        <>
+          <AllowGoodDollar chain={chain} allowlist={shownAddresses?.allowlist} wallet={wallet} wallets={installed} onConnect={onConnect} />
+          <UpgradeGroups chain={chain} wallet={wallet} wallets={installed} onConnect={onConnect} />
+        </>
+      )}
     </main>
   );
 }

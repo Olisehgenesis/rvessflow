@@ -8,7 +8,7 @@ import { appChain, appNetwork, appRpc, celoTransport } from "@/lib/network";
 const groupsProbe = parseAbi(["function groups(uint256) view returns (uint256)", "function upgradeReadyAt() view returns (uint64)"]);
 const groupsOfAbi = parseAbi(["function groupsOf(address) view returns (uint256[])"]);
 
-const celoGroups = "0xe98361A2D733783b20371ed6b03e93c7be7A3285" as Address;
+const celoGroups = "0xc9c9483ab7BB269Ce50Ff265A5b0583268e39F63" as Address;
 const celoToken = "0x3AcB9A08697b6Db4cD977e8Ab42b6f24722e6D6e" as Address;
 const baseGroups = "0x13008059FAd0348Fb8848A0737F9E826C82199fa" as Address;
 const baseToken = "0xD04383398dD2426297da660F9CCA3d439AF9ce1b" as Address;

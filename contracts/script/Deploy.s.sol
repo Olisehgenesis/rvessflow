@@ -67,6 +67,7 @@ abstract contract DeployRvess is Script {
         } else if (expectedChainId == 42220) {
             allow.setSuperToken(SuperfluidAddresses.CELO_CUSDX, true, ITokenAllowlist.TokenKind.Wrapper);
             allow.setSuperToken(SuperfluidAddresses.CELO_CELOX, true, ITokenAllowlist.TokenKind.Native);
+            allow.setSuperToken(SuperfluidAddresses.CELO_G, true, ITokenAllowlist.TokenKind.Pure);
         } else {
             allow.setSuperToken(SuperfluidAddresses.BASE_SEPOLIA_FUSDCX, true, ITokenAllowlist.TokenKind.Wrapper);
             allow.setSuperToken(SuperfluidAddresses.BASE_SEPOLIA_ETHX, true, ITokenAllowlist.TokenKind.Native);

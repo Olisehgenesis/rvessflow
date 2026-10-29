@@ -15,6 +15,9 @@ export type ProtocolChain = {
   stable: { address: Address; kind: 0 | 1; name: string };
   eth: { address: Address; kind: 0 | 1; name: string };
   groups: Address;
+  factory: Address;
+  allowlist: Address;
+  goodDollar: Address;
   mainnet: boolean;
   chain: ReturnType<typeof defineChain>;
 };
@@ -61,7 +64,10 @@ export const chains: Record<ChainId, ProtocolChain> = {
     gda,
     stable: { address: "0x3AcB9A08697b6Db4cD977e8Ab42b6f24722e6D6e", kind: 0, name: "cUSDx" },
     eth: { address: "0x671425Ae1f272Bc6F79beC3ed5C4b00e9c628240", kind: 1, name: "CELOx" },
-    groups: "0xe98361A2D733783b20371ed6b03e93c7be7A3285",
+    groups: "0xc9c9483ab7BB269Ce50Ff265A5b0583268e39F63",
+    factory: "0x0060f57E447e5E2D310b61cAD372Ae83959aF3B7",
+    allowlist: "0xfc48D9CaeBb63Ac94D1170E921E126d9722B6C4E",
+    goodDollar: "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A",
     mainnet: true,
     chain: celo,
   },
@@ -76,6 +82,9 @@ export const chains: Record<ChainId, ProtocolChain> = {
     stable: { address: zeroAddress, kind: 0, name: "cUSDx" },
     eth: { address: zeroAddress, kind: 1, name: "CELOx" },
     groups: zeroAddress,
+    factory: zeroAddress,
+    allowlist: zeroAddress,
+    goodDollar: zeroAddress,
     mainnet: false,
     chain: celoSepolia,
   },
@@ -89,6 +98,9 @@ export const chains: Record<ChainId, ProtocolChain> = {
     stable: { address: "0x1650581F573eAd727B92073B5Ef8B4f5B94D1648", kind: 0, name: "fUSDCx" },
     eth: { address: "0x143ea239159155B408e71CDbE836e8CFD6766732", kind: 1, name: "ETHx" },
     groups: "0x70f5CF80052E8a8E0e5e252d33cd15F059956E3D",
+    factory: zeroAddress,
+    allowlist: zeroAddress,
+    goodDollar: zeroAddress,
     mainnet: false,
     chain: baseSepolia,
   },
@@ -102,6 +114,9 @@ export const chains: Record<ChainId, ProtocolChain> = {
     stable: { address: "0xD04383398dD2426297da660F9CCA3d439AF9ce1b", kind: 0, name: "USDCx" },
     eth: { address: "0x46fd5cfB4c12D87acD3a13e92BAa53240C661D93", kind: 1, name: "ETHx" },
     groups: "0x13008059FAd0348Fb8848A0737F9E826C82199fa",
+    factory: zeroAddress,
+    allowlist: zeroAddress,
+    goodDollar: zeroAddress,
     mainnet: true,
     chain: base,
   },

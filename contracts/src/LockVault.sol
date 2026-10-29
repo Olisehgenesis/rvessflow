@@ -32,7 +32,7 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
     uint64 public constant MIN_DURATION = 1 hours;
     uint64 public constant MAX_DURATION = 30 * 365 days;
     uint256 public constant PROTECT_WINDOW = 1 hours;
-    uint64 public constant UPGRADE_DELAY = 2 days;
+    uint64 public constant UPGRADE_DELAY = 6 hours;
 
     ITokenAllowlist public immutable allowlist;
     address public immutable host;
@@ -122,7 +122,7 @@ contract LockVault is Initializable, Ownable2Step, UUPSUpgradeable, ReentrancyGu
         return 3;
     }
 
-    /// @notice Schedule an upgrade. It can be executed after two days. Savers can still exit.
+    /// @notice Schedule an upgrade. It can be executed after six hours. Savers can still exit.
     function scheduleUpgrade(address newImplementation) external onlyOwner {
         if (newImplementation == address(0)) revert ZeroAddress();
         pendingImplementation = newImplementation;

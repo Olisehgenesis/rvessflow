@@ -49,7 +49,7 @@ export type FundInput = {
 };
 
 export function buildFundCalls(input: FundInput): PreparedCall[] {
-  if (input.pay === "usdcx") {
+  if (input.pay === "usdcx" || input.pay === "gdx") {
     const token = input.superToken ?? baseMarket.usdcx;
     const calls: PreparedCall[] = [];
     if (input.approveWrap && input.amountInMax > 0n) calls.push(approve(token, input.vault, input.amountInMax));

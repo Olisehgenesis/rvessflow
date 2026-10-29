@@ -67,7 +67,7 @@ forge script script/Deploy.s.sol:DeployBaseMainnet --rpc-url "$BASE_RPC_URL" --b
 
 `DeployBaseSepolia` remains for the old testnet set. The script deploys upgradeable proxies and registers the chain's Super Tokens. On Base that is USDCx and ETHx. On Base Sepolia there is no Circle USDCx, so the stable token is fUSDCx. Addresses are in `src/SuperfluidAddresses.sol`. The live Base mainnet proxies, and the Base Sepolia 2-of-3 set the app reads, are both in [CONTRACTS.md](CONTRACTS.md).
 
-The owner can upgrade the allowlist, factory, lock vault, and group through their proxies. An upgrade waits two days. `upgradeVaults` and `upgradeConduits` on the factory upgrade every vault or every conduit.
+The owner can upgrade the allowlist, factory, lock vault, and group through their proxies. An upgrade waits six hours. `upgradeVaults` and `upgradeConduits` on the factory upgrade every vault or every conduit.
 
 ## App
 

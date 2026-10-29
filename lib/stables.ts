@@ -18,7 +18,8 @@ const usdmMountain = "0x59D9356E565Ab3A36dD77763Fc0d87fEaf85508C" as Address;
 const usdcCelo = "0xcebA9300f2b948710d2653dD7B07f33A8B32118C" as Address;
 const usdtCelo = "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e" as Address;
 const usdmMento = "0x765DE816845861e75A25fCA122bb6898B8B1282a" as Address;
-const goodDollar = "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A" as Address;
+export const GOOD_DOLLAR = "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A" as Address;
+const goodDollar = GOOD_DOLLAR;
 
 const catalog: FinderToken[] = [
   { key: "base-usdc", label: "USDC", address: usdcBase, decimals: 6, pegged: true, chainId: 8453, network: "Base" },

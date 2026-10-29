@@ -13,7 +13,9 @@ import {
   formatUsd8,
   fundForNet,
   grossForNet,
+  isSuperPay,
   netSuperForUsd,
+  netToken18ForUsd,
   parseUsd,
   protocolFeeOf,
   slippageCeiling,
@@ -25,7 +27,7 @@ import {
 } from "@/lib/pay-math";
 import { loadPrices, type Prices } from "@/lib/prices";
 import { addresses, cfaAbi, erc20, factoryAbi, publicClient, stableLabel, streamNeed, vaultAbi } from "@/lib/protocol";
-import { vaultSite, type VaultSite } from "@/lib/vault-site";
+import { siteSuper, vaultSite, type VaultSite } from "@/lib/vault-site";
 
 const quoterAbi = parseAbi([
   "function quoteExactOutputSingle((address tokenIn, address tokenOut, uint256 amount, uint24 fee, uint160 sqrtPriceLimitX96) params) returns (uint256 amountIn, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
@@ -48,8 +50,8 @@ export type FundQuote = {
   prices: Prices;
 };
 
-const symbols: Record<PayAsset, string> = { usdc: "USDC", usdt: "USDT", eth: "ETH", usdcx: stableLabel };
-const scales: Record<PayAsset, number> = { usdc: 6, usdt: 6, eth: 18, usdcx: 18 };
+const symbols: Record<PayAsset, string> = { usdc: "USDC", usdt: "USDT", eth: "ETH", usdcx: stableLabel, gdx: "G$" };
+const scales: Record<PayAsset, number> = { usdc: 6, usdt: 6, eth: 18, usdcx: 18, gdx: 18 };
 
 async function allowance(owner: Address, token: Address, spender: Address) {
   return publicClient.readContract({ address: token, abi: erc20, functionName: "allowance", args: [owner, spender] });
@@ -102,8 +104,9 @@ async function quoteInput(receive: "usdt" | "eth", usdcIn: bigint): Promise<{ am
   throw new Error(last);
 }
 
-export async function superForUsd(usd: string): Promise<bigint> {
+export async function superForUsd(usd: string, pay?: PayAsset): Promise<bigint> {
   const prices = await loadPrices();
+  if (pay === "gdx") return netToken18ForUsd(parseUsd(usd), prices.gdxUsd8);
   return netSuperForUsd(parseUsd(usd), prices.usdcUsd8);
 }
 
@@ -129,7 +132,7 @@ export async function quoteFund(pay: PayAsset, needed: bigint, mode: "vault" | "
       prices,
     };
   }
-  if (pay === "usdcx") {
+  if (pay === "usdcx" || pay === "gdx") {
     const fee = protocolFeeOf(needed);
     return {
       pay,
@@ -163,13 +166,16 @@ async function requireSpendable(owner: Address, pay: PayAsset, needed: bigint) {
   const balance =
     pay === "eth"
       ? await publicClient.getBalance({ address: owner })
-      : await balanceOf(owner, pay === "usdt" ? baseMarket.usdt : pay === "usdc" ? baseMarket.usdc : addresses.fusdcx);
+      : await balanceOf(
+          owner,
+          pay === "usdt" ? baseMarket.usdt : pay === "usdc" ? baseMarket.usdc : pay === "gdx" ? siteSuper(vaultSite(), "gdx") : addresses.fusdcx,
+        );
   const problem = spendableProblem({
     symbol: symbols[pay],
     balance,
     needed,
     scale: scales[pay],
-    digits: pay === "eth" ? 6 : pay === "usdcx" ? 4 : 2,
+    digits: pay === "eth" ? 6 : isSuperPay(pay) ? 4 : 2,
     leaveFee: pay === "eth",
   });
   if (problem) throw new Error(problem);
@@ -214,7 +220,7 @@ async function quoteCeloToUsdm(
   throw new Error(last);
 }
 
-async function streamNeedOn(site: VaultSite, amount: bigint, duration: bigint): Promise<bigint> {
+async function streamNeedOn(site: VaultSite, amount: bigint, duration: bigint, token = site.fusdcx): Promise<bigint> {
   const perSecond = amount / duration;
   if (perSecond === 0n) throw new Error("That duration is too long for this amount. The stream would be less than 1 wei per second.");
   const reserved = perSecond * duration;
@@ -222,7 +228,7 @@ async function streamNeedOn(site: VaultSite, amount: bigint, duration: bigint): 
     address: site.cfa,
     abi: cfaAbi,
     functionName: "getBufferAmountByFlowrate",
-    args: [site.fusdcx, perSecond],
+    args: [token, perSecond],
   });
   return reserved + buffer * 2n + perSecond * 3600n;
 }
@@ -249,18 +255,19 @@ async function wrapSiteCalls(
   mode: "vault" | "wallet",
 ): Promise<PreparedCall[]> {
   if (needed <= 0n) return [];
-  if (pay === "usdcx") {
+  if (isSuperPay(pay)) {
     if (mode === "wallet") return [];
+    const token = siteSuper(site, pay);
     const due = needed + protocolFeeOf(needed);
     const allowanceNow = await site.client.readContract({
-      address: site.fusdcx,
+      address: token,
       abi: wrapAbi,
       functionName: "allowance",
       args: [owner, vault],
     });
     const calls: PreparedCall[] = [];
-    if (allowanceNow < due) calls.push(fundCall(site.fusdcx, "approve", [vault, due]));
-    calls.push(fundCall(vault, "depositSuper", [site.fusdcx, needed]));
+    if (allowanceNow < due) calls.push(fundCall(token, "approve", [vault, due]));
+    calls.push(fundCall(vault, "depositSuper", [token, needed]));
     return calls;
   }
   const minted = grossForNet(needed);
@@ -364,15 +371,16 @@ export async function fundingCalls(
   }
   const quote = await quoteFund(pay, needed, mode);
   await requireSpendable(owner, pay, quote.amountInMax);
-  if (pay === "usdcx") {
+  if (isSuperPay(pay)) {
     if (mode === "wallet") return [];
-    const allowanceNow = await allowance(owner, addresses.fusdcx, vault);
+    const token = siteSuper(site ?? vaultSite(), pay);
+    const allowanceNow = await allowance(owner, token, vault);
     return buildFundCalls({
       payer: owner,
       pay,
       mode,
       vault,
-      superToken: addresses.fusdcx,
+      superToken: token,
       underlying: 0n,
       minted: quote.minted,
       amountInMax: quote.amountInMax,
@@ -432,6 +440,7 @@ function usd8OfSuper(superAmount: bigint, usdcUsd8: bigint): bigint {
 }
 
 function rateLine(quote: FundQuote): string {
+  if (quote.pay === "gdx") return `1 G$ = $${formatPrice8(quote.prices.gdxUsd8)}`;
   if (quote.pay === "usdcx") return `1 ${stableLabel} = $${formatPrice8(quote.prices.usdcUsd8)}`;
   if (quote.pay === "usdc" || quote.amountIn <= 0n) return `1 USDC = $${formatPrice8(quote.prices.usdcUsd8)}`;
   const usd8 = (quote.underlying * quote.prices.usdcUsd8) / 1_000_000n;
@@ -442,15 +451,16 @@ function rateLine(quote: FundQuote): string {
 export function fundingLines(quote: FundQuote, heading?: string): QuoteLine[] {
   const lines: QuoteLine[] = [];
   if (heading) lines.push({ label: "You add", value: heading });
-  lines.push({ label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(quote.fee, quote.prices.usdcUsd8))}` });
-  if (quote.pay !== "usdcx") lines.push({ label: "USDC wrapped", value: formatAmount(quote.underlying, 6, 2) });
+  const feePrice = quote.pay === "gdx" ? quote.prices.gdxUsd8 : quote.prices.usdcUsd8;
+  lines.push({ label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(quote.fee, feePrice))}` });
+  if (!isSuperPay(quote.pay)) lines.push({ label: "USDC wrapped", value: formatAmount(quote.underlying, 6, 2) });
   lines.push({
-    label: quote.pay === "usdc" || quote.pay === "usdcx" ? "You spend" : "You spend at most",
-    value: `${formatAmount(quote.amountInMax, scales[quote.pay], quote.pay === "eth" ? 6 : 2)} ${symbols[quote.pay]}`,
+    label: quote.pay === "usdc" || isSuperPay(quote.pay) ? "You spend" : "You spend at most",
+    value: `${formatAmount(quote.amountInMax, scales[quote.pay], quote.pay === "eth" || quote.pay === "gdx" ? 6 : 2)} ${symbols[quote.pay]}`,
   });
   lines.push({ label: "Rate", value: rateLine(quote) });
-  lines.push({ label: "Slippage", value: quote.pay === "usdc" || quote.pay === "usdcx" ? "No swap" : `${(SLIPPAGE_BPS / 100).toFixed(2)}% max` });
-  if (quote.pay !== "usdcx") lines.push({ label: "Deadline", value: "20 minutes" });
+  lines.push({ label: "Slippage", value: quote.pay === "usdc" || isSuperPay(quote.pay) ? "No swap" : `${(SLIPPAGE_BPS / 100).toFixed(2)}% max` });
+  if (!isSuperPay(quote.pay)) lines.push({ label: "Deadline", value: "20 minutes" });
   return lines;
 }
 
@@ -485,16 +495,19 @@ export async function previewLines(input: {
   const prices = await loadPrices();
   let face = 0n;
   if (input.superWei) face = BigInt(input.superWei);
-  else if (input.usd) face = netSuperForUsd(parseUsd(input.usd), prices.usdcUsd8);
+  else if (input.usd) {
+    face = input.pay === "gdx" ? netToken18ForUsd(parseUsd(input.usd), prices.gdxUsd8) : netSuperForUsd(parseUsd(input.usd), prices.usdcUsd8);
+  }
   if (face <= 0n) throw new Error("Enter the amount in USD.");
-  const heading = `$${formatUsd8(usd8OfSuper(face, prices.usdcUsd8))}`;
+  const facePrice = input.pay === "gdx" ? prices.gdxUsd8 : prices.usdcUsd8;
+  const heading = `$${formatUsd8(usd8OfSuper(face, facePrice))}`;
   let needed = face;
   if (input.mode === "stream") {
     const duration = Number(input.duration);
     if (!Number.isInteger(duration) || duration < 60) throw new Error("Pick the end date first.");
     needed =
       input.network && /celo/i.test(input.network)
-        ? await streamNeedOn(vaultSite("celo"), face, BigInt(duration))
+        ? await streamNeedOn(vaultSite("celo"), face, BigInt(duration), siteSuper(vaultSite("celo"), input.pay))
         : await streamNeed(face, BigInt(duration));
   }
   const pulledFee = input.protocolOnTop ? protocolFeeOf(face) : 0n;
@@ -515,6 +528,13 @@ export async function previewLines(input: {
     const short = needed - covered;
     const minted = grossForNet(short);
     const fee = protocolFeeOf(minted);
+    if (input.pay === "gdx") {
+      return shownQuote([
+        { label: "You spend", value: `${formatAmount(short, 18, 4)} G$` },
+        { label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(protocolFeeOf(short), prices.gdxUsd8))}` },
+        { label: "Slippage", value: "No swap" },
+      ]);
+    }
     if (input.pay === "usdcx" || input.pay === "usdc") {
       const symbol = input.pay === "usdcx" ? "cUSDx" : "USDm";
       return shownQuote([
@@ -594,7 +614,7 @@ export async function superForWithdraw(usd: string): Promise<bigint> {
 export async function depositPreview(owner: Address, pay: PayAsset, usd: string): Promise<DepositPreview> {
   const micros = parseUsd(usd);
   if (micros <= 0n) throw new Error("Enter the amount in USD.");
-  const quote = await quoteFund(pay, await superForUsd(usd), "vault");
+  const quote = await quoteFund(pay, await superForUsd(usd, pay), "vault");
   const vault = await publicClient.readContract({
     address: addresses.factory,
     abi: factoryAbi,
@@ -628,7 +648,7 @@ export async function depositPreview(owner: Address, pay: PayAsset, usd: string)
   } catch {
     network = null;
   }
-  const tokenUsd8 = pay === "eth" ? quote.prices.ethUsd8 : pay === "usdt" ? quote.prices.usdtUsd8 : quote.prices.usdcUsd8;
+  const tokenUsd8 = pay === "eth" ? quote.prices.ethUsd8 : pay === "usdt" ? quote.prices.usdtUsd8 : pay === "gdx" ? quote.prices.gdxUsd8 : quote.prices.usdcUsd8;
   return buildDepositPreview({
     pay,
     typedUsdMicros: micros,

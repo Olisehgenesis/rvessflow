@@ -6,6 +6,7 @@ import { baseMarket } from "@/lib/base-market";
 import { formatAmount } from "@/lib/pay-math";
 import { celoTransport } from "@/lib/network";
 import { addresses, chain, erc20, networkName, publicClient, stableLabel } from "@/lib/protocol";
+import { GOOD_DOLLAR } from "@/lib/stables";
 import { pickCeloFee } from "@/lib/celo-fee";
 import { type MoveChoice, type SendAsset, type SendChoice, sendDecimals, spendableEth, spendableUsdc, usdcFeeReserve } from "@/lib/send-math";
 
@@ -65,6 +66,7 @@ export function sendRoute(asset: SendAsset): SendRoute {
   if (asset === "celo-usdm") return { chainId: 42220, token: celoUsdm, label: "USDm", network: "Celo", fee: "none" };
   if (asset === "celo-mountain") return { chainId: 42220, token: celoMountain, label: "USDM", network: "Celo", fee: "none" };
   if (asset === "celo-cusdx") return { chainId: 42220, token: celoCusdx, label: "cUSDx", network: "Celo", fee: "none" };
+  if (asset === "celo-gdx") return { chainId: 42220, token: GOOD_DOLLAR, label: "G$", network: "Celo", fee: "none" };
   return { chainId: 42220, token: celoCelox, label: "CELOx", network: "Celo", fee: "none" };
 }
 
@@ -128,7 +130,8 @@ export async function loadMoveOut(owner: Address): Promise<MoveChoice[]> {
 function listedAssets(): SendAsset[] {
   const assets: SendAsset[] = ["eth", "usdc", "usdt", "usdcx", "ethx", "base-usdm", "celo-usdm", "celo-mountain"];
   if (chain.id !== 8453) assets.push("base-eth", "base-usdc", "base-usdt", "base-usdcx", "base-ethx");
-  if (chain.id !== 42220) assets.push("celo", "celo-usdc", "celo-usdt", "celo-cusdx", "celo-celox");
+  if (chain.id === 42220) assets.push("celo-gdx");
+  if (chain.id !== 42220) assets.push("celo", "celo-usdc", "celo-usdt", "celo-cusdx", "celo-celox", "celo-gdx");
   return assets;
 }
 

@@ -1,6 +1,7 @@
 import "server-only";
 
-import { createPublicClient, http, type Address, type PublicClient } from "viem";
+import { createPublicClient, http, zeroAddress, type Address, type PublicClient } from "viem";
+import type { PayAsset } from "@/lib/pay-math";
 import { base, celo } from "viem/chains";
 import { appGroupNet, type GroupNet } from "@/lib/group-network";
 import { appChain, appNetwork, appRpc, celoTransport } from "@/lib/network";
@@ -31,6 +32,8 @@ export type VaultSite = {
   usdt: Address;
   /** Token Superfluid wraps into fusdcx. Celo cUSDx wraps Mento USDm. */
   wrap: Address;
+  /** Pure Super Token. Celo G$. Zero on Base. */
+  goodDollar: Address;
   client: VaultReader;
 };
 
@@ -38,15 +41,16 @@ const celoLive: Omit<VaultSite, "client"> = {
   net: "celo",
   chainId: 42220,
   name: "Celo",
-  factory: "0xeC9f5717593f66BA703e9bdB871B24014642F3cB",
-  locks: "0x1a48b3d9f38ea0B905F4731c5D3bdA081078b5ef",
-  allowlist: "0x3627815B99D045A40a189000FBf7dAE729cEF9eB",
+  factory: "0x0060f57E447e5E2D310b61cAD372Ae83959aF3B7",
+  locks: "0x0A55056218036f3396b00115e44569eb7D33e951",
+  allowlist: "0xfc48D9CaeBb63Ac94D1170E921E126d9722B6C4E",
   fusdcx: "0x3AcB9A08697b6Db4cD977e8Ab42b6f24722e6D6e",
   ethx: "0x671425Ae1f272Bc6F79beC3ed5C4b00e9c628240",
   cfa: "0xcfA132E353cB4E398080B9700609bb008eceB125",
   usdc: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
   usdt: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e",
   wrap: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
+  goodDollar: "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A",
 };
 
 const baseLive: Omit<VaultSite, "client"> = {
@@ -62,6 +66,7 @@ const baseLive: Omit<VaultSite, "client"> = {
   usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   usdt: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
   wrap: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  goodDollar: "0x0000000000000000000000000000000000000000",
 };
 
 const sepoliaLive: Omit<VaultSite, "client"> = {
@@ -77,6 +82,7 @@ const sepoliaLive: Omit<VaultSite, "client"> = {
   usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
   usdt: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
   wrap: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  goodDollar: "0x0000000000000000000000000000000000000000",
 };
 
 export function vaultSite(net: GroupNet = appGroupNet()): VaultSite {
@@ -87,4 +93,12 @@ export function vaultSite(net: GroupNet = appGroupNet()): VaultSite {
   }
   if (net === "celo") return { ...celoLive, client: celoClient as VaultReader };
   return { ...baseLive, client: baseClient as VaultReader };
+}
+
+export function siteSuper(site: VaultSite, pay?: PayAsset): Address {
+  if (pay === "gdx") {
+    if (site.goodDollar === zeroAddress) throw new Error("G$ is on Celo.");
+    return site.goodDollar;
+  }
+  return site.fusdcx;
 }

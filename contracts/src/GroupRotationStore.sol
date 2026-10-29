@@ -19,7 +19,7 @@ abstract contract GroupRotationStore is Initializable, Ownable2Step, UUPSUpgrade
     uint64 public constant MIN_CYCLE = 1 hours;
     uint64 public constant MAX_CYCLE = 366 days;
     uint256 public constant PROTECT_WINDOW = 1 hours;
-    uint64 public constant UPGRADE_DELAY = 2 days;
+    uint64 public constant UPGRADE_DELAY = 6 hours;
 
     enum PayStatus {
         None,

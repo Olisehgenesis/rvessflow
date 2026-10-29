@@ -8,6 +8,7 @@ import {
   fundForNet,
   grossForNet,
   netSuperForUsd,
+  netToken18ForUsd,
   parseUsd,
   protocolFeeOf,
   slippageCeiling,
@@ -45,6 +46,10 @@ test("a $100 deposit at a $1 USDC price keeps a full dollar after the 0.30% skim
   assert.equal(sized.minted, sized.underlying * SUPER_UNIT);
   const feeUsd = Number(sized.fee) / 1e18;
   assert.ok(feeUsd > 0.3 && feeUsd < 0.31);
+});
+
+test("G$ at a tenth of a cent buys one thousand tokens per dollar", () => {
+  assert.equal(netToken18ForUsd(parseUsd("1"), 10_000n), 10_000n * 10n ** 18n);
 });
 
 test("USDC cheaper than a dollar buys more than one token per dollar", () => {

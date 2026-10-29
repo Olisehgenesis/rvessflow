@@ -16,7 +16,7 @@ interface IUpgrade {
 
 /// @notice Upgrade the Base Sepolia proxies in place. The live contracts still
 ///         have a zero upgrade delay, so this executes immediately. The new code
-///         waits two days before the next upgrade.
+///         waits six hours before the next upgrade.
 contract UpgradeBaseSepolia is Script {
     address internal constant ALLOW = 0xD1c99f91c3495735929F49D62E430B9a1536D4EE;
     address internal constant FACTORY = 0xf60322153F176b98e552263465F05A9c260A0979;

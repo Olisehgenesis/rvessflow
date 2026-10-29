@@ -17,7 +17,7 @@ const executeAbi = [
 ] as const;
 
 const router = "0x5615CDAb10dc425a742d643d949a7F474C01abc4";
-const factory = "0xeC9f5717593f66BA703e9bdB871B24014642F3cB";
+const factory = "0x0060f57E447e5E2D310b61cAD372Ae83959aF3B7";
 
 function executeCall(to: `0x${string}`) {
   return encodeFunctionData({

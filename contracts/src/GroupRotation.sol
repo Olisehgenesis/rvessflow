@@ -55,7 +55,7 @@ contract GroupRotation is GroupRotationStore {
         return 5;
     }
 
-    /// @notice Schedule an upgrade. It can be executed after two days. Members can still exit a group
+    /// @notice Schedule an upgrade. It can be executed after six hours. Members can still exit a group
     ///         that has not started, and can still claim after it ends.
     function scheduleUpgrade(address newImplementation) external onlyOwner {
         if (newImplementation == address(0)) revert ZeroAddress();

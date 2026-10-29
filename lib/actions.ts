@@ -200,7 +200,7 @@ function activityFrom(owner: string, intent: Intent, id?: string): ActivityRecor
   if (intent.kind === "lock") {
     const amount = activityAmount(intent.amount, Boolean(intent.pay));
     return amount
-      ? { ...base, title: "Locked", detail: intent.name, direction: "out", amount, asset: assetKind(intent.token), href: `/vaults/${id ?? ""}` }
+      ? { ...base, title: "Locked", detail: intent.name, direction: "out", amount, asset: assetKind(intent.token) === "ethx" ? "ethx" : "usdcx", href: `/vaults/${id ?? ""}` }
       : null;
   }
   if (intent.kind === "deposit") {

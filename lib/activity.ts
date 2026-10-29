@@ -1,7 +1,7 @@
 import "server-only";
 
 import { parseAbiItem, zeroAddress, type Address } from "viem";
-import { assetKind } from "@/lib/assets";
+import { activityAsset } from "@/lib/assets";
 import { listActivity, type ActivityRecord } from "@/lib/notes";
 import { addresses, loadPortfolio, publicClient, type FlowRow, type Portfolio } from "@/lib/protocol";
 
@@ -79,7 +79,7 @@ export async function loadActivity(owner: Address, portfolio?: Portfolio): Promi
         detail: "Wallet",
         direction: "in",
         amount: log.args.amount,
-        asset: assetKind(log.args.token ?? addresses.fusdcx),
+        asset: activityAsset(log.args.token ?? addresses.fusdcx),
         href: "/home",
         block: log.blockNumber,
       });
@@ -92,7 +92,7 @@ export async function loadActivity(owner: Address, portfolio?: Portfolio): Promi
         detail: "Vault",
         direction: "out",
         amount: log.args.amount,
-        asset: assetKind(log.args.token ?? addresses.fusdcx),
+        asset: activityAsset(log.args.token ?? addresses.fusdcx),
         href: "/home",
         block: log.blockNumber,
       });
@@ -110,7 +110,7 @@ export async function loadActivity(owner: Address, portfolio?: Portfolio): Promi
         detail: flow?.name || "Goal",
         direction: saving ? "in" : "out",
         amount,
-        asset: assetKind(flow?.token ?? log.args.token ?? addresses.fusdcx),
+        asset: activityAsset(flow?.token ?? log.args.token ?? addresses.fusdcx),
         href: `/goals/${id}`,
         block: log.blockNumber,
       });
@@ -127,7 +127,7 @@ export async function loadActivity(owner: Address, portfolio?: Portfolio): Promi
         detail: flow?.name || "Goal",
         direction: "in",
         amount,
-        asset: assetKind(flow?.token ?? addresses.fusdcx),
+        asset: activityAsset(flow?.token ?? addresses.fusdcx),
         href: `/goals/${id}`,
         block: log.blockNumber,
       });
@@ -151,7 +151,7 @@ export async function loadActivity(owner: Address, portfolio?: Portfolio): Promi
       detail: lock?.name || "Lock",
       direction: "out",
       amount: log.args.principal,
-      asset: assetKind(log.args.token ?? addresses.fusdcx),
+      asset: activityAsset(log.args.token ?? addresses.fusdcx),
       href: `/vaults/${id}`,
       block: log.blockNumber,
     });
@@ -166,7 +166,7 @@ export async function loadActivity(owner: Address, portfolio?: Portfolio): Promi
       detail: locksById.get(id)?.name || "Lock",
       direction: "in",
       amount: log.args.payout ?? 0n,
-      asset: assetKind(locksById.get(id)?.token ?? addresses.fusdcx),
+      asset: activityAsset(locksById.get(id)?.token ?? addresses.fusdcx),
       href: `/vaults/${id}`,
       block: log.blockNumber,
     });
@@ -180,7 +180,7 @@ export async function loadActivity(owner: Address, portfolio?: Portfolio): Promi
       detail: locksById.get(id)?.name || "Lock",
       direction: "in",
       amount: (log.args.principal ?? 0n) + (log.args.bonus ?? 0n),
-      asset: assetKind(locksById.get(id)?.token ?? addresses.fusdcx),
+      asset: activityAsset(locksById.get(id)?.token ?? addresses.fusdcx),
       href: `/vaults/${id}`,
       block: log.blockNumber,
     });

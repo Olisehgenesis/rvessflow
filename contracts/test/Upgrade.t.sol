@@ -42,7 +42,7 @@ contract UpgradeTest is SfBase {
         vm.expectRevert(VaultFactory.UpgradeNotReady.selector);
         factory.upgradeVaults(address(nextVault));
         uint256 vaultAt = vm.getBlockTimestamp();
-        vm.warp(vaultAt + 2 days);
+        vm.warp(vaultAt + factory.UPGRADE_DELAY());
         vm.prank(admin);
         factory.upgradeVaults(address(nextVault));
         assertEq(FlowVaultV2(payable(address(vault))).contractVersion(), 2);
@@ -66,7 +66,7 @@ contract UpgradeTest is SfBase {
         vm.expectRevert(GroupRotationStore.UpgradeNotReady.selector);
         proxied.upgradeToAndCall(address(nextGroup), "");
         uint256 groupAt = vm.getBlockTimestamp();
-        vm.warp(groupAt + 2 days);
+        vm.warp(groupAt + proxied.UPGRADE_DELAY());
         vm.prank(admin);
         proxied.upgradeToAndCall(address(nextGroup), "");
         assertEq(GroupRotationV2(address(proxied)).contractVersion(), 6);

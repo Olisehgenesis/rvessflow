@@ -10,7 +10,7 @@ import { celoTransport } from "@/lib/network";
 import { addresses, chain, erc20, factoryAbi, lockAbi, networkName, publicClient, stableLabel, vaultAbi, type Portfolio } from "@/lib/protocol";
 import { vaultSite } from "@/lib/vault-site";
 import type { GroupNet } from "@/lib/group-network";
-import { cashTokens, finderTokens, type FinderToken } from "@/lib/stables";
+import { cashTokens, finderTokens, GOOD_DOLLAR, type FinderToken } from "@/lib/stables";
 import type { Quote } from "@/lib/quote";
 import type { HoldingRow } from "@/lib/holding-row";
 
@@ -83,8 +83,8 @@ const baseFactory = "0xc21B7Bd68F8235b7DB2827334d2039fD8B3C118d" as Address;
 const baseLocks = "0x68B0667E098A62b3e3F437DBeb0aEdB746cD4c41" as Address;
 const celoCusdx = "0x3AcB9A08697b6Db4cD977e8Ab42b6f24722e6D6e" as Address;
 const celoCelox = "0x671425Ae1f272Bc6F79beC3ed5C4b00e9c628240" as Address;
-const celoFactory = "0xeC9f5717593f66BA703e9bdB871B24014642F3cB" as Address;
-const celoLocks = "0x1a48b3d9f38ea0B905F4731c5D3bdA081078b5ef" as Address;
+const celoFactory = "0x0060f57E447e5E2D310b61cAD372Ae83959aF3B7" as Address;
+const celoLocks = "0x0A55056218036f3396b00115e44569eb7D33e951" as Address;
 
 const baseReader = createPublicClient({
   chain: base,
@@ -233,7 +233,7 @@ async function savedOn(chainId: number, owner: Address, factory: Address, locks:
 }
 
 function amountDigits(label: string, decimals: number): number {
-  if (label === "ETH" || label === "ETHx" || label === "CELO" || label === "CELOx") return 6;
+  if (label === "ETH" || label === "ETHx" || label === "CELO" || label === "CELOx" || label === "G$") return 6;
   return decimals === 6 ? 2 : 4;
 }
 
@@ -335,7 +335,7 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
   const wrappedEth = ethx + ethxLocked;
   const ethPrice = chain.id === 42220 ? quotes.ethereum : prices.ethUsd8;
   const celoPrice = quotes.celo;
-  const goodPrice = quotes.gooddollar;
+  const goodPrice = prices.gdxUsd8 > 0n ? prices.gdxUsd8 : quotes.gooddollar;
   const pieces = new Map<string, Piece>();
   const put = (piece: Piece) => pieces.set(piece.key, piece);
   for (const { token, amount } of listed) {
@@ -435,7 +435,18 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
     streaming: money(columns.streaming),
     locked: money(columns.locked),
     idleUsd: money(idleValue),
-    choices: payChoices(prices, usdc, usdt, eth, reads[0]?.status === "success", reads[1]?.status === "success", superAmount),
+    choices: payChoices(
+      prices,
+      usdc,
+      usdt,
+      eth,
+      reads[0]?.status === "success",
+      reads[1]?.status === "success",
+      superAmount,
+      undefined,
+      undefined,
+      listed.find((row) => row.token.key === "celo-gooddollar")?.amount ?? 0n,
+    ),
   };
 }
 
@@ -449,11 +460,23 @@ function payChoices(
   superAmount: bigint,
   network?: string,
   net?: GroupNet,
+  gdx = 0n,
 ): PayChoice[] {
   const choices: PayChoice[] = [];
   const celo = Boolean(network?.startsWith("Celo"));
   const tag = (pay: PayAsset) => (net ? `${net}-${pay}` : pay);
   choices.push(superChoice(superAmount, prices.usdcUsd8, celo ? "cUSDx" : stableLabel, network, tag("usdcx")));
+  if ((celo || chain.id === 42220) && prices.gdxUsd8 > 0n) {
+    choices.push({
+      pay: "gdx",
+      label: "G$",
+      balance: formatAmount(gdx, 18, 4),
+      usd: money(valueOf(gdx, 18, prices.gdxUsd8)),
+      maxUsd: maxUsdInput(valueOf(gdx, 18, prices.gdxUsd8)),
+      network: network ?? "Celo",
+      id: tag("gdx"),
+    });
+  }
   choices.push({
     pay: "eth",
     label: celo ? "CELO" : chain.nativeCurrency.symbol,
@@ -501,6 +524,9 @@ export async function loadPayChoices(owner: Address): Promise<PayChoice[]> {
           contracts: [
             { address: dollar, abi: erc20, functionName: "balanceOf" as const, args: [owner] as const },
             { address: site.usdt, abi: erc20, functionName: "balanceOf" as const, args: [owner] as const },
+            ...(net === "celo"
+              ? [{ address: GOOD_DOLLAR, abi: erc20, functionName: "balanceOf" as const, args: [owner] as const }]
+              : []),
           ],
           allowFailure: true,
         }),
@@ -517,6 +543,7 @@ export async function loadPayChoices(owner: Address): Promise<PayChoice[]> {
         superAmount,
         site.name,
         net,
+        net === "celo" ? readAmount(reads, 2) : 0n,
       );
     }),
   );

@@ -21,6 +21,8 @@ library SuperfluidAddresses {
     /// @dev cUSDx wraps Mento USDm (the token historically called cUSD).
     address internal constant CELO_CUSDX = 0x3AcB9A08697b6Db4cD977e8Ab42b6f24722e6D6e;
     address internal constant CELO_CELOX = 0x671425Ae1f272Bc6F79beC3ed5C4b00e9c628240;
+    /// @dev SuperGoodDollar Pure Super Token. No wrap. getUnderlyingDecimals reverts.
+    address internal constant CELO_G = 0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A;
     /// @dev Celo Sepolia (11142220) is not in Superfluid metadata. The Celo host,
     ///      forwarders, cUSDx, and CELOx have no code there (checked 28 Oct 2026).
 

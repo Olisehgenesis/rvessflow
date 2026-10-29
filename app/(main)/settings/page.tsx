@@ -182,7 +182,7 @@ async function SettingsBody() {
           </li>
         </ul>
         <div className="py-3">
-          <Notice>These contracts are unaudited. An upgrade waits two days after it is scheduled.</Notice>
+          <Notice>These contracts are unaudited. An upgrade waits six hours after it is scheduled.</Notice>
         </div>
       </details>
       </div>

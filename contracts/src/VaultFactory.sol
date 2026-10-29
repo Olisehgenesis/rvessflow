@@ -22,7 +22,7 @@ contract VaultFactory is Initializable, Ownable2Step, UUPSUpgradeable {
 
     mapping(address user => address vault) public vaultOf;
 
-    uint64 public constant UPGRADE_DELAY = 2 days;
+    uint64 public constant UPGRADE_DELAY = 6 hours;
     address public pendingVault;
     address public pendingConduit;
     address public pendingImplementation;
@@ -81,21 +81,21 @@ contract VaultFactory is Initializable, Ownable2Step, UUPSUpgradeable {
         emit VaultCreated(msg.sender, vault);
     }
 
-    /// @notice Schedule a vault upgrade. It can be executed after two days.
+    /// @notice Schedule a vault upgrade. It can be executed after six hours.
     function scheduleVaultUpgrade(address newImplementation) external onlyOwner {
         if (newImplementation == address(0)) revert ZeroAddress();
         pendingVault = newImplementation;
         vaultReadyAt = uint64(block.timestamp) + UPGRADE_DELAY;
     }
 
-    /// @notice Schedule a conduit upgrade. It can be executed after two days.
+    /// @notice Schedule a conduit upgrade. It can be executed after six hours.
     function scheduleConduitUpgrade(address newImplementation) external onlyOwner {
         if (newImplementation == address(0)) revert ZeroAddress();
         pendingConduit = newImplementation;
         conduitReadyAt = uint64(block.timestamp) + UPGRADE_DELAY;
     }
 
-    /// @notice Schedule a factory upgrade. It can be executed after two days.
+    /// @notice Schedule a factory upgrade. It can be executed after six hours.
     function scheduleUpgrade(address newImplementation) external onlyOwner {
         if (newImplementation == address(0)) revert ZeroAddress();
         pendingImplementation = newImplementation;

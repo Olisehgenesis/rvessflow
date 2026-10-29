@@ -11,13 +11,13 @@ describe("vault create", () => {
 
   it("treats a lone createVault call as the vault step", () => {
     assert.equal(
-      isCreateVaultOnly([{ to: "0xeC9f5717593f66BA703e9bdB871B24014642F3cB", data: `${createVaultSelector}` }]),
+      isCreateVaultOnly([{ to: "0x0060f57E447e5E2D310b61cAD372Ae83959aF3B7", data: `${createVaultSelector}` }]),
       true,
     );
     assert.equal(
       isCreateVaultOnly([
-        { to: "0xeC9f5717593f66BA703e9bdB871B24014642F3cB", data: `${createVaultSelector}` },
-        { to: "0xeC9f5717593f66BA703e9bdB871B24014642F3cB", data: `${createVaultSelector}` },
+        { to: "0x0060f57E447e5E2D310b61cAD372Ae83959aF3B7", data: `${createVaultSelector}` },
+        { to: "0x0060f57E447e5E2D310b61cAD372Ae83959aF3B7", data: `${createVaultSelector}` },
       ]),
       false,
     );

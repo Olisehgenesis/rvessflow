@@ -23,7 +23,7 @@ contract TokenAllowlist is Initializable, Ownable2Step, UUPSUpgradeable, ITokenA
 
     mapping(address superToken => Config config) private _tokens;
     bool public paused;
-    uint64 public constant UPGRADE_DELAY = 2 days;
+    uint64 public constant UPGRADE_DELAY = 6 hours;
     address public pendingImplementation;
     uint64 public upgradeReadyAt;
     /// @dev Support staff. Appended after the original layout so an upgrade keeps existing slots.
@@ -64,8 +64,25 @@ contract TokenAllowlist is Initializable, Ownable2Step, UUPSUpgradeable, ITokenA
         _transferOwnership(initialOwner);
     }
 
+    /// @notice Same as the two-token setup, plus a Pure Super Token such as G$.
+    function initialize(
+        address initialOwner,
+        address stable,
+        TokenKind stableKind,
+        address eth,
+        TokenKind ethKind,
+        address extra,
+        TokenKind extraKind
+    ) external initializer {
+        if (initialOwner == address(0) || stable == address(0) || eth == address(0)) revert ZeroAddress();
+        _setSuperToken(stable, true, stableKind);
+        _setSuperToken(eth, true, ethKind);
+        if (extra != address(0)) _setSuperToken(extra, true, extraKind);
+        _transferOwnership(initialOwner);
+    }
+
     function contractVersion() public pure virtual returns (uint256) {
-        return 3;
+        return 4;
     }
 
     function scheduleUpgrade(address newImplementation) external onlyOwner {
@@ -115,8 +132,10 @@ contract TokenAllowlist is Initializable, Ownable2Step, UUPSUpgradeable, ITokenA
         emit PausedSet(paused_);
     }
 
-    /// @notice Register a super token. Wrapper entries must match the token's own
+    /// @notice Add or remove a super token. The owner Safe can do this at any time.
+    ///         It does not schedule an upgrade. Wrapper entries must match the token's own
     ///         underlying address and decimals, so USDC (6) cannot be stored as 18.
+    ///         Pure Super Tokens such as G$ may omit getUnderlyingDecimals.
     function setSuperToken(address superToken, bool allowed, TokenKind kind) external onlyOwner {
         _setSuperToken(superToken, allowed, kind);
     }
@@ -124,7 +143,12 @@ contract TokenAllowlist is Initializable, Ownable2Step, UUPSUpgradeable, ITokenA
     function _setSuperToken(address superToken, bool allowed, TokenKind kind) internal {
         if (superToken == address(0)) revert ZeroAddress();
         address underlying = ISuperTokenMini(superToken).getUnderlyingToken();
-        uint8 decimals = ISuperTokenMini(superToken).getUnderlyingDecimals();
+        uint8 decimals;
+        try ISuperTokenMini(superToken).getUnderlyingDecimals() returns (uint8 reported) {
+            decimals = reported;
+        } catch {
+            decimals = 0;
+        }
         if (kind == TokenKind.Wrapper) {
             if (underlying == address(0) || decimals == 0 || decimals > 18) revert BadDecimals();
         } else if (underlying != address(0)) {
