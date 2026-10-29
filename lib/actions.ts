@@ -8,6 +8,7 @@ import { assetKind } from "@/lib/assets";
 import type { DepositPreview } from "@/lib/deposit-math";
 import { asTokenAmount, shortAddress } from "@/lib/display";
 import { idleSuper, previewLines, previewWithdraw, walletSuper } from "@/lib/funding";
+import { walletStamp } from "@/lib/holdings";
 import type { Intent, SignPayload } from "@/lib/intent";
 import { inferFrequency } from "@/lib/intent";
 import { goalNotes, patchGoalNote, recordActivity, saveGoalNote, type ActivityRecord } from "@/lib/notes";
@@ -1050,6 +1051,19 @@ export async function previewPay(input: {
     if (message.includes("Cannot decode zero data") || message.includes("viem@")) return { lines: [] };
     return { lines: [], error: message };
   }
+}
+
+export async function watchWallet(): Promise<{ stamp?: string; error?: string }> {
+  try {
+    const who = await viewer();
+    return { stamp: await walletStamp(who.address) };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The wallet could not be read." };
+  }
+}
+
+export async function noteWalletChange() {
+  revalidatePath("/", "layout");
 }
 
 export async function previewReceive(input: { usd: string; receive: string }): Promise<{ lines: { label: string; value: string }[]; error?: string }> {

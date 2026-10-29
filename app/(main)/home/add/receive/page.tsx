@@ -5,6 +5,7 @@ import Loading from "../../../loading";
 import { CopyButton } from "@/components/copy-button";
 import { FlowHeader } from "@/components/deposit-flow";
 import { IconInfo } from "@/components/icons";
+import { ReceiveWatch } from "@/components/receive-watch";
 import { viewer } from "@/lib/session";
 
 export default function ReceivePage() {
@@ -43,6 +44,9 @@ async function ReceiveBody() {
           <CopyButton value={who.address} label="Copy address" />
         </div>
       </section>
+      <div className="mt-4">
+        <ReceiveWatch />
+      </div>
       <p className="mt-4 flex gap-2 rounded-2xl bg-[#f3f0e6] px-4 py-3 text-sm leading-relaxed">
         <IconInfo className="mt-0.5 size-4 shrink-0" />
         Base and Celo only. A transfer on any other network can be lost.
