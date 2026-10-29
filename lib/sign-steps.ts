@@ -28,6 +28,7 @@ const labels: Record<string, { id: string; title: string; detail: string }> = {
   "0xd67e4147": { id: "open", title: "Open the stream", detail: "Money starts moving every second." },
   "0xb260c42a": { id: "start", title: "Start the stream", detail: "A later start date is now live." },
   "0xd7e05f44": { id: "open", title: "Open the stream", detail: "Money starts moving every second." },
+  "0x4e71d92d": { id: "claim", title: "Claim today's G$", detail: "GoodDollar pays this once a day." },
 };
 
 function selector(data: string): string {
@@ -84,6 +85,7 @@ export function headline(intent: Intent): { title: string; body: string } {
   if (intent.kind === "saving") return { title: "Starting a save", body: "" };
   if (intent.kind === "lock") return { title: "Creating a lock", body: "" };
   if (intent.kind === "deposit") return { title: "Adding money", body: "" };
+  if (intent.kind === "claim") return { title: "Claiming G$", body: "" };
   return { title: "Creating", body: "" };
 }
 
@@ -91,6 +93,7 @@ export function humanArt(intent: Intent): string {
   if (intent.kind === "lock") return "/marks/lock.png";
   if (intent.kind === "saving") return "/marks/saving.png";
   if (intent.kind === "stream") return intent.flowKind === "expense" ? "/marks/expense.png" : "/marks/flow.png";
+  if (intent.kind === "claim") return "/marks/receive.png";
   return "/marks/saving.png";
 }
 

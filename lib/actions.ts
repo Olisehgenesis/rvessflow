@@ -227,6 +227,9 @@ function activityFrom(owner: string, intent: Intent, id?: string): ActivityRecor
     const amount = activityAmount(intent.amount, Boolean(intent.pay));
     return amount ? { ...base, title: "Locked", detail: "Top up", direction: "out", amount, href: `/vaults/${intent.id}` } : null;
   }
+  if (intent.kind === "claim") {
+    return { ...base, title: "Claimed G$", detail: "Daily UBI", direction: "in", amount: "0", href: "/settings" };
+  }
   return null;
 }
 
@@ -1045,6 +1048,19 @@ export async function withdrawUsd(_prev: ActionState, formData: FormData): Promi
   } catch (error) {
     rethrowRedirect(error);
     return { error: explain(error) };
+  }
+}
+
+export async function claimUbi(_prev: ActionState, _formData: FormData): Promise<ActionState> {
+  try {
+    await requireTerms();
+    const who = await viewer();
+    const intent = refIntent({ kind: "claim" as const, ref: "" });
+    if (who.method === "tester") return await finishTester(intent);
+    return await handoff(intent);
+  } catch (error) {
+    rethrowRedirect(error);
+    return spoken(error);
   }
 }
 

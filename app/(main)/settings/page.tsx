@@ -2,6 +2,8 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { ProfileForm } from "@/components/circle";
 import { ProfileAvatar } from "@/components/profile-avatar";
+import { AvatarTick, VerifiedName } from "@/components/verify-badge";
+import { VerifyPanel } from "@/components/verify-panel";
 import { CopyAddress } from "@/components/copy-address";
 import { ExportKey } from "@/components/export-key";
 import { InstallButton } from "@/components/install-app";
@@ -14,6 +16,7 @@ import { contactIfReady, type Contact } from "@/lib/circle";
 import { labeled, money, shortAddress } from "@/lib/display";
 import { loadQuote } from "@/lib/rates";
 import { SignOutForm } from "@/components/sign-out";
+import { loadIdentity } from "@/lib/good-identity";
 import { addresses, explorer, loadPortfolio, networkName, stableLabel } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
@@ -34,7 +37,12 @@ function findLine(contact: Contact) {
 
 async function SettingsBody() {
   const who = await viewer();
-  const [data, quote, directory] = await Promise.all([loadPortfolio(who), loadQuote(), contactIfReady(who.address)]);
+  const [data, quote, directory, identity] = await Promise.all([
+    loadPortfolio(who),
+    loadQuote(),
+    contactIfReady(who.address),
+    loadIdentity(who.address),
+  ]);
   const signLabel = who.method === "passkey" ? "Passkey on this device" : who.method === "wallet" ? "Connected wallet" : "Signs on this machine";
   const upgrade = data.protocol.upgradeReadyAt ? new Date(data.protocol.upgradeReadyAt * 1000).toLocaleString() : "Not scheduled";
   const links = [
@@ -52,6 +60,7 @@ async function SettingsBody() {
         <ul className="space-y-1">
           {[
             ["#profile", "Profile"],
+            ["#verify", "Verify"],
             ["#preferences", "Preferences"],
             ["#security", "Wallet and security"],
             ...(who.method === "tester" ? [["#accounts", "Switch account"]] : []),
@@ -69,9 +78,13 @@ async function SettingsBody() {
       <section id="profile" className="scroll-mt-6 lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
       <h2 className="hidden font-[family-name:var(--font-manrope)] text-lg font-semibold tracking-[-0.03em] lg:mb-4 lg:block">Profile</h2>
       <div className="flex items-center gap-3">
-        <ProfileAvatar seed={who.address} className="size-14 ring-2 ring-[#D6F34A]" />
+        <AvatarTick verified={identity.verified}>
+          <ProfileAvatar seed={who.address} className="size-14 ring-2 ring-[#D6F34A]" />
+        </AvatarTick>
         <div className="min-w-0">
-          <p className="text-base font-semibold">{data.me.name}</p>
+          <p className="text-base font-semibold">
+            <VerifiedName name={data.me.name} verified={identity.verified} />
+          </p>
           <p className="text-sm text-muted-foreground">{shortAddress(data.me.address)}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <span className="rounded-full bg-[#E7F4C4] px-2.5 py-1 text-xs font-medium">{signLabel}</span>
@@ -87,6 +100,17 @@ async function SettingsBody() {
           : "A connected wallet on Celo pays the fee in USDT, then USDC, then USDm, when that token is in the account. CELO is used only if none of those cover it. On Base the wallet uses ETH."}
       </p>
       <CopyAddress address={data.me.address} />
+      </section>
+
+      <section id="verify" className="scroll-mt-6 lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
+        <h2 className="hidden font-[family-name:var(--font-manrope)] text-lg font-semibold tracking-[-0.03em] lg:mb-2 lg:block">Verify</h2>
+        <VerifyPanel
+          address={who.address}
+          method={who.method}
+          verified={identity.verified}
+          claimable={identity.claimable.toString()}
+          expiresAt={identity.expiresAt}
+        />
       </section>
 
       <section id="preferences" className="scroll-mt-6 lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">

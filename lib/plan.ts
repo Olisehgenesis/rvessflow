@@ -10,6 +10,8 @@ import { isSendAsset, parseSendAmount, spendableEth } from "@/lib/send-math";
 import { appGroupNet, groupKey, netFromLabel, parseGroupKey, type GroupNet } from "@/lib/group-network";
 import { groupSite } from "@/lib/group-site";
 import { siteSuper, vaultSite, type VaultSite } from "@/lib/vault-site";
+import { CELO_UBI, ubiAbi } from "@/lib/good-fv";
+import { loadIdentity } from "@/lib/good-identity";
 import { readName, stableLabel, toName } from "@/lib/protocol";
 import {
   addresses,
@@ -720,6 +722,19 @@ async function planPayout(owner: Address, intent: Extract<Intent, { kind: "payou
   };
 }
 
+async function planClaim(owner: Address, intent: Extract<Intent, { kind: "claim" }>): Promise<Plan> {
+  const identity = await loadIdentity(owner);
+  if (!identity.verified) throw new Error("Verify this account first. GoodDollar pays UBI to a unique person.");
+  if (identity.claimable === 0n) return done(intent, { href: "/settings" });
+  if (intent.submitted) return pending(intent);
+  return {
+    calls: [encode(CELO_UBI, ubiAbi, "claim")],
+    intent: { ...intent, submitted: true },
+    done: false,
+    chainId: 42220,
+  };
+}
+
 async function planPhone(owner: Address, intent: Extract<Intent, { kind: "phone" }>): Promise<Plan> {
   const digits = intent.phone.replace(/\D/g, "");
   if (digits.length < 7 || digits.length > 31) throw new Error("Add a phone number with the country code in Settings first.");
@@ -773,5 +788,7 @@ export async function planIntent(owner: Address, intent: Intent): Promise<Plan> 
       return planPayout(owner, intent);
     case "phone":
       return planPhone(owner, intent);
+    case "claim":
+      return planClaim(owner, intent);
   }
 }

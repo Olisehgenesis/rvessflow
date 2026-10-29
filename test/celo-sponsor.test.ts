@@ -18,6 +18,7 @@ const executeAbi = [
 
 const router = "0x5615CDAb10dc425a742d643d949a7F474C01abc4";
 const factory = "0x0060f57E447e5E2D310b61cAD372Ae83959aF3B7";
+const ubi = "0x43d72Ff17701B2DA814620735C39C620Ce0ea4A1";
 
 function executeCall(to: `0x${string}`) {
   return encodeFunctionData({
@@ -31,6 +32,7 @@ describe("Celo sponsorship policy", () => {
   it("sponsors Uniswap and the vault factory on Celo", () => {
     assert.equal(shouldSponsorCeloUserOp({ chainId: 42220, callData: executeCall(router) }), true);
     assert.equal(shouldSponsorCeloUserOp({ chainId: 42220, callData: executeCall(factory) }), true);
+    assert.equal(shouldSponsorCeloUserOp({ chainId: 42220, callData: executeCall(ubi) }), true);
   });
 
   it("rejects another chain or an unknown contract", () => {

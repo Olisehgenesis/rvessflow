@@ -110,6 +110,7 @@ export type Intent = (
     }
   | { kind: "payout"; id: string; from: number; dir: -1 | 1 }
   | { kind: "phone"; id: string; phone: string }
+  | { kind: "claim" }
 ) &
   Progress;
 
