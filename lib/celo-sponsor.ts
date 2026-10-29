@@ -94,15 +94,21 @@ export function shouldSponsorCeloUserOp(input: { chainId?: number; callData?: st
   }
 }
 
+function withPolicyContext(value: unknown) {
+  const context = value && typeof value === "object" && !Array.isArray(value) ? { ...(value as object) } : {};
+  return { ...context, sponsorshipPolicyId: celoSponsorPolicyId };
+}
+
 export function withCeloSponsorshipPolicy(body: unknown) {
   if (!body || typeof body !== "object" || !("method" in body) || !("params" in body)) return body;
   const method = String((body as { method: unknown }).method);
-  if (!/^pm_(sponsorUserOperation|getPaymasterData|getPaymasterStubData)$/.test(method)) return body;
   const params = (body as { params: unknown }).params;
   if (!Array.isArray(params) || params.length < 2) return body;
-  const context = params[2] && typeof params[2] === "object" ? { ...(params[2] as object) } : {};
-  return {
-    ...body,
-    params: [params[0], params[1], { ...context, sponsorshipPolicyId: celoSponsorPolicyId }],
-  };
+  if (method === "pm_sponsorUserOperation") {
+    return { ...body, params: [params[0], params[1], withPolicyContext(params[2])] };
+  }
+  if (method === "pm_getPaymasterData" || method === "pm_getPaymasterStubData") {
+    return { ...body, params: [params[0], params[1], params[2], withPolicyContext(params[3])] };
+  }
+  return body;
 }

@@ -50,4 +50,16 @@ describe("Celo sponsorship policy", () => {
     }) as { params: [unknown, unknown, { sponsorshipPolicyId: string }] };
     assert.equal(next.params[2].sponsorshipPolicyId, "sp_small_tusk");
   });
+
+  it("keeps ERC-7677 chain id and puts the policy in context", () => {
+    const next = withCeloSponsorshipPolicy({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "pm_getPaymasterStubData",
+      params: [{}, "0x0000000071727De22E5E9d8BAf0edAc6f37da032", "0xa4ec", { foo: 1 }],
+    }) as { params: [unknown, unknown, string, { foo: number; sponsorshipPolicyId: string }] };
+    assert.equal(next.params[2], "0xa4ec");
+    assert.equal(next.params[3].foo, 1);
+    assert.equal(next.params[3].sponsorshipPolicyId, "sp_small_tusk");
+  });
 });
