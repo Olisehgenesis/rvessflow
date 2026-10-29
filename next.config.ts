@@ -21,7 +21,7 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_RVESS_NETWORK: network,
     NEXT_PUBLIC_BASE_RPC_URL: process.env.BASE_RPC_URL || process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org",
     NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL: process.env.BASE_SEPOLIA_RPC_URL || process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
-    NEXT_PUBLIC_CELO_RPC_URL: process.env.CELO_RPC_URL || process.env.NEXT_PUBLIC_CELO_RPC_URL || "https://forno.celo.org",
+    NEXT_PUBLIC_CELO_RPC_URL: process.env.CELO_RPC_URL || process.env.NEXT_PUBLIC_CELO_RPC_URL || "https://rpc.ankr.com/celo",
   },
   async headers() {
     return [

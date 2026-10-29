@@ -1,9 +1,9 @@
 import "server-only";
 
-import { createPublicClient, encodeFunctionData, http, parseAbi, type Address } from "viem";
+import { createPublicClient, encodeFunctionData, http, parseAbi, type Address, type PublicClient } from "viem";
 import { base, celo } from "viem/chains";
 import { appGroupNet, type GroupNet } from "@/lib/group-network";
-import { appChain, appNetwork, appRpc } from "@/lib/network";
+import { appChain, appNetwork, appRpc, celoTransport } from "@/lib/network";
 
 const groupsProbe = parseAbi(["function groups(uint256) view returns (uint256)", "function upgradeReadyAt() view returns (uint64)"]);
 const groupsOfAbi = parseAbi(["function groupsOf(address) view returns (uint256[])"]);
@@ -16,7 +16,7 @@ const sepoliaGroups = "0x70f5CF80052E8a8E0e5e252d33cd15F059956E3D" as Address;
 const sepoliaToken = "0x1650581F573eAd727B92073B5Ef8B4f5B94D1648" as Address;
 
 const appClient = createPublicClient({ chain: appChain(), transport: http(appRpc()) });
-type GroupReader = typeof appClient;
+type GroupReader = Pick<PublicClient, "readContract" | "multicall" | "call">;
 
 export type GroupSite = {
   net: GroupNet;
@@ -29,7 +29,7 @@ export type GroupSite = {
 
 const celoClient = createPublicClient({
   chain: celo,
-  transport: http(process.env.CELO_RPC_URL || process.env.NEXT_PUBLIC_CELO_RPC_URL || "https://forno.celo.org"),
+  transport: celoTransport(),
 });
 const baseClient = createPublicClient({
   chain: base,

@@ -25,7 +25,7 @@ import { money, shortAddress } from "@/lib/display";
 import { appGroupNet, groupKey, type GroupNet } from "@/lib/group-network";
 import { groupPlainOn, groupsOfOn, groupSite, otherGroupNet } from "@/lib/group-site";
 import { vaultSite } from "@/lib/vault-site";
-import { appChain, appNetwork, appRpc, explorerUrl, networkLabel, stableName } from "@/lib/network";
+import { appChain, appNetwork, appRpc, celoTransport, explorerUrl, networkLabel, stableName } from "@/lib/network";
 
 const network = appNetwork();
 
@@ -78,7 +78,8 @@ export const addresses = network === "celo"
       cfa: "0xcfA132E353cB4E398080B9700609bb008eceB125" as Address,
     };
 
-export const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
+const appTransport = appNetwork() === "celo" ? celoTransport() : http(rpcUrl);
+export const publicClient = createPublicClient({ chain, transport: appTransport });
 
 export const erc20 = parseAbi([
   "function balanceOf(address) view returns (uint256)",
@@ -229,7 +230,7 @@ function signer(index: number) {
   const chosen = accounts[index];
   if (!chosen) throw new Error("That account is not one of the funded test accounts.");
   const account = privateKeyToAccount(chosen.privateKey);
-  const wallet = createWalletClient({ account, chain, transport: http(rpcUrl) });
+  const wallet = createWalletClient({ account, chain, transport: appTransport });
   return { account, wallet, person: { name: chosen.name, address: chosen.address } };
 }
 

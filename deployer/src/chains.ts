@@ -23,7 +23,7 @@ const celo = defineChain({
   id: 42220,
   name: "Celo",
   nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
-  rpcUrls: { default: { http: ["https://forno.celo.org"] } },
+  rpcUrls: { default: { http: ["https://rpc.ankr.com/celo", "https://forno.celo.org"] } },
   blockExplorers: { default: { name: "Celoscan", url: "https://celoscan.io" } },
 });
 
@@ -55,7 +55,7 @@ export const chains: Record<ChainId, ProtocolChain> = {
   42220: {
     id: 42220,
     name: "Celo",
-    rpc: "https://forno.celo.org",
+    rpc: "https://rpc.ankr.com/celo",
     host: "0xA4Ff07cF81C02CFD356184879D953970cA957585",
     cfa,
     gda,

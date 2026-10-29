@@ -6,6 +6,7 @@ import { maxUsdInput } from "@/lib/deposit-math";
 import { balanceColumns, holdingCaption } from "@/lib/home-math";
 import { formatAmount, formatUsd8, type PayAsset } from "@/lib/pay-math";
 import { coinMap, loadPrices } from "@/lib/prices";
+import { celoTransport } from "@/lib/network";
 import { addresses, chain, erc20, factoryAbi, lockAbi, networkName, publicClient, stableLabel, vaultAbi, type Portfolio } from "@/lib/protocol";
 import { vaultSite } from "@/lib/vault-site";
 import type { GroupNet } from "@/lib/group-network";
@@ -91,7 +92,7 @@ const baseReader = createPublicClient({
 });
 const celoReader = createPublicClient({
   chain: celo,
-  transport: http(process.env.CELO_RPC_URL || process.env.NEXT_PUBLIC_CELO_RPC_URL || "https://forno.celo.org"),
+  transport: celoTransport(),
 });
 
 function readTokenBalances(chainId: number, owner: Address, tokens: { address: Address }[]) {

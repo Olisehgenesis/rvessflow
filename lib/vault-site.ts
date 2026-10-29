@@ -1,16 +1,16 @@
 import "server-only";
 
-import { createPublicClient, http, type Address } from "viem";
+import { createPublicClient, http, type Address, type PublicClient } from "viem";
 import { base, celo } from "viem/chains";
 import { appGroupNet, type GroupNet } from "@/lib/group-network";
-import { appChain, appNetwork, appRpc } from "@/lib/network";
+import { appChain, appNetwork, appRpc, celoTransport } from "@/lib/network";
 
 const appClient = createPublicClient({ chain: appChain(), transport: http(appRpc()) });
-export type VaultReader = typeof appClient;
+export type VaultReader = Pick<PublicClient, "readContract" | "multicall" | "getBalance" | "call" | "waitForTransactionReceipt">;
 
 const celoClient = createPublicClient({
   chain: celo,
-  transport: http(process.env.CELO_RPC_URL || process.env.NEXT_PUBLIC_CELO_RPC_URL || "https://forno.celo.org"),
+  transport: celoTransport(),
 });
 const baseClient = createPublicClient({
   chain: base,

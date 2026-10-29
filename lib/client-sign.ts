@@ -3,7 +3,7 @@
 import { createPublicClient, encodePacked, erc20Abi, http, maxUint256, parseErc6492Signature, type Address, type Hash, type Hex, type PublicClient } from "viem";
 import { base as baseChain, celo as celoChain } from "viem/chains";
 import { walletProvider } from "@/lib/auth-client";
-import { appChain, appNetwork, appRpc, walletNetwork } from "@/lib/network";
+import { appChain, appNetwork, appRpc, celoRpcUrls, celoTransport, walletNetwork } from "@/lib/network";
 import type { PreparedCall, SignPayload } from "@/lib/intent";
 import { readPasskeys } from "@/lib/passkey-vault";
 import { estimationSkipped, passkeyPaysWith, usdcCanPayFee, userOpCost } from "@/lib/passkey-fee";
@@ -45,15 +45,15 @@ async function wait(hash: Hash, reader: Pick<PublicClient, "waitForTransactionRe
 
 function settlement(chainId?: number) {
   if (chainId === 42220 && chain.id !== 42220) {
-    const rpcUrl = process.env.NEXT_PUBLIC_CELO_RPC_URL || "https://forno.celo.org";
+    const urls = celoRpcUrls();
     return {
       id: 42220,
-      reader: createPublicClient({ chain: celoChain, transport: http(rpcUrl) }),
+      reader: createPublicClient({ chain: celoChain, transport: celoTransport() }),
       params: {
         chainId: "0xa4ec",
         chainName: "Celo",
         nativeCurrency: { name: "CELO", symbol: "CELO", decimals: 18 },
-        rpcUrls: [rpcUrl],
+        rpcUrls: urls,
         blockExplorerUrls: ["https://celoscan.io"],
       },
     };
@@ -180,7 +180,10 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
   const viemChain = destinationChain(where.id);
   const rpcUrl = where.id === chain.id ? rpc : where.params.rpcUrls[0];
   const bundler = bundlerFor(where.id);
-  const publicClient = createClient({ chain: viemChain, transport: transport(rpcUrl) });
+  const publicClient = createClient({
+    chain: viemChain,
+    transport: where.id === 42220 ? celoTransport() : transport(rpcUrl),
+  });
   const account = await toKernelSmartAccount({
     client: publicClient,
     owners: [owner],

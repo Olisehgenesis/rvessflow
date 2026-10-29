@@ -1,4 +1,20 @@
+import { fallback, http } from "viem";
 import { base, baseSepolia, celo } from "viem/chains";
+
+export const celoRpcAnkr = "https://rpc.ankr.com/celo";
+export const celoRpcForno = "https://forno.celo.org";
+
+/** Ankr first, Forno if Ankr fails. A custom env URL is tried before both. */
+export function celoRpcUrls(): string[] {
+  const extra = (process.env.CELO_RPC_URL || process.env.NEXT_PUBLIC_CELO_RPC_URL || "").trim();
+  const urls = [celoRpcAnkr, celoRpcForno];
+  if (extra && extra !== celoRpcAnkr && extra !== celoRpcForno) urls.unshift(extra);
+  return urls;
+}
+
+export function celoTransport() {
+  return fallback(celoRpcUrls().map((url) => http(url)));
+}
 
 export type AppNetwork = "base" | "sepolia" | "celo";
 
@@ -20,9 +36,7 @@ export function appChain() {
 /** Server reads `BASE_` and `CELO_`. The browser reads the matching `NEXT_PUBLIC_` names. */
 export function appRpc(): string {
   const network = appNetwork();
-  if (network === "celo") {
-    return process.env.CELO_RPC_URL || process.env.NEXT_PUBLIC_CELO_RPC_URL || "https://forno.celo.org";
-  }
+  if (network === "celo") return celoRpcUrls()[0];
   if (network === "sepolia") {
     return process.env.BASE_SEPOLIA_RPC_URL || process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org";
   }
@@ -54,7 +68,7 @@ export function walletNetwork() {
     chainId: `0x${chain.id.toString(16)}`,
     chainName: chain.name,
     nativeCurrency: chain.nativeCurrency,
-    rpcUrls: [appRpc()],
+    rpcUrls: appNetwork() === "celo" ? celoRpcUrls() : [appRpc()],
     blockExplorerUrls: [explorerUrl()],
   };
 }

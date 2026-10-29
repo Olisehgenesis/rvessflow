@@ -4,6 +4,7 @@ import { createPublicClient, formatUnits, http, type Address } from "viem";
 import { base, celo } from "viem/chains";
 import { baseMarket } from "@/lib/base-market";
 import { formatAmount } from "@/lib/pay-math";
+import { celoTransport } from "@/lib/network";
 import { addresses, chain, erc20, networkName, publicClient, stableLabel } from "@/lib/protocol";
 import { pickCeloFee } from "@/lib/celo-fee";
 import { type MoveChoice, type SendAsset, type SendChoice, sendDecimals, spendableEth, spendableUsdc, usdcFeeReserve } from "@/lib/send-math";
@@ -36,7 +37,7 @@ const baseReader = createPublicClient({
 });
 const celoReader = createPublicClient({
   chain: celo,
-  transport: http(process.env.CELO_RPC_URL || process.env.NEXT_PUBLIC_CELO_RPC_URL || "https://forno.celo.org"),
+  transport: celoTransport(),
 });
 
 function reader(chainId: number) {
