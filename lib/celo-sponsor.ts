@@ -43,6 +43,7 @@ const allowed = new Set(
     "0xBAC849bB641841b44E965fB01A4Bf5F074f84b4D",
     "0x7ab16Ff354AcB328452F1D445b3Ddee9a91e9e69",
     "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+    "0x50c503dFFd9e8d0903Bf33376F6DdD278209939A",
   ].map((item) => item.toLowerCase()),
 );
 

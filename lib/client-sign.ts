@@ -7,7 +7,7 @@ import { appChain, appNetwork, appRpc, walletNetwork } from "@/lib/network";
 import type { PreparedCall, SignPayload } from "@/lib/intent";
 import { readPasskeys } from "@/lib/passkey-vault";
 import { estimationSkipped, passkeyPaysWith, usdcCanPayFee, userOpCost } from "@/lib/passkey-fee";
-import { celoFeeTx, pickCeloFee } from "@/lib/celo-fee";
+import { celoFeeTx, celoFeeCurrencies, celoGasSkimCall, pickCeloFee, pickCeloFeeCovering, tokenAmountForCeloGas, withSkimGas } from "@/lib/celo-fee";
 import { celoSponsorPolicyId } from "@/lib/celo-sponsor";
 import { batchId, batchOutcome, batchUnsupported, walletSendCallsParam } from "@/lib/wallet-batch";
 
@@ -86,6 +86,13 @@ function bundlerFor(id: number) {
   return `https://public.pimlico.io/v2/${id}/rpc`;
 }
 
+async function hexGasPrice(reader: Pick<PublicClient, "request">, token?: Address) {
+  const hex = token
+    ? await reader.request({ method: "eth_gasPrice", params: [token] } as never)
+    : await reader.request({ method: "eth_gasPrice" });
+  return BigInt(hex as string);
+}
+
 function txValue(value: string | undefined): Hex | undefined {
   if (!value || value === "0") return undefined;
   return `0x${BigInt(value).toString(16)}`;
@@ -116,7 +123,8 @@ async function sendWallet(calls: PreparedCall[], from: Address, where: ReturnTyp
   if (!found || found.toLowerCase() !== from.toLowerCase()) {
     throw new Error("Reconnect the wallet for this account.");
   }
-  const fee = where.id === 42220 ? await pickCeloFee(where.reader, from) : null;
+  const celoBalance = where.id === 42220 ? await where.reader.getBalance({ address: from }) : 0n;
+  const fee = where.id === 42220 && celoBalance === 0n ? await pickCeloFee(where.reader, from) : null;
   const feeFields = celoFeeTx(fee?.feeCurrency);
   if (calls.length > 1 && !fee) {
     let id: string | null = null;
@@ -204,6 +212,18 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
       : publicClient.readContract({ address: circleUsdc, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }),
   ]);
   if (where.id === 42220) {
+    let celoCost: bigint | null = null;
+    try {
+      celoCost = userOpCost(await smart.prepareUserOperation({ calls: batched }));
+    } catch (error) {
+      if (!estimationSkipped(error)) throw error;
+    }
+    if (celoCost !== null && celoCost > 0n && ethBalance >= celoCost) {
+      const hash = await smart.sendTransaction({ calls: batched });
+      onHash?.(hash);
+      await wait(hash, where.reader);
+      return hash;
+    }
     const pimlicoPaymaster = createPimlicoClient({
       chain: viemChain,
       transport: transport(bundler),
@@ -220,7 +240,26 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
         estimateFeesPerGas: async () => (await pimlicoPaymaster.getUserOperationGasPrice()).fast,
       },
     });
-    const hash = await sponsored.sendTransaction({ calls: batched });
+    const quoted = await sponsored.prepareUserOperation({ calls: batched });
+    const dueWei = withSkimGas(userOpCost(quoted), quoted.maxFeePerGas ?? 0n);
+    const nativePrice = await hexGasPrice(where.reader);
+    const amounts = await Promise.all(
+      celoFeeCurrencies.map((row) =>
+        where.reader.readContract({ address: row.token, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }).catch(() => 0n),
+      ),
+    );
+    const needed = await Promise.all(
+      celoFeeCurrencies.map(async (row) => {
+        const tokenPrice = await hexGasPrice(where.reader, row.feeCurrency);
+        return tokenAmountForCeloGas({ costWei: dueWei, nativePrice, tokenPrice, decimals: row.decimals });
+      }),
+    );
+    const pick = pickCeloFeeCovering(amounts, needed);
+    const due = pick ? needed[celoFeeCurrencies.findIndex((row) => row.label === pick.label)] ?? 0n : 0n;
+    if (!pick || due === 0n) {
+      throw new Error("This passkey needs CELO, or USDT, USDC, or USDm at this address for the Celo network fee.");
+    }
+    const hash = await sponsored.sendTransaction({ calls: [celoGasSkimCall(pick.token, due), ...batched] });
     onHash?.(hash);
     await wait(hash, where.reader);
     return hash;

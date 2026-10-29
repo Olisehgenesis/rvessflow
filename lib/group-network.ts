@@ -47,10 +47,10 @@ export const groupChainFacts: Record<
   celo: {
     title: "Celo",
     recommend: true,
-    fee: "A connected wallet pays the Celo fee in USDT, then USDC, then USDm, when that token is in the account. CELO is used only if none of those cover it.",
+    fee: "A connected wallet pays the Celo fee in CELO when it has some. If it has none, it pays in USDT, then USDC, then USDm.",
     turn: "Paid each turn is already live. A new group can send the contribution as a transfer.",
     token: "The pot is cUSDx. Members need that token on Celo, at this same address.",
-    passkey: "A passkey on Celo has its network fee sponsored. A connected wallet pays in USDT, then USDC, then USDm, and CELO only if none of those cover it.",
+    passkey: "A passkey that holds CELO pays the bundler itself. If it has none, the app sponsors the fee and takes USDT, then USDC, then USDm, including the transfer.",
   },
   base: {
     title: "Base",
