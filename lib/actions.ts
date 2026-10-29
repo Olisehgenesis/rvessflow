@@ -230,6 +230,9 @@ function activityFrom(owner: string, intent: Intent, id?: string): ActivityRecor
   if (intent.kind === "claim") {
     return { ...base, title: "Claimed G$", detail: "Daily UBI", direction: "in", amount: "0", href: "/settings" };
   }
+  if (intent.kind === "link") {
+    return { ...base, title: "Linked a wallet", detail: shortAddress(intent.target), direction: "in", amount: "0", href: "/settings" };
+  }
   return null;
 }
 
@@ -1048,6 +1051,34 @@ export async function withdrawUsd(_prev: ActionState, formData: FormData): Promi
   } catch (error) {
     rethrowRedirect(error);
     return { error: explain(error) };
+  }
+}
+
+export async function topCeloIfNeeded() {
+  const who = await viewer();
+  const { topCeloFaucet } = await import("@/lib/good-faucet");
+  return topCeloFaucet(who.address);
+}
+
+export async function topVerifiedCelo(address: string) {
+  await viewer();
+  if (!isAddress(address)) return "error" as const;
+  const { topCeloFaucet } = await import("@/lib/good-faucet");
+  return topCeloFaucet(getAddress(address));
+}
+
+export async function linkWallet(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await requireTerms();
+    const who = await viewer();
+    const target = String(formData.get("target") ?? "").trim();
+    if (!isAddress(target)) return { error: "Enter the wallet to attach." };
+    const intent = refIntent({ kind: "link" as const, target: getAddress(target), ref: "" });
+    if (who.method === "tester") return await finishTester(intent);
+    return await handoff(intent);
+  } catch (error) {
+    rethrowRedirect(error);
+    return spoken(error);
   }
 }
 

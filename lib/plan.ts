@@ -10,7 +10,7 @@ import { isSendAsset, parseSendAmount, spendableEth } from "@/lib/send-math";
 import { appGroupNet, groupKey, netFromLabel, parseGroupKey, type GroupNet } from "@/lib/group-network";
 import { groupSite } from "@/lib/group-site";
 import { siteSuper, vaultSite, type VaultSite } from "@/lib/vault-site";
-import { CELO_UBI, ubiAbi } from "@/lib/good-fv";
+import { CELO_IDENTITY, CELO_UBI, identityAbi, ubiAbi } from "@/lib/good-fv";
 import { loadIdentity } from "@/lib/good-identity";
 import { readName, stableLabel, toName } from "@/lib/protocol";
 import {
@@ -727,8 +727,32 @@ async function planClaim(owner: Address, intent: Extract<Intent, { kind: "claim"
   if (!identity.verified) throw new Error("Verify this account first. GoodDollar pays UBI to a unique person.");
   if (identity.claimable === 0n) return done(intent, { href: "/settings" });
   if (intent.submitted) return pending(intent);
+  const { topCeloFaucet } = await import("@/lib/good-faucet");
+  await topCeloFaucet(owner);
   return {
     calls: [encode(CELO_UBI, ubiAbi, "claim")],
+    intent: { ...intent, submitted: true },
+    done: false,
+    chainId: 42220,
+  };
+}
+
+async function planLink(owner: Address, intent: Extract<Intent, { kind: "link" }>): Promise<Plan> {
+  if (!isAddress(intent.target)) throw new Error("Enter the wallet to attach.");
+  const target = getAddress(intent.target);
+  if (target.toLowerCase() === owner.toLowerCase()) throw new Error("That is this account.");
+  const identity = await loadIdentity(owner);
+  if (!identity.verified || identity.linked) {
+    throw new Error("Connect the original verified wallet. This account cannot attach another one.");
+  }
+  const other = await loadIdentity(target);
+  if (other.verified) {
+    if (other.root.toLowerCase() === owner.toLowerCase()) return done(intent, { href: "/settings" });
+    throw new Error("That wallet already has a GoodDollar identity.");
+  }
+  if (intent.submitted) return pending(intent);
+  return {
+    calls: [encode(CELO_IDENTITY, identityAbi, "connectAccount", [target])],
     intent: { ...intent, submitted: true },
     done: false,
     chainId: 42220,
@@ -790,5 +814,7 @@ export async function planIntent(owner: Address, intent: Intent): Promise<Plan> 
       return planPhone(owner, intent);
     case "claim":
       return planClaim(owner, intent);
+    case "link":
+      return planLink(owner, intent);
   }
 }

@@ -1,36 +1,47 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Dialog } from "radix-ui";
 import { useSignedAction } from "@/components/sign-action";
 import { VerifiedTick } from "@/components/verify-badge";
-import { claimUbi } from "@/lib/actions";
-import { openFaceCheck } from "@/lib/good-fv-sign";
-import { money } from "@/lib/display";
+import { claimUbi, linkWallet } from "@/lib/actions";
+import { attachThisAccount, faceCheckHref } from "@/lib/good-fv-sign";
+import { GOOD_IDENTITY_DOCS, WALLET_LINK_NOTICE } from "@/lib/good-fv";
+import { money, shortAddress } from "@/lib/display";
 import type { Address } from "viem";
 
 const reasons = [
   { src: "/marks/paid.png", title: "A tick on your name", body: "Same idea as the check next to a name on X. Here it is clay, and it means a live unique person." },
-  { src: "/marks/crypto.png", title: "Sponsored Celo gas", body: "After you verify, this passkey can send Celo calls without keeping CELO on hand, including the daily claim." },
+  { src: "/marks/crypto.png", title: "Celo when the balance is low", body: "If you are verified and CELO drops below GoodDollar's floor, the app calls their faucet. You stay here." },
   { src: "/marks/receive.png", title: "Daily free G$", body: "GoodDollar pays a Universal Basic Income once a day to each verified person." },
-  { src: "/marks/group.png", title: "And more", body: "The same identity opens other GoodDollar commons later. One face. One claim." },
+  { src: "/marks/friend.png", title: "Or link a wallet you already verified", body: "The original verified wallet signs once. Both share one face and one daily claim." },
 ];
 
 export function VerifyPanel({
   address,
   method,
   verified,
+  linked,
+  root,
   claimable,
   expiresAt,
 }: {
   address: Address;
   method: "passkey" | "wallet" | "tester";
   verified: boolean;
+  linked: boolean;
+  root: Address;
   claimable: string;
   expiresAt: number;
 }) {
+  const router = useRouter();
   const [state, run, pending] = useSignedAction(claimUbi);
+  const [linkState, runLink, linking] = useSignedAction(linkWallet);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [frame, setFrame] = useState("");
+  const [linkOpen, setLinkOpen] = useState(false);
   const due = Number(claimable) > 0;
   const until = expiresAt > 0 ? new Date(expiresAt * 1000).toLocaleDateString() : "";
 
@@ -38,9 +49,23 @@ export function VerifyPanel({
     setNote("");
     setBusy(true);
     try {
-      await openFaceCheck({ address, method });
+      setFrame(await faceCheckHref({ address, method }));
     } catch (error) {
       setNote(error instanceof Error ? error.message : "Face verification did not start.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function attach() {
+    setNote("");
+    setBusy(true);
+    try {
+      await attachThisAccount(address);
+      setLinkOpen(false);
+      router.refresh();
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "That wallet did not attach this account.");
     } finally {
       setBusy(false);
     }
@@ -51,13 +76,15 @@ export function VerifyPanel({
       <div className="flex items-start gap-3">
         <VerifiedTick className="size-14 shrink-0" />
         <div className="min-w-0">
-          <p className="text-base font-semibold">{verified ? "Verified" : "Verify"}</p>
+          <p className="text-base font-semibold">{verified ? (linked ? "Linked" : "Verified") : "Verify"}</p>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
             {verified
-              ? until
-                ? `GoodDollar knows this account is a unique person. The tick lasts until ${until}.`
-                : "GoodDollar knows this account is a unique person."
-              : "Why verify? Free sponsored Celo gas, a daily G$ claim, and a tick on this name. Face check is GoodDollar. This page stores no key."}
+              ? linked
+                ? `This account uses the tick from ${shortAddress(root)}. One daily G$ claim is shared.`
+                : until
+                  ? `GoodDollar knows this account is a unique person. The tick lasts until ${until}.`
+                  : "GoodDollar knows this account is a unique person."
+              : "Why verify? Daily G$, a Celo top-up when this account is short, and a tick on this name. Already verified on another wallet? Link it. This page stores no key."}
           </p>
         </div>
       </div>
@@ -75,33 +102,115 @@ export function VerifyPanel({
         </ul>
       ) : null}
       {verified ? (
-        <form action={run} className="mt-4">
-          {due ? (
-            <p className="mb-3 text-sm">
-              Today&apos;s UBI is <span className="font-semibold tabular-nums">{money(claimable)} G$</span>.
-            </p>
-          ) : (
-            <p className="mb-3 text-sm text-muted-foreground">Today&apos;s G$ is already claimed. Come back tomorrow.</p>
-          )}
-          <button
-            type="submit"
-            disabled={pending || !due}
-            className="inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#141414] px-5 text-sm font-semibold text-white disabled:opacity-40"
-          >
-            {pending ? "Claiming…" : due ? "Claim today's G$" : "Claimed today"}
-          </button>
-        </form>
+        <>
+          <form action={run} className="mt-4">
+            {due ? (
+              <p className="mb-3 text-sm">
+                Today&apos;s UBI is <span className="font-semibold tabular-nums">{money(claimable)} G$</span>.
+              </p>
+            ) : (
+              <p className="mb-3 text-sm text-muted-foreground">Today&apos;s G$ is already claimed. Come back tomorrow.</p>
+            )}
+            <button
+              type="submit"
+              disabled={pending || !due}
+              className="inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#141414] px-5 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {pending ? "Claiming…" : due ? "Claim today's G$" : "Claimed today"}
+            </button>
+          </form>
+          {!linked ? (
+            <form action={runLink} className="mt-5">
+              <label className="block text-sm font-medium">Attach another wallet</label>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">This verified wallet signs. The other address then shares this tick and this daily claim.</p>
+              <input
+                name="target"
+                placeholder="0x…"
+                className="mt-2 h-12 w-full rounded-2xl border border-[#E6EADF] bg-white px-4 text-sm"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button
+                type="submit"
+                disabled={linking}
+                className="mt-3 inline-flex h-11 items-center justify-center rounded-full border border-[#E6EADF] bg-white px-4 text-sm font-semibold"
+              >
+                {linking ? "Linking…" : "Attach"}
+              </button>
+            </form>
+          ) : null}
+        </>
       ) : (
-        <button
-          type="button"
-          onClick={() => void verify()}
-          disabled={busy}
-          className="mt-5 inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#D6F34A] px-5 text-sm font-semibold text-[#141414] disabled:opacity-40"
-        >
-          {busy ? "Opening…" : "Verify"}
-        </button>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setLinkOpen(true)}
+            className="inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#D6F34A] px-5 text-sm font-semibold text-[#141414]"
+          >
+            I already verified
+          </button>
+          <button
+            type="button"
+            onClick={() => void verify()}
+            disabled={busy}
+            className="inline-flex h-12 min-w-40 items-center justify-center rounded-full border border-[#E6EADF] bg-white px-5 text-sm font-semibold disabled:opacity-40"
+          >
+            {busy ? "Signing…" : "New face check"}
+          </button>
+        </div>
       )}
-      {note || state?.error ? <p className="mt-3 text-sm text-destructive">{note || state?.error}</p> : null}
+      {frame ? (
+        <div className="mt-4 overflow-hidden rounded-3xl border border-[#E6EADF] bg-white">
+          <iframe title="GoodDollar face check" src={frame} className="h-[32rem] w-full border-0" allow="camera; microphone" />
+          <button
+            type="button"
+            className="flex min-h-12 w-full items-center justify-center text-sm font-medium"
+            onClick={() => {
+              setFrame("");
+              router.refresh();
+            }}
+          >
+            Done
+          </button>
+        </div>
+      ) : null}
+      {note || state?.error || linkState?.error ? (
+        <p className="mt-3 text-sm text-destructive">{note || state?.error || linkState?.error}</p>
+      ) : null}
+
+      <Dialog.Root open={linkOpen} onOpenChange={setLinkOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[60] bg-[#141414]/40 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
+          <Dialog.Content className="fixed top-1/2 left-1/2 z-[61] w-[min(100%-1.5rem,22.5rem)] -translate-x-1/2 -translate-y-1/2 rounded-[1.5rem] bg-white px-5 pt-4 pb-5 shadow-[0_28px_80px_-28px_rgba(20,20,20,0.45)] outline-none">
+            <img src="/marks/friend.png" alt="" className="mx-auto size-20 object-contain" />
+            <Dialog.Title className="mt-3 text-center text-lg font-semibold tracking-[-0.03em]">Already verified?</Dialog.Title>
+            <Dialog.Description className="mt-2 text-center text-sm leading-relaxed text-[#5C6572]">
+              Connect the wallet that already has the GoodDollar tick. That wallet signs once and attaches this account. You still get one G$ claim a day, not two.
+            </Dialog.Description>
+            <p className="mt-3 text-center text-xs leading-relaxed text-[#6B7280]">{WALLET_LINK_NOTICE}</p>
+            <a
+              href={GOOD_IDENTITY_DOCS}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 block text-center text-xs font-medium text-[#141414] underline underline-offset-2"
+            >
+              Read the GoodDollar docs
+            </a>
+            {note ? <p className="mt-3 text-center text-sm text-destructive">{note}</p> : null}
+            <button
+              type="button"
+              onClick={() => void attach()}
+              disabled={busy}
+              className="mt-5 flex h-12 w-full items-center justify-center rounded-full bg-[#141414] text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {busy ? "Waiting for that wallet…" : "Connect the verified wallet"}
+            </button>
+            <Dialog.Close className="mt-2 flex h-11 w-full items-center justify-center rounded-full text-sm font-medium text-[#5C6572]">
+              Not yet
+            </Dialog.Close>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

@@ -108,6 +108,8 @@ async function SettingsBody() {
           address={who.address}
           method={who.method}
           verified={identity.verified}
+          linked={identity.linked}
+          root={identity.root}
           claimable={identity.claimable.toString()}
           expiresAt={identity.expiresAt}
         />

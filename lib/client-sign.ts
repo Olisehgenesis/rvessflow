@@ -228,6 +228,15 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
       : publicClient.readContract({ address: circleUsdc, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }),
   ]);
   if (where.id === 42220) {
+    if (ethBalance === 0n || ethBalance < 10n ** 17n) {
+      try {
+        const { topCeloIfNeeded } = await import("@/lib/actions");
+        await topCeloIfNeeded();
+        ethBalance = await publicClient.getBalance({ address: account.address });
+      } catch {
+        // The faucet is optional. The passkey can still pay with CELO or a dollar token.
+      }
+    }
     if (ethBalance > 0n) {
       try {
         const celoCost = userOpCost(await smart.prepareUserOperation({ calls: batched }));

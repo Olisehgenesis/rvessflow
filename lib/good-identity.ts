@@ -13,6 +13,7 @@ export type GoodIdentity = {
   authPeriodDays: bigint;
   expiresAt: number;
   claimable: bigint;
+  linked: boolean;
 };
 
 const empty: GoodIdentity = {
@@ -22,6 +23,7 @@ const empty: GoodIdentity = {
   authPeriodDays: 0n,
   expiresAt: 0,
   claimable: 0n,
+  linked: false,
 };
 
 const reader = createPublicClient({ chain: celo, transport: celoTransport() });
@@ -44,6 +46,7 @@ export const loadIdentity = cache(async (account: Address): Promise<GoodIdentity
       authPeriodDays,
       expiresAt: identityExpiry(lastAuthenticated, authPeriodDays),
       claimable,
+      linked: verified && root.toLowerCase() !== account.toLowerCase(),
     };
   } catch {
     return empty;

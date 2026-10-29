@@ -6,17 +6,37 @@ export const CELO_IDENTITY = "0xC361A6E67822a0EDc17D899227dd9FC50BD62F42" as Add
 export const CELO_UBI = "0x43d72Ff17701B2DA814620735C39C620Ce0ea4A1" as Address;
 export const CELO_FAUCET = "0x4F93Fa058b03953C851eFaA2e4FC5C34afDFAb84" as Address;
 export const GOOD_ID_URL = "https://goodid.gooddollar.org";
+export const GOOD_SERVER = "https://goodserver.gooddollar.org";
+export const GOOD_IDENTITY_DOCS = "https://docs.gooddollar.org/user-guides/connect-another-wallet-address-to-identity";
+export const CELO_CLAIM_GAS = 250_000n;
 
 export const identityAbi = parseAbi([
   "function getWhitelistedRoot(address account) view returns (address)",
   "function lastAuthenticated(address account) view returns (uint256)",
   "function authenticationPeriod() view returns (uint256)",
+  "function connectAccount(address account)",
+  "function disconnectAccount(address account)",
 ]);
+
+export const WALLET_LINK_NOTICE =
+  "Only the original verified wallet can attach this account. After it signs, both wallets share one face and one daily G$ claim. Do not attach a wallet you do not own.";
 
 export const ubiAbi = parseAbi([
   "function claim() returns (bool)",
   "function checkEntitlement(address _member) view returns (uint256)",
 ]);
+
+export const faucetAbi = parseAbi([
+  "function canTop(address _user) view returns (bool)",
+  "function getToppingAmount() view returns (uint256)",
+  "function minTopping() view returns (uint8)",
+]);
+
+/** True when native CELO is below the faucet's topping floor (GoodDollar minTopping). */
+export function belowFaucetNeed(balance: bigint, toppingAmount: bigint, minTopping: number) {
+  if (toppingAmount === 0n || balance >= toppingAmount) return false;
+  return ((toppingAmount - balance) * 100n) / toppingAmount >= BigInt(minTopping);
+}
 
 /** Same text the GoodDollar Identity SDK signs. The first space is replaced with the account. */
 export const FV_IDENTIFIER_MSG2 =
