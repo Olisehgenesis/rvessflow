@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatUnits, parseUnits } from "viem";
 import { useSignedAction } from "@/components/sign-action";
 import { TokenIcon } from "@/components/token-icon";
+import { networkLabel } from "@/lib/network";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,7 +71,7 @@ export function MoveOut({ choices }: { choices: MoveChoice[] }) {
               }}
               className={`flex w-full items-center gap-3 rounded-2xl bg-card px-3 py-3 text-left ${on ? "border-2 border-foreground" : "border border-border"}`}
             >
-              <TokenIcon symbol={choice.label} className="size-10" />
+              <TokenIcon symbol={choice.label} network={networkLabel()} className="size-10" />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold">{choice.label}</span>
                 <span className="block text-xs text-muted-foreground tabular-nums">

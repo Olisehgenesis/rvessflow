@@ -38,7 +38,7 @@ export function FlowHeader({ title, back, close }: { title: string; back?: strin
 }
 
 function TokenMark({ pay }: { pay: PayAsset }) {
-  return <TokenIcon symbol={symbols[pay]} className="size-10" />;
+  return <TokenIcon symbol={symbols[pay]} network={networkLabel()} className="size-10" />;
 }
 
 function TokenRow({

@@ -188,8 +188,8 @@ export function LockForm({ penalty, quote, choices }: { penalty: number; quote: 
   );
 }
 
-export function TokenMark({ symbol }: { symbol: string }) {
-  return <TokenIcon symbol={symbol} className="size-10" />;
+export function TokenMark({ symbol, network }: { symbol: string; network?: string }) {
+  return <TokenIcon symbol={symbol} network={network} className="size-10" />;
 }
 
 export function AddMoneyForm({ choices }: { choices: PayChoice[] }) {

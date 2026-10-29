@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { ErrorNote } from "@/components/ui-bits";
 import { createDraft, type ActionState } from "@/lib/actions";
 import { cyclePlan, spanLabel, type CycleChoice } from "@/lib/cycle";
+import { ChainMark } from "@/components/token-icon";
 import { groupChainFacts, groupNetLabel, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
 
 const field = "h-12 rounded-2xl border-border bg-white px-4 text-base shadow-none";
@@ -135,6 +136,7 @@ export function CreateGroup({
               <input type="radio" name="network-choice" className="mt-1 size-4" checked={on} onChange={() => pickNetwork(net)} />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
+                  <ChainMark chain={net} className="size-5" />
                   <span className="text-sm font-semibold">{fact.title}</span>
                   {fact.recommend ? <span className="rounded-full bg-[#E7F4C4] px-2 py-0.5 text-[11px] font-medium">Recommended</span> : null}
                 </span>

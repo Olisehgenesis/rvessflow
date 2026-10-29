@@ -6,6 +6,7 @@ import { CopyButton } from "@/components/copy-button";
 import { FlowHeader } from "@/components/deposit-flow";
 import { IconInfo } from "@/components/icons";
 import { ReceiveWatch } from "@/components/receive-watch";
+import { ChainMark } from "@/components/token-icon";
 import { viewer } from "@/lib/session";
 
 export default function ReceivePage() {
@@ -29,11 +30,17 @@ async function ReceiveBody() {
       <p className="text-sm text-muted-foreground">This address is the same on Base and on Celo. Tokens land in the wallet. Savings, streams, and groups stay on the network this app uses.</p>
       <dl className="mt-4 space-y-3 text-sm">
         <div>
-          <dt className="font-medium">Base</dt>
+          <dt className="flex items-center gap-2 font-medium">
+            <ChainMark chain="base" className="size-5" />
+            Base
+          </dt>
           <dd className="text-muted-foreground">USDC, USDT, USDM, ETH, USDCx, ETHx</dd>
         </div>
         <div>
-          <dt className="font-medium">Celo</dt>
+          <dt className="flex items-center gap-2 font-medium">
+            <ChainMark chain="celo" className="size-5" />
+            Celo
+          </dt>
           <dd className="text-muted-foreground">USDC, USDT, USDm, USDM, CELO, cUSDx, CELOx</dd>
         </div>
       </dl>

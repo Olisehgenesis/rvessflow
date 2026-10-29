@@ -6,6 +6,7 @@ import { TokenMark } from "@/components/forms";
 import { when } from "@/components/ui-bits";
 import { Progress } from "@/components/ui/progress";
 import { assetByAddress } from "@/lib/assets";
+import { networkLabel } from "@/lib/network";
 import { percent, show } from "@/lib/display";
 import type { Quote } from "@/lib/quote";
 import type { FlowRow, LockRow } from "@/lib/protocol";
@@ -195,7 +196,7 @@ export function LockLink({ lock, quote }: { lock: LockRow; quote: Quote }) {
     <div className="rounded-2xl border border-border bg-card p-4">
       <Link href={`/vaults/${lock.id}`} className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <TokenMark symbol={symbol} />
+          <TokenMark symbol={symbol} network={networkLabel()} />
           <div>
             <p className="font-medium">{symbol}</p>
             <p className="text-xs text-muted-foreground">{name}</p>

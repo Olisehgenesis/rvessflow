@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChainMark } from "@/components/token-icon";
 import { Page } from "@/components/ui-bits";
 import { groupChainFacts, recommendedGroupNet } from "@/lib/group-network";
 import { groupPlainOn } from "@/lib/group-site";
@@ -19,7 +20,10 @@ export default async function GroupChainsPage() {
           return (
             <li key={net} className="rounded-3xl border border-border bg-card p-5">
               <div className="flex items-start justify-between gap-3">
-                <h2 className="text-lg font-semibold">{fact.title}</h2>
+                <h2 className="flex items-center gap-2 text-lg font-semibold">
+                  <ChainMark chain={net} className="size-6" />
+                  {fact.title}
+                </h2>
                 {fact.recommend ? <span className="rounded-full bg-[#E7F4C4] px-2.5 py-1 text-xs font-medium">Recommended</span> : null}
               </div>
               <dl className="mt-4 space-y-3 text-sm">

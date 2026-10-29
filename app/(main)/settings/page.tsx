@@ -8,6 +8,7 @@ import { InstallButton } from "@/components/install-app";
 import { CurrencyPick } from "@/components/currency-pick";
 import { AccountSwitch } from "@/components/forms";
 import Loading from "../loading";
+import { ChainMark } from "@/components/token-icon";
 import { Fact, Notice, Page } from "@/components/ui-bits";
 import { contactIfReady, type Contact } from "@/lib/circle";
 import { labeled, money, shortAddress } from "@/lib/display";
@@ -37,8 +38,8 @@ async function SettingsBody() {
   const signLabel = who.method === "passkey" ? "Passkey on this device" : who.method === "wallet" ? "Connected wallet" : "Signs on this machine";
   const upgrade = data.protocol.upgradeReadyAt ? new Date(data.protocol.upgradeReadyAt * 1000).toLocaleString() : "Not scheduled";
   const links = [
-    { href: `https://basescan.org/address/${data.me.address}`, label: "This account on Base" },
-    { href: `https://celoscan.io/address/${data.me.address}`, label: "This account on Celo" },
+    { href: `https://basescan.org/address/${data.me.address}`, label: "This account on Base", chain: "base" as const },
+    { href: `https://celoscan.io/address/${data.me.address}`, label: "This account on Celo", chain: "celo" as const },
     ...(explorer === "https://basescan.org" ? [] : [{ href: `${explorer}/address/${data.me.address}`, label: `This account on ${networkName}` }]),
     { href: `${explorer}/address/${addresses.factory}`, label: "Vault factory" },
     { href: `${explorer}/address/${addresses.locks}`, label: "Lock vault" },
@@ -168,7 +169,8 @@ async function SettingsBody() {
         <ul className="divide-y divide-border border-t border-border text-sm">
           {links.map((link) => (
             <li key={link.href}>
-              <a href={link.href} className="block py-3 font-medium">
+              <a href={link.href} className="flex items-center gap-2 py-3 font-medium">
+                {"chain" in link && link.chain ? <ChainMark chain={link.chain} className="size-5" /> : null}
                 {link.label}
               </a>
             </li>

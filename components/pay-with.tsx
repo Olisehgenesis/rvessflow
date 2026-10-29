@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { IconCheck, IconChevron } from "@/components/icons";
 import { TokenIcon } from "@/components/token-icon";
 import { previewPay, previewReceive } from "@/lib/actions";
+import { networkLabel } from "@/lib/network";
 import type { PayAsset, ReceiveAsset } from "@/lib/pay-math";
 
 export type PayChoice = {
@@ -142,7 +143,7 @@ function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value
         onClick={() => setOpen((current) => !current)}
         className="flex h-14 w-full items-center gap-3 rounded-2xl border border-border bg-white px-3 text-left"
       >
-        <TokenIcon symbol={picked.label} className="size-8" />
+        <TokenIcon symbol={picked.label} network={networkLabel()} className="size-8" />
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold">{picked.label}</span>
           <span className="block text-xs text-muted-foreground tabular-nums">
@@ -168,7 +169,7 @@ function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value
                   }}
                   className={`flex w-full items-center gap-3 px-3 py-2.5 text-left ${selected ? "bg-[#F4F8E8]" : ""}`}
                 >
-                  <TokenIcon symbol={choice.label} className="size-8" />
+                  <TokenIcon symbol={choice.label} network={networkLabel()} className="size-8" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold">{choice.label}</span>
                     <span className="block text-xs text-muted-foreground tabular-nums">{choice.balance} available</span>
