@@ -2,6 +2,7 @@ import "server-only";
 
 import { decodeFunctionResult, encodeFunctionData, parseAbi, zeroAddress, type Address } from "viem";
 import { baseMarket, poolFees, SLIPPAGE_BPS, SUPER_UNIT } from "@/lib/base-market";
+import { celoMarket, celoPoolFees } from "@/lib/celo-market";
 import { buildDepositPreview, depositGasUnits, networkFeeUsd8, type DepositPreview } from "@/lib/deposit-math";
 import type { PreparedCall } from "@/lib/intent";
 import { buildFundCalls, buildWithdrawCalls, quoteDeadline } from "@/lib/pay-build";
@@ -21,8 +22,8 @@ import {
   type ReceiveAsset,
 } from "@/lib/pay-math";
 import { loadPrices, type Prices } from "@/lib/prices";
-import { addresses, erc20, factoryAbi, publicClient, stableLabel, streamNeed, vaultAbi } from "@/lib/protocol";
-import type { VaultSite } from "@/lib/vault-site";
+import { addresses, cfaAbi, erc20, factoryAbi, publicClient, stableLabel, streamNeed, vaultAbi } from "@/lib/protocol";
+import { vaultSite, type VaultSite } from "@/lib/vault-site";
 
 const quoterAbi = parseAbi([
   "function quoteExactOutputSingle((address tokenIn, address tokenOut, uint256 amount, uint24 fee, uint160 sqrtPriceLimitX96) params) returns (uint256 amountIn, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)",
@@ -181,6 +182,48 @@ const wrapAbi = parseAbi([
   "function depositSuper(address token, uint256 amount)",
   "function upgrade(uint256 amount)",
 ]);
+const swapRouterAbi = parseAbi([
+  "function exactOutputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountOut, uint256 amountInMaximum, uint160 sqrtPriceLimitX96) params) payable returns (uint256 amountIn)",
+  "function multicall(uint256 deadline, bytes[] data) payable returns (bytes[])",
+]);
+
+async function quoteCeloToUsdm(
+  site: VaultSite,
+  pay: "usdt" | "usdc" | "eth",
+  usdmOut: bigint,
+): Promise<{ amountIn: bigint; feeTier: number }> {
+  const tokenIn = pay === "eth" ? celoMarket.celo : pay === "usdt" ? site.usdt : site.usdc;
+  let last = "Celo has no price for that swap right now.";
+  for (const fee of celoPoolFees[pay]) {
+    try {
+      const data = encodeFunctionData({
+        abi: quoterAbi,
+        functionName: "quoteExactOutputSingle",
+        args: [{ tokenIn, tokenOut: site.wrap, amount: usdmOut, fee, sqrtPriceLimitX96: 0n }],
+      });
+      const raw = await site.client.call({ to: celoMarket.quoterV2, data });
+      if (!raw.data || raw.data === "0x") continue;
+      const decoded = decodeFunctionResult({ abi: quoterAbi, functionName: "quoteExactOutputSingle", data: raw.data });
+      if (decoded[0] > 0n) return { amountIn: decoded[0], feeTier: fee };
+    } catch (error) {
+      last = error instanceof Error ? error.message : last;
+    }
+  }
+  throw new Error(last);
+}
+
+async function streamNeedOn(site: VaultSite, amount: bigint, duration: bigint): Promise<bigint> {
+  const perSecond = amount / duration;
+  if (perSecond === 0n) throw new Error("That duration is too long for this amount. The stream would be less than 1 wei per second.");
+  const reserved = perSecond * duration;
+  const buffer = await site.client.readContract({
+    address: site.cfa,
+    abi: cfaAbi,
+    functionName: "getBufferAmountByFlowrate",
+    args: [site.fusdcx, perSecond],
+  });
+  return reserved + buffer * 2n + perSecond * 3600n;
+}
 
 function fundCall(
   to: Address,
@@ -218,49 +261,88 @@ async function wrapSiteCalls(
     calls.push(fundCall(vault, "depositSuper", [site.fusdcx, needed]));
     return calls;
   }
-  if (pay === "eth") {
-    throw new Error(
-      site.net === "celo"
-        ? "A Celo saving takes cUSDx. Pay with cUSDx or USDm, or convert CELO first."
-        : "Pay with the savings token on this chain, or convert first.",
-    );
-  }
-  const token = pay === "usdt" ? site.usdt : site.net === "celo" ? site.wrap : site.usdc;
-  if (pay === "usdt" && token.toLowerCase() !== site.wrap.toLowerCase()) {
-    throw new Error(
-      site.net === "celo"
-        ? "This Celo vault wraps USDm into cUSDx. Pay with cUSDx or USDm, or convert USDT first."
-        : "Convert that token to the savings dollar first.",
-    );
-  }
-  const decimals = Number(
-    await site.client.readContract({ address: token, abi: wrapAbi, functionName: "decimals" }),
-  );
   const dueSuper = needed + protocolFeeOf(needed);
-  const underlying = decimals >= 18 ? dueSuper : dueSuper / 10n ** BigInt(18 - decimals);
-  if (underlying <= 0n) throw new Error("Enter a larger amount.");
+  const wrapDecimals = Number(
+    await site.client.readContract({ address: site.wrap, abi: wrapAbi, functionName: "decimals" }),
+  );
+  const usdmOut = wrapDecimals >= 18 ? dueSuper : dueSuper / 10n ** BigInt(18 - wrapDecimals);
+  if (usdmOut <= 0n) throw new Error("Enter a larger amount.");
+  const spender = mode === "vault" ? vault : site.fusdcx;
+  const calls: PreparedCall[] = [];
+
+  const direct = pay === "usdc" && site.net === "celo" ? site.wrap : pay === "usdc" ? site.usdc : null;
+  if (direct) {
+    const decimals = Number(await site.client.readContract({ address: direct, abi: wrapAbi, functionName: "decimals" }));
+    const underlying = decimals >= 18 ? dueSuper : dueSuper / 10n ** BigInt(18 - decimals);
+    const balance = await site.client.readContract({ address: direct, abi: wrapAbi, functionName: "balanceOf", args: [owner] });
+    const symbol = site.net === "celo" ? "USDm" : "USDC";
+    const problem = spendableProblem({ symbol, balance, needed: underlying, scale: decimals, digits: decimals > 6 ? 4 : 2, leaveFee: false });
+    if (problem) throw new Error(problem);
+    const allowanceNow = await site.client.readContract({ address: direct, abi: wrapAbi, functionName: "allowance", args: [owner, spender] });
+    if (allowanceNow < underlying) calls.push(fundCall(direct, "approve", [spender, underlying]));
+    if (mode === "vault") calls.push(fundCall(vault, "depositUnderlying", [site.fusdcx, underlying]));
+    else calls.push(fundCall(site.fusdcx, "upgrade", [dueSuper]));
+    return calls;
+  }
+
+  if (pay !== "usdt" && pay !== "eth") throw new Error("Pay with a dollar token on this chain.");
+  const token = pay === "usdt" ? site.usdt : celoMarket.celo;
+  const quoted = await quoteCeloToUsdm(site, pay, usdmOut);
+  const amountInMax = slippageCeiling(quoted.amountIn);
+  const decimals = pay === "usdt" ? 6 : 18;
   const balance = await site.client.readContract({ address: token, abi: wrapAbi, functionName: "balanceOf", args: [owner] });
-  const symbol = site.net === "celo" && token.toLowerCase() === site.wrap.toLowerCase() ? "USDm" : pay.toUpperCase();
   const problem = spendableProblem({
-    symbol,
+    symbol: pay === "usdt" ? "USDT" : "CELO",
     balance,
-    needed: underlying,
+    needed: amountInMax,
     scale: decimals,
-    digits: decimals > 6 ? 4 : 2,
-    leaveFee: false,
+    digits: pay === "usdt" ? 2 : 6,
+    leaveFee: pay === "eth",
   });
   if (problem) throw new Error(problem);
-  const spender = mode === "vault" ? vault : site.fusdcx;
-  const allowanceNow = await site.client.readContract({
+  const routerAllowance = await site.client.readContract({
     address: token,
+    abi: wrapAbi,
+    functionName: "allowance",
+    args: [owner, celoMarket.swapRouter02],
+  });
+  if (pay === "usdt" && routerAllowance > 0n && routerAllowance < amountInMax) {
+    calls.push(fundCall(token, "approve", [celoMarket.swapRouter02, 0n]));
+  }
+  if (routerAllowance < amountInMax) calls.push(fundCall(token, "approve", [celoMarket.swapRouter02, amountInMax]));
+  const swap = encodeFunctionData({
+    abi: swapRouterAbi,
+    functionName: "exactOutputSingle",
+    args: [
+      {
+        tokenIn: token,
+        tokenOut: site.wrap,
+        fee: quoted.feeTier,
+        recipient: owner,
+        amountOut: usdmOut,
+        amountInMaximum: amountInMax,
+        sqrtPriceLimitX96: 0n,
+      },
+    ],
+  });
+  calls.push({
+    to: celoMarket.swapRouter02,
+    data: encodeFunctionData({
+      abi: swapRouterAbi,
+      functionName: "multicall",
+      args: [quoteDeadline(Math.floor(Date.now() / 1000)), [swap]],
+    }),
+    value: "0",
+  });
+  const wrapAllowance = await site.client.readContract({
+    address: site.wrap,
     abi: wrapAbi,
     functionName: "allowance",
     args: [owner, spender],
   });
-  const calls: PreparedCall[] = [];
-  if (allowanceNow < underlying) calls.push(fundCall(token, "approve", [spender, underlying]));
-  if (mode === "vault") calls.push(fundCall(vault, "depositUnderlying", [site.fusdcx, underlying]));
-  else calls.push(fundCall(site.fusdcx, "upgrade", [underlying]));
+  if (wrapAllowance < usdmOut) calls.push(fundCall(site.wrap, "approve", [spender, usdmOut]));
+  if (mode === "vault") calls.push(fundCall(vault, "depositUnderlying", [site.fusdcx, usdmOut]));
+  else calls.push(fundCall(site.fusdcx, "upgrade", [dueSuper]));
   return calls;
 }
 
@@ -406,7 +488,10 @@ export async function previewLines(input: {
   if (input.mode === "stream") {
     const duration = Number(input.duration);
     if (!Number.isInteger(duration) || duration < 60) throw new Error("Pick the end date first.");
-    needed = await streamNeed(face, BigInt(duration));
+    needed =
+      input.network && /celo/i.test(input.network)
+        ? await streamNeedOn(vaultSite("celo"), face, BigInt(duration))
+        : await streamNeed(face, BigInt(duration));
   }
   const pulledFee = input.protocolOnTop ? protocolFeeOf(face) : 0n;
   if (pulledFee > 0n) needed += pulledFee;
@@ -425,14 +510,24 @@ export async function previewLines(input: {
   if (input.network && /celo/i.test(input.network)) {
     const short = needed - covered;
     const fee = protocolFeeOf(short);
-    const symbol = input.pay === "usdcx" ? "cUSDx" : input.pay === "usdc" ? "USDm" : input.pay.toUpperCase();
-    if (input.pay === "eth" || input.pay === "usdt") {
-      throw new Error("On Celo pay with cUSDx or USDm. Convert USDT or CELO first.");
+    if (input.pay === "usdcx" || input.pay === "usdc") {
+      const symbol = input.pay === "usdcx" ? "cUSDx" : "USDm";
+      return shownQuote([
+        { label: "You spend", value: `${formatAmount(short + fee, 18, 4)} ${symbol}` },
+        { label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(fee, prices.usdcUsd8))}` },
+        { label: "Slippage", value: "No swap" },
+      ]);
     }
+    const site = vaultSite("celo");
+    const quoted = await quoteCeloToUsdm(site, input.pay === "eth" ? "eth" : "usdt", short + fee);
+    const amountInMax = slippageCeiling(quoted.amountIn);
+    const scale = input.pay === "eth" ? 18 : 6;
+    const digits = input.pay === "eth" ? 6 : 2;
+    const symbol = input.pay === "eth" ? "CELO" : "USDT";
     return shownQuote([
-      { label: "You spend", value: `${formatAmount(short + fee, 18, 4)} ${symbol}` },
+      { label: "You spend", value: `${formatAmount(amountInMax, scale, digits)} ${symbol}` },
       { label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(fee, prices.usdcUsd8))}` },
-      { label: "Slippage", value: "No swap" },
+      { label: "Slippage", value: "0.50%" },
     ]);
   }
   if (input.pay !== "usdc" && input.pay !== "usdcx") {
