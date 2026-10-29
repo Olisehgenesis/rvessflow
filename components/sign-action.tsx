@@ -6,6 +6,7 @@ import { continueIntent, type ActionState } from "@/lib/actions";
 import { sendCalls } from "@/lib/client-sign";
 import { setSignTrack } from "@/components/sign-progress";
 import { describeCalls, humanArt, humanTrack, phaseTitle, type HumanPhase, type SignStep } from "@/lib/sign-steps";
+import type { Intent } from "@/lib/intent";
 
 function explain(error: unknown): string {
   const message = error instanceof Error ? error.message : "The transaction failed.";
