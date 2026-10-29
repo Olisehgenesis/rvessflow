@@ -14,6 +14,7 @@ import { goalNotes, patchGoalNote, recordActivity, saveGoalNote, type ActivityRe
 import { parseUsd, readPay, readReceive, type PayAsset } from "@/lib/pay-math";
 import { activityUnits, isSendAsset, parseSendAmount, type SendAsset } from "@/lib/send-math";
 import { sendRoute } from "@/lib/send";
+import { appGroupNet, groupNetLabel, parseGroupKey } from "@/lib/group-network";
 import { planIntent } from "@/lib/plan";
 import {
   addToGoal,
@@ -75,8 +76,9 @@ async function quotedAmount(raw: string, eth = false): Promise<string> {
   return asTokenAmount(clean, await loadQuote());
 }
 
-function signPayload(who: Viewer, intent: Intent, calls: SignPayload["calls"]): ActionState {
+function signPayload(who: Viewer, intent: Intent, calls: SignPayload["calls"], chainId?: number): ActionState {
   if (who.method === "tester") return { error: "This account signs on the server." };
+  const sendChain = intent.kind === "send" && isSendAsset(intent.asset) ? sendRoute(intent.asset).chainId : undefined;
   return {
     sign: {
       nonce: randomUUID(),
@@ -84,7 +86,7 @@ function signPayload(who: Viewer, intent: Intent, calls: SignPayload["calls"]): 
       intent,
       method: who.method,
       address: who.address,
-      chainId: intent.kind === "send" && isSendAsset(intent.asset) ? sendRoute(intent.asset).chainId : undefined,
+      chainId: chainId ?? sendChain,
     },
   };
 }
@@ -224,7 +226,7 @@ async function handoff(intent: Intent): Promise<ActionState> {
     if (step.href) redirect(step.href);
     return null;
   }
-  return signPayload(who, step.intent, step.calls);
+  return signPayload(who, step.intent, step.calls, step.chainId);
 }
 
 export async function continueIntent(intent: Intent): Promise<{ error?: string; href?: string; sign?: SignPayload }> {
@@ -239,7 +241,7 @@ export async function continueIntent(intent: Intent): Promise<{ error?: string; 
       refresh();
       return { href: step.href };
     }
-    const signed = signPayload(who, step.intent, step.calls);
+    const signed = signPayload(who, step.intent, step.calls, step.chainId);
     return signed?.sign ? { sign: signed.sign } : { error: "The wallet could not be asked to sign." };
   } catch (error) {
     return { error: explain(error) };
@@ -528,6 +530,7 @@ export async function createDraft(_prev: ActionState, formData: FormData): Promi
       cycle: String(formData.get("cycle") ?? ""),
       days: String(formData.get("days") ?? ""),
       plain: String(formData.get("payout") ?? "") === "plain",
+      network: String(formData.get("network") ?? ""),
     });
   } catch (error) {
     return spoken(error);
@@ -547,6 +550,7 @@ export async function saveDraft(_prev: ActionState, formData: FormData): Promise
       cycle: String(formData.get("cycle") ?? ""),
       days: String(formData.get("days") ?? ""),
       plain: String(formData.get("payout") ?? "") === "plain",
+      network: String(formData.get("network") ?? ""),
     });
   } catch (error) {
     return spoken(error);
@@ -682,7 +686,11 @@ export async function moveTurn(_prev: ActionState, formData: FormData): Promise<
     const from = Number(formData.get("from"));
     const dir = formData.get("dir") === "up" ? -1 : 1;
     if (who.method === "tester") {
-      await shiftPayout(await accountIndex(), BigInt(id), from, dir);
+      const group = parseGroupKey(id);
+      if (group.net !== appGroupNet()) {
+        return { error: `This test account signs on ${groupNetLabel(appGroupNet())}. Connect a wallet to act on ${groupNetLabel(group.net)}.` };
+      }
+      await shiftPayout(await accountIndex(), group.id, from, dir);
       refresh();
       return null;
     }
@@ -700,7 +708,11 @@ export async function useMyPhone(_prev: ActionState, formData: FormData): Promis
     const address = String(formData.get("address") ?? "");
     const phone = isAddress(address) ? await phoneFor(address as Address) : "";
     if (who.method === "tester") {
-      await linkPhone(await accountIndex(), BigInt(id), phone);
+      const group = parseGroupKey(id);
+      if (group.net !== appGroupNet()) {
+        return { error: `This test account signs on ${groupNetLabel(appGroupNet())}. Connect a wallet to act on ${groupNetLabel(group.net)}.` };
+      }
+      await linkPhone(await accountIndex(), group.id, phone);
       refresh();
       return null;
     }
@@ -917,7 +929,11 @@ export async function doGroup(_prev: ActionState, formData: FormData): Promise<A
     const intent = refIntent({ kind: "group" as const, fn, id, pay, ref: "" });
     if (who.method === "tester") {
       if (pay) return await finishTester(intent);
-      await groupAct(await accountIndex(), BigInt(id), fn);
+      const group = parseGroupKey(id);
+      if (group.net !== appGroupNet()) {
+        return { error: `This test account signs on ${groupNetLabel(appGroupNet())}. Connect a wallet to act on ${groupNetLabel(group.net)}.` };
+      }
+      await groupAct(await accountIndex(), group.id, fn);
       refresh();
       return null;
     }

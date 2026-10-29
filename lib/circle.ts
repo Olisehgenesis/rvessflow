@@ -5,11 +5,12 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { getAddress, isAddress, type Address } from "viem";
 import { cyclePlan, spanLabel } from "@/lib/cycle";
+import { appGroupNet, groupNetLabel, isGroupNet, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
 import { plainGroupWaits } from "@/lib/group-upgrade";
 import { rows, sql, transaction } from "@/lib/motherduck";
 import { ensureSchema } from "@/lib/records";
 import type { IdStatus } from "@/lib/savings";
-import { personName, people, openGroup, publishPhones } from "@/lib/protocol";
+import { groupPlainStatus, personName, people, openGroup, publishPhones } from "@/lib/protocol";
 import { accountIndex, viewer, type Viewer } from "@/lib/session";
 
 export type Contact = {
@@ -30,6 +31,7 @@ export type DraftCard = {
   contribution: string;
   cycles: number;
   cycleLabel: string;
+  network: string;
   count: number;
   role: "organizer" | "member" | "open" | "applied";
 };
@@ -52,6 +54,8 @@ export type DraftView = {
   cycle: string;
   days: string;
   cycleLabel: string;
+  network: GroupNet;
+  networkLabel: string;
   plain: boolean;
   summary: string;
   open: boolean;
@@ -87,8 +91,13 @@ type Draft = {
   members: Address[];
   open: boolean;
   plain: boolean;
+  network: GroupNet;
   applications: { address: Address; name: string }[];
 };
+
+function asGroupNet(value: unknown): GroupNet {
+  return typeof value === "string" && isGroupNet(value) ? value : appGroupNet();
+}
 
 export type GroupLabel = { ref: string; name: string; description: string; code: string };
 
@@ -152,8 +161,8 @@ async function readBucket(bucket: Bucket): Promise<Store> {
   const phones = await rows<{ address: string; phone: string; position: unknown }>(
     sql`SELECT address, phone, position FROM ${table(bucket, "phones")} ORDER BY position`,
   );
-  const drafts = await rows<{ id: string; creator: string; contribution: string; cycles: unknown; cycle: string; days: string; is_open: boolean; plain: boolean; name: string; description: string; code: string }>(
-    sql`SELECT id, creator, contribution, cycles, cycle, days, is_open, plain, name, description, code FROM ${table(bucket, "drafts")}`,
+  const drafts = await rows<{ id: string; creator: string; contribution: string; cycles: unknown; cycle: string; days: string; is_open: boolean; plain: boolean; name: string; description: string; code: string; network: string }>(
+    sql`SELECT id, creator, contribution, cycles, cycle, days, is_open, plain, name, description, code, network FROM ${table(bucket, "drafts")}`,
   );
   const labels = await rows<{ ref: string; name: string; description: string; code: string }>(
     sql`SELECT ref, name, description, code FROM ${sql.raw(`${bucket}.group_labels`)}`,
@@ -201,6 +210,7 @@ async function readBucket(bucket: Bucket): Promise<Store> {
           code: draft.code ?? "",
           open: Boolean(draft.is_open),
           plain: Boolean(draft.plain),
+          network: asGroupNet(draft.network),
           members: members.flatMap((item) => {
             if (item.draft_id !== draft.id) return [];
             const address = asAddress(item.address);
@@ -249,7 +259,7 @@ async function writeBucket(bucket: Bucket, store: Store) {
     }
     for (const draft of store.drafts) {
       await query(
-        sql`INSERT INTO ${table(bucket, "drafts")} (id, creator, contribution, cycles, cycle, days, is_open, plain, name, description, code) VALUES (${draft.id}, ${draft.creator}, ${draft.contribution}, ${draft.cycles}, ${draft.cycle}, ${draft.days}, ${draft.open}, ${Boolean(draft.plain)}, ${draft.name}, ${draft.description}, ${draft.code})`,
+        sql`INSERT INTO ${table(bucket, "drafts")} (id, creator, contribution, cycles, cycle, days, is_open, plain, name, description, code, network) VALUES (${draft.id}, ${draft.creator}, ${draft.contribution}, ${draft.cycles}, ${draft.cycle}, ${draft.days}, ${draft.open}, ${Boolean(draft.plain)}, ${draft.name}, ${draft.description}, ${draft.code}, ${draft.network})`,
       );
       for (let index = 0; index < draft.members.length; index += 1) {
         await query(
@@ -341,6 +351,7 @@ function loadFileWorld(): World {
       code: draft.code ?? "",
       open: Boolean(draft.open),
       plain: Boolean(draft.plain),
+      network: asGroupNet(draft.network),
       cycles: num(draft.cycles),
     });
   }
@@ -392,7 +403,7 @@ async function importLocal() {
     const creator = asAddress(draft.creator);
     if (!creator) continue;
     const store = bucketFor(creator) === "demo" ? demo : app;
-    store.drafts.push({ ...draft, creator });
+    store.drafts.push({ ...draft, creator, network: asGroupNet(draft.network) });
   }
   await writeBucket("demo", demo);
   await writeBucket("app", app);
@@ -523,6 +534,8 @@ function view(data: World, draft: Draft, who: Viewer): DraftView {
     cycle: draft.cycle,
     days: draft.days,
     cycleLabel: plan ? spanLabel(plan.cycle) : "a custom cycle",
+    network: draft.network,
+    networkLabel: groupNetLabel(draft.network),
     plain: draft.plain,
     summary: `${plan ? `${draft.contribution} USD each cycle, ${draft.cycles} cycles of ${spanLabel(plan.cycle)}.` : `${draft.contribution} USD each cycle.`} ${draft.plain ? "Each contribution is paid to the person whose turn it is." : "The pot streams to the person whose turn it is."}`,
     open: draft.open,
@@ -711,6 +724,7 @@ export async function visibleDrafts(address: Address): Promise<DraftCard[]> {
         contribution: draft.contribution,
         cycles: draft.cycles,
         cycleLabel: plan ? spanLabel(plan.cycle) : "a custom cycle",
+        network: groupNetLabel(draft.network),
         count: draft.members.length,
         role,
       },
@@ -809,7 +823,7 @@ function cleanDescription(value: string) {
   return description;
 }
 
-export async function openDraft(input: { name: string; description: string; contribution: string; cycles: number; cycle: string; days: string; plain: boolean }) {
+export async function openDraft(input: { name: string; description: string; contribution: string; cycles: number; cycle: string; days: string; plain: boolean; network?: string }) {
   const contribution = input.contribution.trim();
   if (!/^\d+(\.\d{1,18})?$/.test(contribution) || Number(contribution) <= 0) {
     throw new Error("Enter a contribution greater than zero.");
@@ -836,13 +850,14 @@ export async function openDraft(input: { name: string; description: string; cont
     members: [who.address],
     open: true,
     plain: input.plain,
+    network: input.network && isGroupNet(input.network) ? input.network : recommendedGroupNet,
     applications: [],
   });
   await writeBucket(bucket, store);
   return id;
 }
 
-export async function updateDraft(id: string, input: { name: string; description: string; contribution: string; cycles: number; cycle: string; days: string; plain: boolean }) {
+export async function updateDraft(id: string, input: { name: string; description: string; contribution: string; cycles: number; cycle: string; days: string; plain: boolean; network?: string }) {
   const contribution = input.contribution.trim();
   if (!/^\d+(\.\d{1,18})?$/.test(contribution) || Number(contribution) <= 0) {
     throw new Error("Enter a contribution greater than zero.");
@@ -861,6 +876,7 @@ export async function updateDraft(id: string, input: { name: string; description
   draft.cycle = input.cycle;
   draft.days = String(Number.isInteger(Number(input.days)) ? Number(input.days) : 14);
   draft.plain = input.plain;
+  if (input.network) draft.network = asGroupNet(input.network);
   if (!draft.code) draft.code = makeCode(knownCodes(data));
   await writeBucket(bucket, data[bucket]);
 }
@@ -1029,7 +1045,7 @@ export async function groupCreateIntent(draftId: string) {
   const plan = cyclePlan(draft.cycle, Number(draft.days));
   if (!plan) throw new Error("That cycle length is outside what the contract allows. Use 1 to 366 days.");
   if (draft.plain) {
-    const wait = plainGroupWaits();
+    const wait = plainGroupWaits(await groupPlainStatus(draft.network));
     if (wait) throw new Error(wait);
   }
   const members = draft.members.flatMap((item) => {
@@ -1051,6 +1067,7 @@ export async function groupCreateIntent(draftId: string) {
     graceSeconds: plan.grace,
     phones,
     plain: draft.plain,
+    network: draft.network,
     ref: "",
   };
 }
@@ -1063,7 +1080,7 @@ export async function launchDraft(id: string) {
   const plan = cyclePlan(draft.cycle, Number(draft.days));
   if (!plan) throw new Error("That cycle length is outside what the contract allows. Use 1 to 366 days.");
   if (draft.plain) {
-    const wait = plainGroupWaits();
+    const wait = plainGroupWaits(await groupPlainStatus(draft.network));
     if (wait) throw new Error(wait);
   }
   const members = draft.members.flatMap((item) => {
@@ -1075,6 +1092,9 @@ export async function launchDraft(id: string) {
     return phone ? [{ account, phone }] : [];
   });
   const index = await accountIndex();
+  if (draft.network !== appGroupNet()) {
+    throw new Error(`This test account signs on ${groupNetLabel(appGroupNet())}. Connect a wallet to start a group on ${groupNetLabel(draft.network)}.`);
+  }
   const chainId = await openGroup(index, {
     contribution: draft.contribution,
     members,

@@ -66,7 +66,7 @@ export function DraftTerms() {
           <option value="plain">Paid each turn</option>
           <option value="stream">Streaming pot</option>
         </select>
-        <span className="block text-xs leading-relaxed text-muted-foreground">Paid each turn sends the contribution to the person whose turn it is. A streaming pot pays that person every second. Paid each turn is an upgrade coming soon, on Thursday, 29 October.</span>
+        <span className="block text-xs leading-relaxed text-muted-foreground">Paid each turn sends the contribution to the person whose turn it is. A streaming pot pays that person every second.</span>
       </label>
       <label className="block space-y-1.5">
         <Label htmlFor="cycles">Cycles</Label>

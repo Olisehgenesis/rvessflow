@@ -7,6 +7,8 @@ import type { Intent, Plan, PreparedCall } from "@/lib/intent";
 import { readPay, type PayAsset } from "@/lib/pay-math";
 import { sendLabel, sendRoute, sendToken, walletBalance } from "@/lib/send";
 import { isSendAsset, parseSendAmount, spendableEth } from "@/lib/send-math";
+import { appGroupNet, groupKey, isGroupNet, parseGroupKey, type GroupNet } from "@/lib/group-network";
+import { groupSite } from "@/lib/group-site";
 import { readName, stableLabel, toName } from "@/lib/protocol";
 import {
   addresses,
@@ -75,8 +77,15 @@ async function coverWallet(calls: PreparedCall[], owner: Address, pay: PayAsset,
   calls.push(...(await fundingCalls(owner, owner, pay, due - balance, "wallet")));
 }
 
-async function approveIfNeeded(calls: PreparedCall[], owner: Address, token: Address, spender: Address, amount: bigint) {
-  const allowance = await publicClient.readContract({
+async function approveIfNeeded(
+  calls: PreparedCall[],
+  owner: Address,
+  token: Address,
+  spender: Address,
+  amount: bigint,
+  reader: { readContract: typeof publicClient.readContract } = publicClient,
+) {
+  const allowance = await reader.readContract({
     address: token,
     abi: erc20,
     functionName: "allowance",
@@ -470,15 +479,22 @@ async function planLockAct(owner: Address, intent: Extract<Intent, { kind: "lock
   return { calls, intent: { ...intent, seen: entry[2].toString(), submitted: true }, done: false };
 }
 
-async function groupOf(id: bigint) {
-  return readGroup(id);
+function netOf(value: { id?: string; network?: string }): GroupNet {
+  if (value.network && isGroupNet(value.network)) return value.network;
+  if (value.id) return parseGroupKey(value.id).net;
+  return appGroupNet();
 }
 
-async function membersOf(id: bigint, count: number) {
+async function groupOf(id: bigint, net: GroupNet) {
+  return readGroup(id, net);
+}
+
+async function membersOf(id: bigint, count: number, net: GroupNet) {
   if (!count) return [];
-  return publicClient.multicall({
+  const site = groupSite(net);
+  return site.client.multicall({
     contracts: Array.from({ length: count }, (_, index) => ({
-      address: addresses.groups,
+      address: site.groups,
       abi: groupAbi,
       functionName: "getMember" as const,
       args: [id, BigInt(index)] as const,
@@ -488,26 +504,29 @@ async function membersOf(id: bigint, count: number) {
 }
 
 async function planGroup(owner: Address, intent: Extract<Intent, { kind: "group" }>): Promise<Plan> {
-  const id = BigInt(intent.id);
-  const group = await groupOf(id);
+  const parsed = parseGroupKey(intent.id);
+  const id = parsed.id;
+  const net = parsed.net;
+  const site = groupSite(net);
+  const group = await groupOf(id, net);
   const href = `/groups/${intent.id}`;
   const count = Number(group[10]);
-  const members = await membersOf(id, count);
+  const members = await membersOf(id, count, net);
   const mine = members.findIndex((member) => member[0].toLowerCase() === owner.toLowerCase());
   if (intent.fn === "start") {
     if (group[11]) return done(intent, { href });
     if (intent.submitted) return pending(intent);
-    return { calls: [encode(addresses.groups, groupAbi, "start", [id])], intent: { ...intent, submitted: true }, done: false };
+    return { calls: [encode(site.groups, groupAbi, "start", [id])], intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
   }
   if (intent.fn === "cancelBeforeStart") {
     if (group[12]) return done(intent, { href: "/groups" });
     if (intent.submitted) return pending(intent);
-    return { calls: [encode(addresses.groups, groupAbi, "cancelBeforeStart", [id])], intent: { ...intent, submitted: true }, done: false };
+    return { calls: [encode(site.groups, groupAbi, "cancelBeforeStart", [id])], intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
   }
   if (intent.fn === "exitBeforeStart") {
     if (mine < 0) return done(intent, { href: "/groups" });
     if (intent.submitted) return pending(intent);
-    return { calls: [encode(addresses.groups, groupAbi, "exitBeforeStart", [id])], intent: { ...intent, submitted: true }, done: false };
+    return { calls: [encode(site.groups, groupAbi, "exitBeforeStart", [id])], intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
   }
   if (mine < 0) throw new Error("You are not a member of this group.");
   if (intent.fn === "postCollateral") {
@@ -515,30 +534,38 @@ async function planGroup(owner: Address, intent: Extract<Intent, { kind: "group"
     if (intent.submitted) return pending(intent);
     const calls: PreparedCall[] = [];
     const due = withProtocolFee(group[4]);
-    if (intent.pay) await coverWallet(calls, owner, readPay(intent.pay), due);
-    await approveIfNeeded(calls, owner, addresses.fusdcx, addresses.groups, due);
-    calls.push(encode(addresses.groups, groupAbi, "postCollateral", [id]));
-    return { calls, intent: { ...intent, submitted: true }, done: false };
+    if (intent.pay) {
+      if (net !== appGroupNet()) throw new Error(`This group takes ${site.name} tokens. Convert there first.`);
+      await coverWallet(calls, owner, readPay(intent.pay), due);
+    }
+    await approveIfNeeded(calls, owner, site.token, site.groups, due, site.client);
+    calls.push(encode(site.groups, groupAbi, "postCollateral", [id]));
+    return { calls, intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
   }
   if (intent.fn === "claimCollateral") {
     if (group[13] && members[mine][2] === 0n) return done(intent, { href });
     if (intent.submitted) return pending(intent);
-    return { calls: [encode(addresses.groups, groupAbi, "claimCollateral", [id])], intent: { ...intent, submitted: true }, done: false };
+    return { calls: [encode(site.groups, groupAbi, "claimCollateral", [id])], intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
   }
   const given = members[mine][5];
   if (intent.seen && given > BigInt(intent.seen)) return done(intent, { href: `/groups/${intent.id}/paid` });
   if (intent.submitted) return pending(intent);
   const calls: PreparedCall[] = [];
   const due = withProtocolFee(group[3]);
-  if (intent.pay) await coverWallet(calls, owner, readPay(intent.pay), due);
-  await approveIfNeeded(calls, owner, addresses.fusdcx, addresses.groups, due);
-  calls.push(encode(addresses.groups, groupAbi, "contribute", [id]));
-  return { calls, intent: { ...intent, seen: given.toString(), submitted: true }, done: false };
+  if (intent.pay) {
+    if (net !== appGroupNet()) throw new Error(`This group takes ${site.name} tokens. Convert there first.`);
+    await coverWallet(calls, owner, readPay(intent.pay), due);
+  }
+  await approveIfNeeded(calls, owner, site.token, site.groups, due, site.client);
+  calls.push(encode(site.groups, groupAbi, "contribute", [id]));
+  return { calls, intent: { ...intent, seen: given.toString(), submitted: true }, done: false, chainId: site.chainId };
 }
 
 async function planGroupCreate(owner: Address, intent: Extract<Intent, { kind: "groupCreate" }>): Promise<Plan> {
+  const net = netOf(intent);
+  const site = groupSite(net);
   const ids = (
-    await publicClient.readContract({ address: addresses.groups, abi: groupAbi, functionName: "groupsOf", args: [owner] })
+    await site.client.readContract({ address: site.groups, abi: groupAbi, functionName: "groupsOf", args: [owner] })
   ).map((id) => id.toString());
   if (!intent.knownIds) {
     const contribution = parseAmount(intent.contribution);
@@ -552,8 +579,8 @@ async function planGroupCreate(owner: Address, intent: Extract<Intent, { kind: "
     }
     return {
       calls: [
-        encode(addresses.groups, groupAbi, intent.plain ? "createPlainGroup" : "createGroup", [
-          addresses.fusdcx,
+        encode(site.groups, groupAbi, intent.plain ? "createPlainGroup" : "createGroup", [
+          site.token,
           contribution,
           BigInt(intent.cycleSeconds),
           BigInt(intent.windowSeconds),
@@ -565,33 +592,37 @@ async function planGroupCreate(owner: Address, intent: Extract<Intent, { kind: "
       ],
       intent: { ...intent, knownIds: ids, submitted: true },
       done: false,
+      chainId: site.chainId,
     };
   }
   const fresh = ids.find((id) => !intent.knownIds?.includes(id));
   const groupId = intent.groupId ?? fresh;
   if (!groupId) return pending(intent);
   const next = { ...intent, groupId };
+  const ref = groupKey(net, groupId);
   if (next.phones.length && !next.phonesQueued) {
     const calls = next.phones.flatMap((row) => {
       const digits = row.phone.replace(/\D/g, "");
       if (!isAddress(row.account) || digits.length < 7 || digits.length > 31) return [];
-      return [encode(addresses.groups, groupAbi, "setMemberPhone", [BigInt(groupId), getAddress(row.account), toName(digits)])];
+      return [encode(site.groups, groupAbi, "setMemberPhone", [BigInt(groupId), getAddress(row.account), toName(digits)])];
     });
-    if (calls.length) return { calls, intent: { ...next, phonesQueued: true }, done: false };
+    if (calls.length) return { calls, intent: { ...next, phonesQueued: true }, done: false, chainId: site.chainId };
   }
-  return done(next, { id: groupId, href: `/groups/${groupId}` });
+  return done(next, { id: ref, href: `/groups/${ref}` });
 }
 
 async function planPayout(owner: Address, intent: Extract<Intent, { kind: "payout" }>): Promise<Plan> {
-  const id = BigInt(intent.id);
-  const group = await groupOf(id);
+  const parsed = parseGroupKey(intent.id);
+  const id = parsed.id;
+  const site = groupSite(parsed.net);
+  const group = await groupOf(id, parsed.net);
   if (group[0].toLowerCase() !== owner.toLowerCase()) throw new Error("Only the person who created the group can do that.");
   if (group[11] || group[12]) throw new Error("The turn order is fixed once the group has started.");
   const count = Number(group[10]);
   let seats: number[];
   try {
-    const order = await publicClient.readContract({
-      address: addresses.groups,
+    const order = await site.client.readContract({
+      address: site.groups,
       abi: groupAbi,
       functionName: "payoutOrder",
       args: [id],
@@ -613,20 +644,23 @@ async function planPayout(owner: Address, intent: Extract<Intent, { kind: "payou
   next[intent.from] = next[to];
   next[to] = hold;
   return {
-    calls: [encode(addresses.groups, groupAbi, "setPayoutOrder", [id, next])],
+    calls: [encode(site.groups, groupAbi, "setPayoutOrder", [id, next])],
     intent: { ...intent, seen: next.join(","), submitted: true },
     done: false,
+    chainId: site.chainId,
   };
 }
 
 async function planPhone(owner: Address, intent: Extract<Intent, { kind: "phone" }>): Promise<Plan> {
   const digits = intent.phone.replace(/\D/g, "");
   if (digits.length < 7 || digits.length > 31) throw new Error("Add a phone number with the country code in Settings first.");
-  const current = await publicClient.readContract({
-    address: addresses.groups,
+  const parsed = parseGroupKey(intent.id);
+  const site = groupSite(parsed.net);
+  const current = await site.client.readContract({
+    address: site.groups,
     abi: groupAbi,
     functionName: "memberPhone",
-    args: [BigInt(intent.id), owner],
+    args: [parsed.id, owner],
   });
   let shown = "";
   try {
@@ -637,9 +671,10 @@ async function planPhone(owner: Address, intent: Extract<Intent, { kind: "phone"
   if (shown === digits) return done(intent, { href: `/groups/${intent.id}` });
   if (intent.submitted) return pending(intent);
   return {
-    calls: [encode(addresses.groups, groupAbi, "setMemberPhone", [BigInt(intent.id), owner, toName(digits)])],
+    calls: [encode(site.groups, groupAbi, "setMemberPhone", [parsed.id, owner, toName(digits)])],
     intent: { ...intent, submitted: true },
     done: false,
+    chainId: site.chainId,
   };
 }
 

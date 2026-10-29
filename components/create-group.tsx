@@ -1,16 +1,24 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorNote } from "@/components/ui-bits";
 import { createDraft, type ActionState } from "@/lib/actions";
 import { cyclePlan, spanLabel, type CycleChoice } from "@/lib/cycle";
+import { groupChainFacts, groupNetLabel, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
 
 const field = "h-12 rounded-2xl border-border bg-white px-4 text-base shadow-none";
 
-export function CreateGroup() {
+export function CreateGroup({
+  live,
+  hints,
+}: {
+  live: Record<GroupNet, boolean>;
+  hints: Record<GroupNet, string>;
+}) {
   const [state, action, pending] = useActionState(createDraft, null as ActionState);
   const [step, setStep] = useState<"edit" | "review">("edit");
   const [name, setName] = useState("");
@@ -19,7 +27,12 @@ export function CreateGroup() {
   const [cycles, setCycles] = useState("4");
   const [choice, setChoice] = useState<CycleChoice>("week");
   const [days, setDays] = useState("14");
-  const [payout, setPayout] = useState("stream");
+  const [network, setNetwork] = useState<GroupNet>(recommendedGroupNet);
+  const [payout, setPayout] = useState(live[recommendedGroupNet] ? "plain" : "stream");
+  function pickNetwork(next: GroupNet) {
+    setNetwork(next);
+    setPayout(live[next] ? "plain" : "stream");
+  }
   const plan = cyclePlan(choice, Number(days));
   const total = Number(contribution) > 0 ? (Number(contribution) * Number(cycles)).toLocaleString("en-US", { maximumFractionDigits: 2 }) : "";
 
@@ -33,6 +46,7 @@ export function CreateGroup() {
         <input type="hidden" name="cycle" value={choice} />
         <input type="hidden" name="days" value={days} />
         <input type="hidden" name="payout" value={payout} />
+        <input type="hidden" name="network" value={network} />
         <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
           <p className="text-lg font-semibold">{name || "Untitled group"}</p>
           {description ? <p className="text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
@@ -41,6 +55,7 @@ export function CreateGroup() {
             <Row label="Each cycle" value={plan ? spanLabel(plan.cycle) : "Choose a cycle length"} />
             <Row label="Total cycles" value={cycles} />
             <Row label="You pay, across all cycles" value={total ? `${total} USD` : "—"} />
+            <Row label="Chain" value={groupNetLabel(network)} />
             <Row label="Each turn" value={payout === "plain" ? "Paid as a transfer" : "Streams"} />
           </dl>
         </div>
@@ -101,12 +116,41 @@ export function CreateGroup() {
           <option value="12">12 cycles</option>
         </select>
       </label>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Chain</legend>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Same address on both. The group stays on the chain you pick.{" "}
+          <Link href="/groups/chains" className="font-medium text-foreground underline">
+            Base vs Celo
+          </Link>
+        </p>
+        {(["celo", "base"] as const).map((net) => {
+          const fact = groupChainFacts[net];
+          const on = network === net;
+          return (
+            <label
+              key={net}
+              className={`flex cursor-pointer items-start gap-3 rounded-2xl bg-card px-3 py-3 ${on ? "border-2 border-foreground" : "border border-border"}`}
+            >
+              <input type="radio" name="network-choice" className="mt-1 size-4" checked={on} onChange={() => pickNetwork(net)} />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">{fact.title}</span>
+                  {fact.recommend ? <span className="rounded-full bg-[#E7F4C4] px-2 py-0.5 text-[11px] font-medium">Recommended</span> : null}
+                </span>
+                <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{fact.fee}</span>
+              </span>
+            </label>
+          );
+        })}
+      </fieldset>
       <label className="block space-y-1.5">
         <Label htmlFor="payout">How each turn is paid</Label>
         <select id="payout" className={`${field} w-full`} value={payout} onChange={(event) => setPayout(event.target.value)}>
+          <option value="plain">Paid each turn</option>
           <option value="stream">Streaming pot</option>
-          <option value="plain">Paid each turn, from Thursday 29 October</option>
         </select>
+        <span className="block text-xs leading-relaxed text-muted-foreground">{hints[network]}</span>
       </label>
       <Button type="submit" className="h-12 w-full rounded-full text-base">
         Continue

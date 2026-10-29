@@ -30,6 +30,7 @@ async function DraftBody({ params }: { params: Promise<{ id: string }> }) {
         <Fact label="Contribution" value={`${draft.contribution} USD`} />
         <Fact label="Cycle" value={draft.cycleLabel} />
         <Fact label="Cycles" value={String(draft.cycles)} />
+        <Fact label="Chain" value={draft.networkLabel} />
         <Fact label="Each turn" value={draft.plain ? "Paid as a transfer" : "Streams"} />
       </Facts>
       <GroupNav

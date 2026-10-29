@@ -101,6 +101,7 @@ export type Intent = (
       graceSeconds: number;
       phones: { account: string; phone: string }[];
       plain?: boolean;
+      network?: "base" | "celo";
     }
   | { kind: "payout"; id: string; from: number; dir: -1 | 1 }
   | { kind: "phone"; id: string; phone: string }

@@ -65,7 +65,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
                       <span className="min-w-0">
                         <span className="block font-medium">{draft.name}</span>
                         <span className="mt-0.5 block text-sm leading-snug text-muted-foreground">
-                          {draft.contribution} USD · {draft.cycles} cycles of {draft.cycleLabel}
+                          {draft.network} · {draft.contribution} USD · {draft.cycles} cycles of {draft.cycleLabel}
                           {draft.role === "applied" ? " · Applied" : ""}
                         </span>
                       </span>
@@ -85,7 +85,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
                     contribution={group.contribution}
                     members={group.members.length}
                     title={nameFor(group.id, `Group ${group.id}`)}
-                    detail={`${group.cycles} cycles, ${spanLabel(group.cycleSeconds)} each.`}
+                    detail={`${group.network} · ${group.cycles} cycles, ${spanLabel(group.cycleSeconds)} each.`}
                     quote={quote}
                   />
                 </li>

@@ -22,6 +22,8 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { money, shortAddress } from "@/lib/display";
+import { appGroupNet, groupKey, type GroupNet } from "@/lib/group-network";
+import { groupPlainOn, groupsOfOn, groupSite, otherGroupNet } from "@/lib/group-site";
 import { appChain, appNetwork, appRpc, explorerUrl, networkLabel, stableName } from "@/lib/network";
 
 const network = appNetwork();
@@ -165,9 +167,10 @@ const groupLegacyAbi = parseAbi([
 
 /// Reads a group from the live proxy. Contracts that have not been upgraded yet
 /// return one fewer field, and those groups are streaming.
-export async function readGroup(id: bigint) {
-  const data = await publicClient.call({
-    to: addresses.groups,
+export async function readGroup(id: bigint, net: GroupNet = appGroupNet()) {
+  const site = groupSite(net);
+  const data = await site.client.call({
+    to: site.groups,
     data: encodeFunctionData({ abi: groupAbi, functionName: "groups", args: [id] }),
   });
   const raw = data.data ?? "0x";
@@ -177,6 +180,11 @@ export async function readGroup(id: bigint) {
     functionName: "groups",
     data: raw,
   });
+}
+
+/** Live proxy already has paid-each-turn. Celo shipped with it. Base still waits on the scheduled upgrade. */
+export async function groupPlainStatus(net: GroupNet = appGroupNet()): Promise<{ live: boolean; readyAt: number }> {
+  return groupPlainOn(net);
 }
 
 export type Person = { name: string; address: Address };
@@ -353,6 +361,7 @@ export type MemberRow = {
 
 export type GroupRow = {
   id: string;
+  network: string;
   creator: Address;
   creatorName: string;
   contribution: string;
@@ -471,7 +480,7 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
   const me = { name: who.name, address: who.address };
   const index = who.index;
 
-  const [walletBal, ethBal, vault, penaltyBps, yieldBudget, yieldRate, tokenAllowed, paused, admin, lockIds, groupIds] =
+  const [walletBal, ethBal, vault, penaltyBps, yieldBudget, yieldRate, tokenAllowed, paused, admin, lockIds, groupIds, otherGroupIds] =
     await Promise.all([
       publicClient.readContract({ address: addresses.fusdcx, abi: erc20, functionName: "balanceOf", args: [me.address] }),
       publicClient.getBalance({ address: me.address }),
@@ -488,7 +497,8 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
       publicClient.readContract({ address: addresses.allowlist, abi: allowAbi, functionName: "paused" }),
       publicClient.readContract({ address: addresses.allowlist, abi: allowAbi, functionName: "owner" }),
       publicClient.readContract({ address: addresses.locks, abi: lockAbi, functionName: "locksOf", args: [me.address] }),
-      publicClient.readContract({ address: addresses.groups, abi: groupAbi, functionName: "groupsOf", args: [me.address] }),
+      groupsOfOn(appGroupNet(), me.address),
+      groupsOfOn(otherGroupNet(), me.address).catch(() => [] as bigint[]),
     ]);
 
   const hasVault = vault !== zeroAddress;
@@ -571,8 +581,13 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
   }
 
   const total = walletBal + idle + held + streaming + locked;
-  const [groupRows, upgradeReadyAt] = await Promise.all([
-    scope === "home" ? Promise.resolve(groupIds.map(homeGroup)) : Promise.all(groupIds.map((id) => readGroupRow(id))),
+  const [groupRows, otherRows, upgradeReadyAt] = await Promise.all([
+    scope === "home"
+      ? Promise.resolve(groupIds.map((id) => homeGroup(id, appGroupNet())))
+      : Promise.all(groupIds.map((id) => readGroupRow(id, appGroupNet()))),
+    scope === "home"
+      ? Promise.resolve(otherGroupIds.map((id) => homeGroup(id, otherGroupNet())))
+      : Promise.all(otherGroupIds.map((id) => readGroupRow(id, otherGroupNet()))),
     readUpgradeReady(),
   ]);
 
@@ -591,7 +606,7 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
     readAt,
     flows,
     locks,
-    groups: groupRows,
+    groups: [...groupRows, ...otherRows],
     protocol: {
       admin,
       penaltyBps: Number(penaltyBps),
@@ -955,9 +970,10 @@ export async function openGroup(
   return (fresh ?? after[after.length - 1])?.toString() ?? "";
 }
 
-function homeGroup(id: bigint): GroupRow {
+function homeGroup(id: bigint, net: GroupNet): GroupRow {
   return {
-    id: id.toString(),
+    id: groupKey(net, id),
+    network: groupSite(net).name,
     creator: zeroAddress,
     creatorName: "",
     contribution: "0",
@@ -993,8 +1009,9 @@ async function readUpgradeReady(): Promise<number> {
   }
 }
 
-async function readGroupRow(id: bigint): Promise<GroupRow> {
-  const group = await readGroup(id);
+async function readGroupRow(id: bigint, net: GroupNet): Promise<GroupRow> {
+  const site = groupSite(net);
+  const group = await readGroup(id, net);
   const creator = group[0];
   const contribution = group[3];
   const collateralRequired = group[4];
@@ -1002,9 +1019,9 @@ async function readGroupRow(id: bigint): Promise<GroupRow> {
   const running = group[11] && !group[13];
   const [members, seating, current] = await Promise.all([
     count
-      ? publicClient.multicall({
+      ? site.client.multicall({
           contracts: Array.from({ length: count }, (_, index) => ({
-            address: addresses.groups,
+            address: site.groups,
             abi: groupAbi,
             functionName: "getMember" as const,
             args: [id, BigInt(index)] as const,
@@ -1012,10 +1029,10 @@ async function readGroupRow(id: bigint): Promise<GroupRow> {
           allowFailure: false as const,
         })
       : Promise.resolve([]),
-    readPayout(id, count),
+    readPayout(id, count, net),
     running
-      ? publicClient.readContract({
-          address: addresses.groups,
+      ? site.client.readContract({
+          address: site.groups,
           abi: groupAbi,
           functionName: "currentCycle",
           args: [id],
@@ -1023,9 +1040,9 @@ async function readGroupRow(id: bigint): Promise<GroupRow> {
       : Promise.resolve(null),
   ]);
   const phoneRows = count
-    ? await publicClient.multicall({
+    ? await site.client.multicall({
         contracts: members.map((member) => ({
-          address: addresses.groups,
+          address: site.groups,
           abi: groupAbi,
           functionName: "memberPhone" as const,
           args: [id, member[0]] as const,
@@ -1035,7 +1052,8 @@ async function readGroupRow(id: bigint): Promise<GroupRow> {
     : [];
   const phonesLive = phoneRows.some((row) => row.status === "success");
   return {
-    id: id.toString(),
+    id: groupKey(net, id),
+    network: site.name,
     creator,
     creatorName: personName(creator),
     contribution: contribution.toString(),
@@ -1067,12 +1085,13 @@ async function readGroupRow(id: bigint): Promise<GroupRow> {
   };
 }
 
-async function readPayout(id: bigint, count: number): Promise<{ order: number[]; known: boolean }> {
+async function readPayout(id: bigint, count: number, net: GroupNet = appGroupNet()): Promise<{ order: number[]; known: boolean }> {
   const identity = Array.from({ length: count }, (_, index) => index);
   if (!count) return { order: [], known: false };
+  const site = groupSite(net);
   try {
-    const order = await publicClient.readContract({
-      address: addresses.groups,
+    const order = await site.client.readContract({
+      address: site.groups,
       abi: groupAbi,
       functionName: "payoutOrder",
       args: [id],

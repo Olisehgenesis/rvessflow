@@ -54,6 +54,7 @@ async function applySchema() {
     await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS name VARCHAR NOT NULL DEFAULT ''`));
     await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS description VARCHAR NOT NULL DEFAULT ''`));
     await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS code VARCHAR NOT NULL DEFAULT ''`));
+    await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS network VARCHAR NOT NULL DEFAULT 'base'`));
     await rows(sql.raw(`CREATE TABLE IF NOT EXISTS ${bucket}.group_labels (ref VARCHAR PRIMARY KEY, name VARCHAR NOT NULL, description VARCHAR NOT NULL, code VARCHAR NOT NULL)`));
     await rows(
       sql.raw(

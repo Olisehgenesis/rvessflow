@@ -1,12 +1,41 @@
-const testnet = (process.env.RVESS_NETWORK || process.env.NEXT_PUBLIC_RVESS_NETWORK) === "sepolia";
+export type GroupPlainStatus = { live: boolean; readyAt: number };
 
-/** Unix time when the scheduled group upgrade can be finished. */
-const readyAt = testnet ? 1793253697 : 1793254361;
+export function groupUpgradeLine(status: GroupPlainStatus): string | null {
+  if (status.live) return null;
+  if (status.readyAt > Math.floor(Date.now() / 1000)) {
+    return `A group upgrade is scheduled for ${when(status.readyAt)}. After the owner wallets finish it, a new group can pay each turn. Groups already running keep streaming.`;
+  }
+  if (status.readyAt > 0) {
+    return "The wait for the group upgrade is over. The owner wallets still need to finish it before a new group can pay each turn. Groups already running keep streaming.";
+  }
+  return "This network's group contract streams. Paid each turn is not on this deployment yet.";
+}
 
-export const groupUpgradeLine =
-  "A group upgrade is coming soon. It is scheduled for Thursday, 29 October. After it is finished, a new group can pay each turn. Groups already running keep streaming.";
+export function plainGroupWaits(status: GroupPlainStatus): string | null {
+  if (status.live) return null;
+  if (status.readyAt > Math.floor(Date.now() / 1000)) {
+    return `Paid each turn waits until ${when(status.readyAt)}, then the owner wallets finish the upgrade. Until then, start the group as a streaming pot.`;
+  }
+  if (status.readyAt > 0) {
+    return "Paid each turn is ready on the calendar. The owner wallets still need to finish the upgrade. Until then, start the group as a streaming pot.";
+  }
+  return "Paid each turn is not on this network yet. Start the group as a streaming pot.";
+}
 
-export function plainGroupWaits(): string | null {
-  if (Math.floor(Date.now() / 1000) >= readyAt) return null;
-  return "Paid each turn is an upgrade coming soon, on Thursday, 29 October. Until then, start the group as a streaming pot.";
+export function plainTurnHint(status: GroupPlainStatus): string {
+  const how = "Paid each turn sends the contribution to the person whose turn it is. A streaming pot pays that person every second.";
+  if (status.live) return how;
+  const wait = plainGroupWaits(status);
+  return wait ? `${how} ${wait}` : how;
+}
+
+function when(readyAt: number) {
+  return new Date(readyAt * 1000).toLocaleString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
 }

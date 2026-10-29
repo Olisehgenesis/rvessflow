@@ -6,13 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorNote } from "@/components/ui-bits";
 import { saveDraft, saveGroupName } from "@/lib/actions";
+import { groupChainFacts, type GroupNet } from "@/lib/group-network";
 
 const field = "h-12 rounded-2xl border-border bg-white px-4 text-base shadow-none";
 
 export function EditDraftForm({
   draft,
+  payoutHint,
 }: {
-  draft: { id: string; name: string; description: string; contribution: string; cycle: string; days: string; cycles: number; plain: boolean };
+  draft: { id: string; name: string; description: string; contribution: string; cycle: string; days: string; cycles: number; plain: boolean; network: GroupNet };
+  payoutHint: string;
 }) {
   const [state, action, pending] = useActionState(saveDraft, null);
   return (
@@ -52,12 +55,28 @@ export function EditDraftForm({
           <option value="12">12 cycles</option>
         </select>
       </label>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Chain</legend>
+        {(["celo", "base"] as const).map((net) => {
+          const fact = groupChainFacts[net];
+          return (
+            <label key={net} className="flex items-start gap-3 rounded-2xl border border-border bg-card px-3 py-3">
+              <input type="radio" name="network" value={net} defaultChecked={draft.network === net} className="mt-1 size-4" />
+              <span>
+                <span className="text-sm font-semibold">{fact.title}</span>
+                {fact.recommend ? <span className="ml-2 rounded-full bg-[#E7F4C4] px-2 py-0.5 text-[11px] font-medium">Recommended</span> : null}
+              </span>
+            </label>
+          );
+        })}
+      </fieldset>
       <label className="block space-y-1.5">
         <Label htmlFor="payout">How each turn is paid</Label>
         <select id="payout" name="payout" defaultValue={draft.plain ? "plain" : "stream"} className={`${field} w-full`}>
-          <option value="stream">Streaming pot</option>
           <option value="plain">Paid each turn</option>
+          <option value="stream">Streaming pot</option>
         </select>
+        <span className="block text-xs leading-relaxed text-muted-foreground">{payoutHint}</span>
       </label>
       <ErrorNote error={state?.error} />
       <Button type="submit" disabled={pending} className="h-12 w-full rounded-full text-base">
