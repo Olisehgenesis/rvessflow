@@ -8,6 +8,7 @@ import type { PreparedCall, SignPayload } from "@/lib/intent";
 import { readPasskeys } from "@/lib/passkey-vault";
 import { estimationSkipped, passkeyPaysWith, usdcCanPayFee, userOpCost } from "@/lib/passkey-fee";
 import { celoFeeTx, pickCeloFee } from "@/lib/celo-fee";
+import { celoSponsorPolicyId } from "@/lib/celo-sponsor";
 import { batchId, batchOutcome, batchUnsupported, walletSendCallsParam } from "@/lib/wallet-batch";
 
 const network = appNetwork();
@@ -71,6 +72,18 @@ function settlement(chainId?: number) {
     };
   }
   return { id: chain.id, reader: client, params: walletNetwork() };
+}
+
+function destinationChain(id: number) {
+  if (id === 42220) return celoChain;
+  if (id === 8453) return baseChain;
+  return chain;
+}
+
+function bundlerFor(id: number) {
+  if (id === 42220) return `${window.location.origin}/api/bundler/celo`;
+  if (id === chain.id) return bundlerUrl;
+  return `https://public.pimlico.io/v2/${id}/rpc`;
 }
 
 function txValue(value: string | undefined): Hex | undefined {
@@ -139,22 +152,26 @@ async function sendWallet(calls: PreparedCall[], from: Address, where: ReturnTyp
   return last;
 }
 
-async function sendPasskey(calls: PreparedCall[], from: Address, onHash?: (hash: Hash) => void) {
+async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnType<typeof settlement>, onHash?: (hash: Hash) => void) {
   const saved = (await readPasskeys()).find((item) => item.address.toLowerCase() === from.toLowerCase());
   if (!saved) throw new Error("This browser does not have the passkey for this account. Sign in again on this device.");
-  const [{ createPublicClient: createClient, http: transport }, accountAbstraction, { toKernelSmartAccount }, { createSmartAccountClient }, { getUserOperationGasPrice }] =
+  const [{ createPublicClient: createClient, http: transport }, accountAbstraction, { toKernelSmartAccount }, { createSmartAccountClient }, { getUserOperationGasPrice }, { createPimlicoClient }] =
     await Promise.all([
       import("viem"),
       import("viem/account-abstraction"),
       import("permissionless/accounts"),
       import("permissionless"),
       import("permissionless/actions/pimlico"),
+      import("permissionless/clients/pimlico"),
     ]);
   const owner = accountAbstraction.toWebAuthnAccount({
     credential: { id: saved.id, publicKey: saved.publicKey },
     rpId: window.location.hostname,
   });
-  const publicClient = createClient({ chain, transport: transport(rpc) });
+  const viemChain = destinationChain(where.id);
+  const rpcUrl = where.id === chain.id ? rpc : where.params.rpcUrls[0];
+  const bundler = bundlerFor(where.id);
+  const publicClient = createClient({ chain: viemChain, transport: transport(rpcUrl) });
   const account = await toKernelSmartAccount({
     client: publicClient,
     owners: [owner],
@@ -164,7 +181,7 @@ async function sendPasskey(calls: PreparedCall[], from: Address, onHash?: (hash:
   if (account.address.toLowerCase() !== from.toLowerCase()) {
     throw new Error("This passkey does not match the signed-in account.");
   }
-  const pimlico = createClient({ chain, transport: transport(bundlerUrl) });
+  const pimlico = createClient({ chain: viemChain, transport: transport(bundler) });
   const batched = calls.map((call) => ({
     to: call.to,
     data: call.data,
@@ -175,22 +192,37 @@ async function sendPasskey(calls: PreparedCall[], from: Address, onHash?: (hash:
   };
   const smart = createSmartAccountClient({
     account,
-    chain,
-    bundlerTransport: transport(bundlerUrl),
+    chain: viemChain,
+    bundlerTransport: transport(bundler),
     client: publicClient,
     userOperation,
   });
   const [ethBalance, usdcBalance] = await Promise.all([
     publicClient.getBalance({ address: account.address }),
-    network === "celo"
+    where.id === 42220
       ? Promise.resolve(0n)
       : publicClient.readContract({ address: circleUsdc, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }),
   ]);
-  if (network === "celo") {
-    if (ethBalance === 0n) throw new Error("This account needs CELO for the network fee.");
-    const hash = await smart.sendTransaction({ calls: batched });
+  if (where.id === 42220) {
+    const pimlicoPaymaster = createPimlicoClient({
+      chain: viemChain,
+      transport: transport(bundler),
+      entryPoint: { address: accountAbstraction.entryPoint07Address, version: "0.7" },
+    });
+    const sponsored = createSmartAccountClient({
+      account,
+      chain: viemChain,
+      bundlerTransport: transport(bundler),
+      client: publicClient,
+      paymaster: pimlicoPaymaster,
+      paymasterContext: { sponsorshipPolicyId: celoSponsorPolicyId },
+      userOperation: {
+        estimateFeesPerGas: async () => (await pimlicoPaymaster.getUserOperationGasPrice()).fast,
+      },
+    });
+    const hash = await sponsored.sendTransaction({ calls: batched });
     onHash?.(hash);
-    await wait(hash);
+    await wait(hash, where.reader);
     return hash;
   }
   let ethCost: bigint | null = null;
@@ -204,7 +236,7 @@ async function sendPasskey(calls: PreparedCall[], from: Address, onHash?: (hash:
   if (passkeyPaysWith({ ethBalance, ethCost, usdcBalance }) === "eth") {
     const hash = await smart.sendTransaction({ calls: batched });
     onHash?.(hash);
-    await wait(hash);
+    await wait(hash, where.reader);
     return hash;
   }
   let signed: { paymaster: Address; paymasterData: Hex; paymasterVerificationGasLimit: bigint; paymasterPostOpGasLimit: bigint } | null = null;
@@ -249,35 +281,38 @@ async function sendPasskey(calls: PreparedCall[], from: Address, onHash?: (hash:
   }
   const sponsored = createSmartAccountClient({
     account,
-    chain,
-    bundlerTransport: transport(bundlerUrl),
+    chain: viemChain,
+    bundlerTransport: transport(bundler),
     client: publicClient,
     paymaster,
     userOperation,
   });
   const hash = await sponsored.sendTransaction({ calls: batched });
   onHash?.(hash);
-  await wait(hash);
+  await wait(hash, where.reader);
   return hash;
 }
 
-export async function depositReceipt(hash: Hash): Promise<{ status: "pending" | "success" | "reverted"; timestamp?: number }> {
+async function receiptOn(reader: Pick<PublicClient, "getTransactionReceipt" | "getBlock">, hash: Hash) {
   try {
-    const receipt = await client.getTransactionReceipt({ hash });
-    if (receipt.status !== "success") return { status: "reverted" };
-    const block = await client.getBlock({ blockNumber: receipt.blockNumber });
-    return { status: "success", timestamp: Number(block.timestamp) };
+    const receipt = await reader.getTransactionReceipt({ hash });
+    if (receipt.status !== "success") return { status: "reverted" as const };
+    const block = await reader.getBlock({ blockNumber: receipt.blockNumber });
+    return { status: "success" as const, timestamp: Number(block.timestamp) };
   } catch {
-    return { status: "pending" };
+    return { status: "pending" as const };
   }
+}
+
+export async function depositReceipt(hash: Hash): Promise<{ status: "pending" | "success" | "reverted"; timestamp?: number }> {
+  const first = await receiptOn(client, hash);
+  if (first.status !== "pending" || chain.id === 42220) return first;
+  return receiptOn(settlement(42220).reader, hash);
 }
 
 export async function sendCalls(sign: Pick<SignPayload, "calls" | "method" | "address" | "chainId">, options?: { onHash?: (hash: Hash) => void }) {
   if (!sign.calls.length) return;
   const where = settlement(sign.chainId);
-  if (sign.method === "passkey") {
-    if (where.id !== chain.id) throw new Error(`This passkey signs on ${chain.name}. Connect a wallet to send on ${where.params.chainName}.`);
-    return sendPasskey(sign.calls, sign.address, options?.onHash);
-  }
+  if (sign.method === "passkey") return sendPasskey(sign.calls, sign.address, where, options?.onHash);
   return sendWallet(sign.calls, sign.address, where, options?.onHash);
 }
