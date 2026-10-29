@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { isAddress } from "viem";
 import { celoGasTreasury, pickCeloFeeCovering, pickCeloFeeFromBalances, tokenAmountForCeloGas, withSkimGas } from "@/lib/celo-fee";
 
 describe("Celo fee currency", () => {
@@ -32,7 +33,8 @@ describe("Celo fee currency", () => {
       decimals: 6,
     });
     assert.ok(usdt >= 1n);
-    assert.equal(celoGasTreasury.toLowerCase(), "0x50c503dffd9e8d0903bf33376f6ddd278209939a");
+    assert.equal(isAddress(celoGasTreasury, { strict: true }), true);
+    assert.equal(celoGasTreasury, "0x50c503DfFd9E8D0903bf33376f6ddd278209939A");
   });
 
   it("picks USDC when USDT cannot cover the quoted skim", () => {

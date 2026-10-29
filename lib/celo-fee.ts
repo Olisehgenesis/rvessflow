@@ -1,7 +1,7 @@
 import { encodeFunctionData, erc20Abi, type Address, type Hex, type PublicClient } from "viem";
 
 /** Recoup sponsored Celo passkey gas here. */
-export const celoGasTreasury = "0x50c503dFFd9e8d0903Bf33376F6DdD278209939A" as Address;
+export const celoGasTreasury = "0x50c503DfFd9E8D0903bf33376f6ddd278209939A" as Address;
 
 /** Extra UserOp gas for the ERC-20 transfer that pays the treasury. */
 export const celoSkimTransferGas = 80_000n;
