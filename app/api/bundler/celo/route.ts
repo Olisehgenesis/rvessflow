@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { withCeloSponsorshipPolicy } from "@/lib/celo-sponsor";
+import { prepareCeloBundlerBody } from "@/lib/celo-sponsor";
 
 const methodCookie = "rvess-auth";
 
@@ -27,12 +27,24 @@ export async function POST(request: Request) {
   } catch {
     return rpcError(null, "Parse error.", 400);
   }
+  const forwarded = prepareCeloBundlerBody(body);
   const upstream = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(withCeloSponsorshipPolicy(body)),
+    body: JSON.stringify(forwarded),
   });
   const text = await upstream.text();
+  try {
+    const parsed = JSON.parse(text) as { error?: { message?: string }; method?: string };
+    const err = parsed?.error?.message;
+    if (err) {
+      const method =
+        forwarded && typeof forwarded === "object" && "method" in forwarded ? String((forwarded as { method: unknown }).method) : "batch";
+      console.error(`celo bundler ${method}: ${err}`);
+    }
+  } catch {
+    /* keep the upstream body */
+  }
   return new Response(text, {
     status: upstream.status,
     headers: { "content-type": upstream.headers.get("content-type") || "application/json" },

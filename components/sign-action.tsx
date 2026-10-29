@@ -20,6 +20,10 @@ function explain(error: unknown): string {
   if (/0x1dc930eb/i.test(message)) {
     return "The vault did not receive enough after the protocol fee to open the stream. Try again.";
   }
+  if (/Invalid parameters were provided to the RPC method/i.test(message)) {
+    const detail = message.split("\n").map((item) => item.trim()).find((item) => item && !/invalid parameters|double check/i.test(item));
+    return detail ? detail.slice(0, 220) : "Celo rejected that gas request. Refresh and try again.";
+  }
   const line = message.split("\n").find((item) => item.trim()) ?? message;
   return line.replace(/^Error:\s*/, "").slice(0, 220);
 }

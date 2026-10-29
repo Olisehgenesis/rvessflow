@@ -99,6 +99,23 @@ function withPolicyContext(value: unknown) {
   return { ...context, sponsorshipPolicyId: celoSponsorPolicyId };
 }
 
+function dropEmpty(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(dropEmpty);
+  if (!value || typeof value !== "object") return value;
+  const next: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (item === null || item === undefined) continue;
+    next[key] = dropEmpty(item);
+  }
+  return next;
+}
+
+function compactParams(params: unknown[]) {
+  const next = params.map(dropEmpty);
+  while (next.length && (next[next.length - 1] === null || next[next.length - 1] === undefined)) next.pop();
+  return next;
+}
+
 export function withCeloSponsorshipPolicy(body: unknown) {
   if (!body || typeof body !== "object" || !("method" in body) || !("params" in body)) return body;
   const method = String((body as { method: unknown }).method);
@@ -108,7 +125,20 @@ export function withCeloSponsorshipPolicy(body: unknown) {
     return { ...body, params: [params[0], params[1], withPolicyContext(params[2])] };
   }
   if (method === "pm_getPaymasterData" || method === "pm_getPaymasterStubData") {
-    return { ...body, params: [params[0], params[1], params[2], withPolicyContext(params[3])] };
+    const chainId = params[2];
+    if (typeof chainId === "string" || typeof chainId === "number") {
+      return { ...body, params: [params[0], params[1], chainId, withPolicyContext(params[3])] };
+    }
+    return { ...body, params: [params[0], params[1], "0xa4ec", withPolicyContext(typeof chainId === "object" ? chainId : params[3])] };
   }
   return body;
+}
+
+/** Strip null UserOp fields and attach the Celo sponsorship policy. Alto rejects `factory: null`. */
+export function prepareCeloBundlerBody(body: unknown): unknown {
+  if (Array.isArray(body)) return body.map(prepareCeloBundlerBody);
+  if (!body || typeof body !== "object" || !("params" in body)) return withCeloSponsorshipPolicy(body);
+  const params = (body as { params: unknown }).params;
+  const cleaned = Array.isArray(params) ? { ...body, params: compactParams(params) } : body;
+  return withCeloSponsorshipPolicy(cleaned);
 }

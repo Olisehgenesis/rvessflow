@@ -88,9 +88,22 @@ function bundlerFor(id: number) {
 }
 
 async function hexGasPrice(reader: Pick<PublicClient, "request">, token?: Address) {
-  const hex = token
-    ? await reader.request({ method: "eth_gasPrice", params: [token] } as never)
-    : await reader.request({ method: "eth_gasPrice" });
+  if (token) {
+    for (const url of celoRpcUrls()) {
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_gasPrice", params: [token] }),
+        });
+        const json = (await response.json()) as { result?: string };
+        if (json.result) return BigInt(json.result);
+      } catch {
+        /* try Forno */
+      }
+    }
+  }
+  const hex = await reader.request({ method: "eth_gasPrice" });
   return BigInt(hex as string);
 }
 

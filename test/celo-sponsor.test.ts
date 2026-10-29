@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { encodeFunctionData, concatHex, toHex } from "viem";
-import { shouldSponsorCeloUserOp, withCeloSponsorshipPolicy } from "@/lib/celo-sponsor";
+import { prepareCeloBundlerBody, shouldSponsorCeloUserOp, withCeloSponsorshipPolicy } from "@/lib/celo-sponsor";
 
 const executeAbi = [
   {
@@ -61,5 +61,17 @@ describe("Celo sponsorship policy", () => {
     assert.equal(next.params[2], "0xa4ec");
     assert.equal(next.params[3].foo, 1);
     assert.equal(next.params[3].sponsorshipPolicyId, "sp_small_tusk");
+  });
+
+  it("drops null UserOp fields Alto rejects", () => {
+    const next = prepareCeloBundlerBody({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_estimateUserOperationGas",
+      params: [{ sender: "0x1", factory: null, paymaster: null }, "0x0000000071727De22E5E9d8BAf0edAc6f37da032", null],
+    }) as { params: [{ sender: string; factory?: string }, string] };
+    assert.equal(next.params[0].sender, "0x1");
+    assert.equal("factory" in next.params[0], false);
+    assert.equal(next.params.length, 2);
   });
 });
