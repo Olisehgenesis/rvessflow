@@ -332,7 +332,13 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
   return hash;
 }
 
-async function receiptOn(reader: Pick<PublicClient, "getTransactionReceipt" | "getBlock">, hash: Hash) {
+async function receiptOn(
+  reader: {
+    getTransactionReceipt: (args: { hash: Hash }) => Promise<{ status: "success" | "reverted"; blockNumber: bigint }>;
+    getBlock: (args: { blockNumber: bigint }) => Promise<{ timestamp: bigint | number }>;
+  },
+  hash: Hash,
+) {
   try {
     const receipt = await reader.getTransactionReceipt({ hash });
     if (receipt.status !== "success") return { status: "reverted" as const };
