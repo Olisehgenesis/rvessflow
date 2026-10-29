@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
-import { RollingText, SecondSweep, useFlowClock } from "@/components/flowing";
+import { RollingText, useFlowClock } from "@/components/flowing";
 import { IconChevron, IconEye, IconEyeOff } from "@/components/icons";
 import { RetryButton } from "@/components/retry-button";
 import { show, streamDigits } from "@/lib/display";
@@ -210,7 +210,6 @@ export function HomeBalance({
             </p>
             {preferLocal ? <p className="mt-0.5 whitespace-nowrap text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal, ticking)}</p> : null}
             {ticking && pace ? <p className="mt-1 text-xs font-medium text-[#3C4A2E] tabular-nums">{pace}</p> : null}
-            {ticking ? <SecondSweep /> : null}
           </div>
           <img src="/marks/saving.png" alt="" className="pointer-events-none hidden w-28 shrink-0 xl:block" />
         </div>
@@ -258,7 +257,6 @@ export function HomeBalance({
         <p className="mt-0.5 whitespace-nowrap text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal, ticking)}</p>
       ) : null}
       {ticking && pace ? <p className="mt-1 text-xs font-medium text-[#3C4A2E] tabular-nums">{pace}</p> : null}
-      {ticking ? <SecondSweep /> : null}
       <dl className="mt-4 grid grid-cols-3">
         {columns.map((column, index) => (
           <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#141414]/10 px-3"}>
