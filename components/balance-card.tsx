@@ -1,11 +1,11 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { RollingText, useFlowingValue } from "@/components/flowing";
+import { RollingText } from "@/components/flowing";
 import { IconChevron, IconEye, IconEyeOff } from "@/components/icons";
 import { RetryButton } from "@/components/retry-button";
-import { streamDigits } from "@/lib/display";
+import { homeBalancePlaces, liveHomeColumns } from "@/lib/home-math";
 import type { Quote } from "@/lib/quote";
 import { TopUpSheet, WithdrawSheet, type SavingBox } from "@/components/withdraw-sheet";
 
@@ -74,22 +74,32 @@ export function BalanceError({ message }: { message: string }) {
 
 export type BalancePulse = {
   readAt: number;
-  wallet: string;
-  rate: string;
-  ceiling: string;
+  inWeiPerSec: string;
+  inCapWei: string;
+  streamWeiPerSec: string;
+  streamRemainingWei: string;
   totalUsd8: string;
   availableUsd8: string;
+  streamingUsd8: string;
+  lockedUsd8: string;
   usdcUsd8: string;
   quote: Quote;
 };
 
+function useNow(readAt: number) {
+  const [now, setNow] = useState(readAt);
+  useEffect(() => {
+    const tick = () => setNow(Math.floor(Date.now() / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
 export function HomeBalance({
-  totalUsd,
   totalLocal,
   localUnit,
-  available,
-  streaming,
-  locked,
   showWithdraw,
   savings = [],
   unit = "USD",
@@ -121,32 +131,38 @@ export function HomeBalance({
   layout?: "phone" | "desk";
 }) {
   const conceal = useConceal();
-  const liveWei = useFlowingValue(pulse?.readAt ?? 0, pulse?.wallet ?? "0", pulse?.rate ?? "0", pulse?.wallet ?? "0", pulse?.ceiling);
-  const ticking = Boolean(pulse && BigInt(pulse.rate) > 0n);
-  let shownTotal = totalUsd;
-  let shownLocal = totalLocal;
-  let shownAvailable = available;
-  let availableNowUsd8 = availableUsd8;
-  if (ticking && pulse) {
-    const livePrice = BigInt(pulse.usdcUsd8);
-    const delta = liveWei - BigInt(pulse.wallet);
-    const deltaUsd8 = livePrice > 0n ? (delta * livePrice) / 10n ** 18n : 0n;
-    const totalNow = BigInt(pulse.totalUsd8) + deltaUsd8;
-    const availableNow = BigInt(pulse.availableUsd8) + deltaUsd8;
-    const usdPlaces = dollarPlaces(BigInt(pulse.rate));
-    shownTotal = formatUsdPlaces(totalNow, usdPlaces);
-    availableNowUsd8 = (availableNow < 0n ? 0n : availableNow).toString();
-    shownAvailable = formatUsdPlaces(BigInt(availableNowUsd8), usdPlaces);
-    const local = formatLocal(totalNow, pulse.quote, livePrice, streamDigits(BigInt(pulse.rate), pulse.quote));
-    if (local) shownLocal = local;
-  }
+  const now = useNow(pulse?.readAt ?? 0);
+  const ticking = Boolean(pulse && (BigInt(pulse.inWeiPerSec) > 0n || BigInt(pulse.streamWeiPerSec) > 0n));
+  const live = ticking && pulse
+    ? liveHomeColumns({
+        elapsed: BigInt(Math.max(0, now - pulse.readAt)),
+        availableUsd8: BigInt(pulse.availableUsd8),
+        streamingUsd8: BigInt(pulse.streamingUsd8),
+        lockedUsd8: BigInt(pulse.lockedUsd8),
+        usdcUsd8: BigInt(pulse.usdcUsd8),
+        inWeiPerSec: BigInt(pulse.inWeiPerSec),
+        inCapWei: BigInt(pulse.inCapWei),
+        streamWeiPerSec: BigInt(pulse.streamWeiPerSec),
+        streamRemainingWei: BigInt(pulse.streamRemainingWei),
+      })
+    : {
+        available: BigInt(availableUsd8),
+        streaming: BigInt(streamingUsd8),
+        locked: BigInt(lockedUsd8),
+        total: BigInt(availableUsd8) + BigInt(streamingUsd8) + BigInt(lockedUsd8),
+      };
+  const places = homeBalancePlaces;
+  const shownTotal = formatUsdPlaces(live.total, places);
+  const shownAvailable = formatUsdPlaces(live.available, places);
+  const shownStreaming = formatUsdPlaces(live.streaming, places);
+  const shownLocked = formatUsdPlaces(live.locked, places);
   const price = BigInt(pulse?.usdcUsd8 ?? usdcUsd8);
   const localQuote = pulse?.quote ?? quote;
-  const preferLocal = Boolean(localUnit && shownLocal && localQuote);
-  const localPlaces = ticking && localQuote ? streamDigits(BigInt(pulse?.rate ?? "0"), localQuote) : (localQuote?.digits ?? 0);
-  const availableLocal = preferLocal && localQuote ? formatLocal(BigInt(availableNowUsd8), localQuote, price, ticking ? localPlaces : localQuote.digits) : "";
-  const streamingLocal = preferLocal && localQuote ? formatLocal(BigInt(streamingUsd8), localQuote, price, localQuote.digits) : "";
-  const lockedLocal = preferLocal && localQuote ? formatLocal(BigInt(lockedUsd8), localQuote, price, localQuote.digits) : "";
+  const preferLocal = Boolean(localUnit && localQuote);
+  const shownLocal = preferLocal && localQuote ? formatLocal(live.total, localQuote, price, places) : totalLocal;
+  const availableLocal = preferLocal && localQuote ? formatLocal(live.available, localQuote, price, places) : "";
+  const streamingLocal = preferLocal && localQuote ? formatLocal(live.streaming, localQuote, price, places) : "";
+  const lockedLocal = preferLocal && localQuote ? formatLocal(live.locked, localQuote, price, places) : "";
   const figure = (prefix: string, value: string, live: boolean) => {
     const lead = prefix === "$" ? "$" : `${prefix} `;
     if (conceal) return hidden;
@@ -163,13 +179,13 @@ export function HomeBalance({
   const columns = preferLocal
     ? [
         { label: "Available", prefix: localUnit ?? "", value: availableLocal, live: ticking, usd: shownAvailable, usdLive: ticking },
-        { label: "Streaming", prefix: localUnit ?? "", value: streamingLocal, live: false, usd: streaming, usdLive: false },
-        { label: "Locked", prefix: localUnit ?? "", value: lockedLocal, live: false, usd: locked, usdLive: false },
+        { label: "Streaming", prefix: localUnit ?? "", value: streamingLocal, live: ticking, usd: shownStreaming, usdLive: ticking },
+        { label: "Locked", prefix: localUnit ?? "", value: lockedLocal, live: false, usd: shownLocked, usdLive: false },
       ]
     : [
         { label: "Available", prefix: "$", value: shownAvailable, live: ticking, usd: "", usdLive: false },
-        { label: "Streaming", prefix: "$", value: streaming, live: false, usd: "", usdLive: false },
-        { label: "Locked", prefix: "$", value: locked, live: false, usd: "", usdLive: false },
+        { label: "Streaming", prefix: "$", value: shownStreaming, live: ticking, usd: "", usdLive: false },
+        { label: "Locked", prefix: "$", value: shownLocked, live: false, usd: "", usdLive: false },
       ];
   const actions = (
     <div className={`mt-4 grid gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
@@ -255,13 +271,6 @@ export function HomeBalance({
       {actions}
     </section>
   );
-}
-
-function dollarPlaces(rateWei: bigint): number {
-  const step = Number(rateWei) / 1e18;
-  if (!Number.isFinite(step) || step >= 0.01) return 2;
-  if (step >= 0.0001) return 4;
-  return 6;
 }
 
 function formatUsdPlaces(usd8: bigint, places: number): string {

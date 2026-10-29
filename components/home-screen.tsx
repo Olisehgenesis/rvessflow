@@ -80,10 +80,14 @@ async function HomeReady({
   quote: Quote;
   incoming: IncomingItem[];
 }) {
+  const me = who.address.toLowerCase();
   const liveIn = incoming.filter((item) => item.flow.active && !item.flow.paused && !item.flow.settled && BigInt(item.flow.rate) > 0n);
-  const inflow = liveIn.reduce((sum, item) => sum + BigInt(item.flow.rate), 0n);
-  const stillDue = liveIn.reduce((sum, item) => sum + BigInt(item.flow.remaining), 0n);
-  const walletWei = BigInt(portfolio.wallet);
+  const liveOwn = portfolio.flows.filter((flow) => flow.active && !flow.paused && !flow.settled && BigInt(flow.rate) > 0n);
+  const liveSelf = liveOwn.filter((flow) => flow.recipient.toLowerCase() === me);
+  const inWeiPerSec = liveIn.reduce((sum, item) => sum + BigInt(item.flow.rate), 0n) + liveSelf.reduce((sum, flow) => sum + BigInt(flow.rate), 0n);
+  const streamWeiPerSec = liveOwn.reduce((sum, flow) => sum + BigInt(flow.rate), 0n);
+  const inCapWei = liveIn.reduce((sum, item) => sum + BigInt(item.flow.remaining), 0n) + liveSelf.reduce((sum, flow) => sum + BigInt(flow.remaining), 0n);
+  const streamRemainingWei = BigInt(portfolio.streaming);
   const amounts = holdings.rows.map((row) => row.amount);
   const funded = amounts.some(hasTokenAmount);
   const starting = showGettingStarted({
@@ -122,14 +126,17 @@ async function HomeReady({
         streamingUsd8={holdings.streamingUsd8}
         lockedUsd8={holdings.lockedUsd8}
         pulse={
-          inflow > 0n
+          inWeiPerSec > 0n || streamWeiPerSec > 0n
             ? {
                 readAt: portfolio.readAt,
-                wallet: portfolio.wallet,
-                rate: inflow.toString(),
-                ceiling: (walletWei + stillDue).toString(),
+                inWeiPerSec: inWeiPerSec.toString(),
+                inCapWei: inCapWei.toString(),
+                streamWeiPerSec: streamWeiPerSec.toString(),
+                streamRemainingWei: streamRemainingWei.toString(),
                 totalUsd8: holdings.totalUsd8,
                 availableUsd8: holdings.availableUsd8,
+                streamingUsd8: holdings.streamingUsd8,
+                lockedUsd8: holdings.lockedUsd8,
                 usdcUsd8: holdings.usdcUsd8,
                 quote,
               }

@@ -207,6 +207,7 @@ export function FlowingText({
   ceiling,
   fine = false,
   plain = false,
+  places,
   quote = chainQuote(),
 }: {
   readAt: number;
@@ -215,14 +216,15 @@ export function FlowingText({
   floor?: string;
   ceiling?: string;
   fine?: boolean;
+  places?: number;
   /** One text node. Compact rows must not split the amount into a character per line. */
   plain?: boolean;
   quote?: Quote;
 }) {
   const now = useNow(readAt);
   const value = moved(readAt, now, base, perSecond, floor, ceiling);
-  const digits = fine ? streamDigits(BigInt(perSecond.startsWith("-") ? perSecond.slice(1) : perSecond), quote) : quote.digits;
-  if (plain || !fine) return show(value, quote, fine ? digits : undefined);
+  const digits = places ?? (fine ? streamDigits(BigInt(perSecond.startsWith("-") ? perSecond.slice(1) : perSecond), quote) : quote.digits);
+  if (plain || !fine) return show(value, quote, digits);
   return <RollingMoney value={value} quote={quote} digits={digits} />;
 }
 

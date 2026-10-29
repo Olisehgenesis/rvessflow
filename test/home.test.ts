@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { balanceColumns, hasTokenAmount, holdingCaption, showGettingStarted, usdcEquivalent } from "@/lib/home-math";
+import { balanceColumns, hasTokenAmount, holdingCaption, liveHomeColumns, showGettingStarted, usdcEquivalent } from "@/lib/home-math";
 
 describe("home balance columns", () => {
   it("splits a total into available, streaming, and locked that add back up", () => {
@@ -24,6 +24,37 @@ describe("home balance columns", () => {
     const columns = balanceColumns(100n, 80n, 50n);
     assert.equal(columns.available + columns.streaming + columns.locked, 100n);
     assert.equal(columns.available, 0n);
+  });
+
+  it("credits a self-pay stream into available and keeps it in the total", () => {
+    const usdcUsd8 = 100_000_000n;
+    const start = liveHomeColumns({
+      elapsed: 0n,
+      availableUsd8: 4_670_000_000n,
+      streamingUsd8: 720_000_000n,
+      lockedUsd8: 0n,
+      usdcUsd8,
+      inWeiPerSec: 10n ** 15n,
+      inCapWei: 10n ** 18n,
+      streamWeiPerSec: 10n ** 15n,
+      streamRemainingWei: 10n ** 18n,
+    });
+    const later = liveHomeColumns({
+      elapsed: 10n,
+      availableUsd8: 4_670_000_000n,
+      streamingUsd8: 720_000_000n,
+      lockedUsd8: 0n,
+      usdcUsd8,
+      inWeiPerSec: 10n ** 15n,
+      inCapWei: 10n ** 18n,
+      streamWeiPerSec: 10n ** 15n,
+      streamRemainingWei: 10n ** 18n,
+    });
+    assert.equal(start.available + start.streaming + start.locked, start.total);
+    assert.equal(later.available + later.streaming + later.locked, later.total);
+    assert.equal(later.total, start.total);
+    assert.ok(later.available > start.available);
+    assert.ok(later.streaming < start.streaming);
   });
 
   it("converts a dollar value into USDC at the Chainlink price", () => {
