@@ -66,22 +66,50 @@ export function describeCalls(calls: readonly PreparedCall[]): Omit<SignStep, "s
   return out;
 }
 
+export type HumanPhase = "create" | "sign" | "send" | "done";
+
+const phases: { id: HumanPhase; title: string }[] = [
+  { id: "create", title: "Creating" },
+  { id: "sign", title: "Sign" },
+  { id: "send", title: "Sending" },
+  { id: "done", title: "Done" },
+];
+
 export function headline(intent: Intent): { title: string; body: string } {
   if (intent.kind === "stream") {
     return intent.flowKind === "expense"
-      ? { title: "Opening this payment", body: "Each hop has to land before the next. A failed step stays marked so you can see where it stopped." }
-      : { title: "Opening this flow", body: "Each hop has to land before the next. A failed step stays marked so you can see where it stopped." };
+      ? { title: "Sending", body: "" }
+      : { title: "Creating a flow", body: "" };
   }
-  if (intent.kind === "saving") {
-    return { title: "Saving this amount", body: "Each hop has to land before the next. A failed step stays marked so you can see where it stopped." };
-  }
-  if (intent.kind === "lock") {
-    return { title: "Locking this amount", body: "Each hop has to land before the next. A failed step stays marked so you can see where it stopped." };
-  }
-  if (intent.kind === "deposit") {
-    return { title: "Adding to the vault", body: "Each hop has to land before the next. A failed step stays marked so you can see where it stopped." };
-  }
-  return { title: "Sending", body: "Follow each hop. A failed step stays marked so you can see where it stopped." };
+  if (intent.kind === "saving") return { title: "Starting a save", body: "" };
+  if (intent.kind === "lock") return { title: "Creating a lock", body: "" };
+  if (intent.kind === "deposit") return { title: "Adding money", body: "" };
+  return { title: "Creating", body: "" };
+}
+
+export function humanArt(intent: Intent): string {
+  if (intent.kind === "lock") return "/marks/lock.png";
+  if (intent.kind === "saving") return "/marks/saving.png";
+  if (intent.kind === "stream") return intent.flowKind === "expense" ? "/marks/expense.png" : "/marks/flow.png";
+  return "/marks/saving.png";
+}
+
+export function phaseTitle(intent: Intent, phase: HumanPhase, failed = false): string {
+  if (failed) return "Didn't go through";
+  if (phase === "create") return headline(intent).title;
+  if (phase === "sign") return "Sign";
+  if (phase === "send") return "Sending";
+  return "Done";
+}
+
+export function humanTrack(phase: HumanPhase, failed = false): SignStep[] {
+  const at = phases.findIndex((row) => row.id === phase);
+  return phases.map((row, index) => ({
+    id: row.id,
+    title: row.title,
+    detail: "",
+    status: failed && index === at ? "fail" : index < at || phase === "done" ? "done" : index === at ? "run" : "wait",
+  }));
 }
 
 export function leftoverSteps(intent: Intent, seen: ReadonlySet<string>): Omit<SignStep, "status">[] {

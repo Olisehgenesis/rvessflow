@@ -10,6 +10,7 @@ export type SignTrack = {
   open: boolean;
   title: string;
   body: string;
+  art?: string;
   steps: SignStep[];
   error?: string;
   busy: boolean;
@@ -32,59 +33,45 @@ function snapshot() {
   return track;
 }
 
-const colors = ["#D8E6F2", "#77C79B", "#F39C41", "#F16364", "#6D68AD"];
-
 function Rail({ steps }: { steps: SignStep[] }) {
   const total = Math.max(steps.length, 1);
   const done = steps.filter((step) => step.status === "done").length;
   const run = steps.findIndex((step) => step.status === "run" || step.status === "fail");
-  const at = run >= 0 ? (run + 0.5) / total : done / total;
-  const x = 20 + at * 460;
+  const fill = run >= 0 ? (run + 0.55) / total : done / total;
   return (
-    <svg viewBox="0 0 500 56" className="h-12 w-full" aria-hidden>
-      {steps.map((step, index) => {
-        const start = (500 / total) * index;
-        const width = 500 / total;
-        const fill = step.status === "fail" ? "#F16364" : step.status === "done" ? "#77C79B" : step.status === "run" ? colors[Math.min(index, colors.length - 1)] : "#E8EEF4";
-        return <rect key={step.id} x={start} y={22} width={width} height={12} fill={fill} />;
+    <ol className="relative grid grid-cols-4 gap-1" aria-label="Progress">
+      <span className="absolute top-[9px] right-4 left-4 h-0.5 rounded-full bg-[#E6EADF]" aria-hidden />
+      <span
+        className="absolute top-[9px] left-4 h-0.5 rounded-full bg-[#141414] transition-[width] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
+        style={{ width: `calc(${Math.max(0, fill * 100)}% - 2rem)` }}
+        aria-hidden
+      />
+      {steps.map((step) => {
+        const on = step.status === "done" || step.status === "run" || step.status === "fail";
+        const live = step.status === "run";
+        const fail = step.status === "fail";
+        return (
+          <li key={step.id} className="relative z-[1] flex flex-col items-center gap-1.5">
+            <span
+              className={`size-2.5 rounded-full ${fail ? "bg-[#E24B4A]" : on ? "bg-[#141414]" : "bg-[#D7DCD0]"} ${live ? "motion-safe:animate-pulse" : ""}`}
+            />
+            <span className={`text-[11px] font-medium ${on ? "text-[#141414]" : "text-[#8B919A]"}`}>{step.title}</span>
+          </li>
+        );
       })}
-      <circle cx={x} cy={28} r={14} fill="#6E68AC" />
-    </svg>
+    </ol>
   );
-}
-
-function Mark({ step, index }: { step: SignStep; index: number }) {
-  if (step.status === "done") {
-    return (
-      <span className="grid size-7 place-items-center rounded-full bg-[#1F8A4C] text-white">
-        <svg viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
-        </svg>
-      </span>
-    );
-  }
-  if (step.status === "fail") {
-    return (
-      <span className="grid size-7 place-items-center rounded-full bg-[#E24B4A] text-white">
-        <X className="size-3.5" />
-      </span>
-    );
-  }
-  if (step.status === "run") {
-    return <span className="grid size-7 place-items-center rounded-full bg-[#6E68AC] text-xs font-semibold text-white">{index + 1}</span>;
-  }
-  return <span className="grid size-7 place-items-center rounded-full border border-border bg-white text-xs font-medium text-muted-foreground">{index + 1}</span>;
 }
 
 export function SignProgressHost() {
   const state = useSyncExternalStore(subscribe, snapshot, () => null);
   if (!state?.open) return null;
-  const failed = state.steps.find((step) => step.status === "fail");
+  const failed = Boolean(state.steps.find((step) => step.status === "fail") || state.error);
   return (
     <Dialog.Root open onOpenChange={(open) => { if (!open && !state.busy) setSignTrack(null); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-[#141414]/40 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-[61] max-h-[min(92dvh,820px)] w-[min(100%-1.25rem,26rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.5rem] bg-white px-5 pt-4 pb-5 shadow-[0_28px_80px_-28px_rgba(0,0,0,0.55)] outline-none">
+        <Dialog.Content className="fixed top-1/2 left-1/2 z-[61] w-[min(100%-1.5rem,22rem)] -translate-x-1/2 -translate-y-1/2 rounded-[1.5rem] bg-white px-5 pt-4 pb-5 shadow-[0_28px_80px_-28px_rgba(0,0,0,0.55)] outline-none">
           <div className="flex justify-end">
             <Dialog.Close disabled={state.busy} className="grid size-8 place-items-center rounded-full text-[#141414] hover:bg-black/5 disabled:opacity-30">
               <X className="size-4" />
@@ -92,49 +79,24 @@ export function SignProgressHost() {
             </Dialog.Close>
           </div>
           <div className="flex flex-col items-center text-center">
-            <span className={`grid size-12 place-items-center rounded-full text-white ${failed ? "bg-[#E24B4A]" : state.busy ? "bg-[#6E68AC]" : "bg-[#1F8A4C]"}`}>
-              {failed ? <X className="size-6" /> : state.busy ? (
-                <span className="size-5 animate-pulse rounded-full bg-white/90" />
-              ) : (
-                <svg viewBox="0 0 16 16" className="size-6" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
-                </svg>
-              )}
-            </span>
-            <Dialog.Title className="mt-4 text-lg font-semibold tracking-[-0.03em]">
-              {failed ? "This step did not finish" : state.title}
-            </Dialog.Title>
-            <Dialog.Description className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{state.body}</Dialog.Description>
+            {state.art ? (
+              <img src={state.art} alt="" className="size-20 object-contain" />
+            ) : (
+              <span className={`grid size-12 place-items-center rounded-full text-white ${failed ? "bg-[#E24B4A]" : "bg-[#141414]"}`}>
+                {failed ? <X className="size-5" /> : <span className="size-5 animate-pulse rounded-full bg-white/90" />}
+              </span>
+            )}
+            <Dialog.Title className="mt-3 text-lg font-semibold tracking-[-0.03em]">{state.title}</Dialog.Title>
+            <Dialog.Description className="sr-only">{state.body || state.title}</Dialog.Description>
           </div>
-          <div className="mt-4">
+          <div className="mt-5">
             <Rail steps={state.steps} />
           </div>
-          <ol className="mt-2">
-            {state.steps.map((step, index) => {
-              const current = step.status === "run" || step.status === "fail";
-              const line = index < state.steps.length - 1;
-              return (
-                <li key={step.id} className="grid grid-cols-[1.75rem_1fr] gap-x-3">
-                  <div className="flex flex-col items-center">
-                    <Mark step={step} index={index} />
-                    {line ? <span className={`w-0.5 flex-1 ${step.status === "done" ? "bg-[#1F8A4C]" : "bg-border"}`} /> : null}
-                  </div>
-                  <div className={`mb-2 rounded-xl px-3 py-2 ${current ? "bg-muted" : ""}`}>
-                    <p className="text-sm font-medium">{step.title}</p>
-                    <p className="text-xs leading-relaxed text-muted-foreground">{step.detail}</p>
-                    {step.status === "fail" && state.error ? <p className="mt-1 text-xs leading-relaxed text-destructive">{state.error}</p> : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
           {failed ? (
-            <Button type="button" className="mt-2 h-11 w-full rounded-full text-sm" onClick={() => setSignTrack(null)}>
-              Ok, I see it
+            <Button type="button" className="mt-5 h-11 w-full rounded-full text-sm" onClick={() => setSignTrack(null)}>
+              Try again
             </Button>
-          ) : (
-            <p className="mt-2 text-center text-xs text-muted-foreground">{state.busy ? "Keep this screen open." : "Done."}</p>
-          )}
+          ) : null}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

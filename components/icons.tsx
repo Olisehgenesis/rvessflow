@@ -275,20 +275,5 @@ export function IconTarget(props: IconProps) {
 }
 
 export function IconMark({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 256 256" fill="none" aria-hidden>
-      <path
-        d="M84 36C52 36 28 60 28 92C28 108 36 122 50 132V164C50 177 61 188 74 188C87 188 98 177 98 164V124H122C142 124 158 108 158 88C158 58 132 36 100 36H84Z"
-        fill="currentColor"
-      />
-      <path
-        d="M104 110L196 198C203 205 214 205 221 198C228 191 228 180 221 173L152 104L104 110Z"
-        fill="var(--motion)"
-      />
-      <path
-        d="M82 62H98C114 62 126 74 126 88C126 100 116 110 102 110H82C70 110 60 100 60 88C60 74 70 62 82 62Z"
-        fill="var(--background)"
-      />
-    </svg>
-  );
+  return <img src="/icon-192.png" alt="" className={`rounded-[22%] object-cover ${className ?? "size-8"}`} />;
 }

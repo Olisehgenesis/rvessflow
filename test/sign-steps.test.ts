@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { createVaultSelector } from "@/lib/vault-create";
 import { celoGasTreasury } from "@/lib/celo-fee";
 import { celoMarket } from "@/lib/celo-market";
-import { bundlerLine, describeCalls, leftoverSteps } from "@/lib/sign-steps";
+import { bundlerLine, describeCalls, humanTrack, leftoverSteps } from "@/lib/sign-steps";
 import type { Intent } from "@/lib/intent";
 
 const stream: Intent = {
@@ -49,5 +49,15 @@ describe("sign steps", () => {
   it("points at the Celo bundler", () => {
     const row = bundlerLine(42220, "https://www.rvess.xyz");
     assert.equal(row?.detail, "https://www.rvess.xyz/api/bundler/celo");
+  });
+
+  it("shows four short human steps", () => {
+    const rows = humanTrack("sign");
+    assert.deepEqual(
+      rows.map((row) => row.title),
+      ["Creating", "Sign", "Sending", "Done"],
+    );
+    assert.equal(rows[0].status, "done");
+    assert.equal(rows[1].status, "run");
   });
 });
