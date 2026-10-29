@@ -7,7 +7,7 @@ import type { Intent, Plan, PreparedCall } from "@/lib/intent";
 import { readPay, type PayAsset } from "@/lib/pay-math";
 import { sendLabel, sendRoute, sendToken, walletBalance } from "@/lib/send";
 import { isSendAsset, parseSendAmount, spendableEth } from "@/lib/send-math";
-import { appGroupNet, groupKey, isGroupNet, parseGroupKey, type GroupNet } from "@/lib/group-network";
+import { appGroupNet, groupKey, netFromLabel, parseGroupKey, type GroupNet } from "@/lib/group-network";
 import { groupSite } from "@/lib/group-site";
 import { vaultSite, type VaultSite } from "@/lib/vault-site";
 import { readName, stableLabel, toName } from "@/lib/protocol";
@@ -45,9 +45,38 @@ function done(intent: Intent, extra: { id?: string; href?: string } = {}): Plan 
 }
 
 function productNet(intent: { network?: string; id?: string }): GroupNet {
-  if (intent.network && isGroupNet(intent.network)) return intent.network;
+  if (intent.network) return netFromLabel(intent.network);
   if (intent.id) return parseGroupKey(intent.id).net;
   return appGroupNet();
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForVault(site: VaultSite, owner: Address): Promise<Address> {
+  for (const delay of [0, 400, 800, 1600, 2500]) {
+    if (delay) await sleep(delay);
+    const vault = await vaultOf(site, owner);
+    if (vault !== zeroAddress) return vault;
+  }
+  return zeroAddress;
+}
+
+async function readyVault(site: VaultSite, owner: Address, seen?: string): Promise<Address> {
+  const vault = await vaultOf(site, owner);
+  if (vault !== zeroAddress) return vault;
+  if (seen === "vault") return waitForVault(site, owner);
+  return zeroAddress;
+}
+
+function createVaultStep(site: VaultSite, intent: Intent): Plan {
+  return {
+    calls: [encode(site.factory, factoryAbi, "createVault")],
+    intent: { ...intent, seen: "vault" },
+    done: false,
+    chainId: site.chainId,
+  };
 }
 
 async function vaultOf(site: VaultSite, owner: Address): Promise<Address> {
@@ -185,25 +214,24 @@ async function planSaving(owner: Address, intent: Extract<Intent, { kind: "savin
     const id = groupKey(net, match.id);
     return done(intent, { id, href: `/goals/${id}?fresh=1` });
   }
+  const vault = found.vault !== zeroAddress ? found.vault : await readyVault(site, owner, intent.seen);
+  if (vault === zeroAddress) return createVaultStep(site, intent);
   if (intent.submitted) return pending(intent);
-  if (found.vault === zeroAddress) {
-    return { calls: [encode(site.factory, factoryAbi, "createVault")], intent, done: false, chainId: site.chainId };
-  }
   const pay = intent.pay ? readPay(intent.pay) : undefined;
   const amount = await sizedAmount(pay, intent.amount);
   const idle = await site.client.readContract({
-    address: found.vault,
+    address: vault,
     abi: vaultAbi,
     functionName: "unallocated",
     args: [site.fusdcx],
   });
   const calls: PreparedCall[] = [];
-  if (idle < amount) await coverVault(calls, site, owner, found.vault, pay, amount - idle);
+  if (idle < amount) await coverVault(calls, site, owner, vault, pay, amount - idle);
   const startAt = intent.startAt ?? 0;
   const later = startAt > Math.floor(Date.now() / 1000);
   calls.push(
     later
-      ? encode(found.vault, vaultAbi, "createFlow", [
+      ? encode(vault, vaultAbi, "createFlow", [
           {
             token: site.fusdcx,
             recipient: owner,
@@ -219,7 +247,7 @@ async function planSaving(owner: Address, intent: Extract<Intent, { kind: "savin
             name: toName(intent.name),
           },
         ])
-      : encode(found.vault, vaultAbi, "openSavings", [site.fusdcx, amount, BigInt(intent.duration), toName(intent.name), amount]),
+      : encode(vault, vaultAbi, "openSavings", [site.fusdcx, amount, BigInt(intent.duration), toName(intent.name), amount]),
   );
   return { calls, intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
 }
@@ -248,26 +276,25 @@ async function planStream(owner: Address, intent: Extract<Intent, { kind: "strea
     }
     return done(intent, { id, href: `/goals/${id}?fresh=1` });
   }
+  const vault = found.vault !== zeroAddress ? found.vault : await readyVault(site, owner, intent.seen);
+  if (vault === zeroAddress) return createVaultStep(site, intent);
   if (intent.submitted) return pending(intent);
-  if (found.vault === zeroAddress) {
-    return { calls: [encode(site.factory, factoryAbi, "createVault")], intent, done: false, chainId: site.chainId };
-  }
   const pay = intent.pay ? readPay(intent.pay) : undefined;
   const amount = await sizedAmount(pay, intent.amount);
   const duration = BigInt(intent.duration);
   const need = await streamNeedOn(site, amount, duration);
   const idle = await site.client.readContract({
-    address: found.vault,
+    address: vault,
     abi: vaultAbi,
     functionName: "unallocated",
     args: [site.fusdcx],
   });
   const calls: PreparedCall[] = [];
-  if (idle < need) await coverVault(calls, site, owner, found.vault, pay, need - idle);
+  if (idle < need) await coverVault(calls, site, owner, vault, pay, need - idle);
   const perSecond = amount / duration;
   const reserved = perSecond * duration;
   calls.push(
-    encode(found.vault, vaultAbi, "createFlow", [
+    encode(vault, vaultAbi, "createFlow", [
       {
         token: site.fusdcx,
         recipient,
@@ -340,8 +367,8 @@ async function planDeposit(owner: Address, intent: Extract<Intent, { kind: "depo
   const pay = intent.pay ? readPay(intent.pay) : undefined;
   if (pay) {
     const net = await superForUsd(intent.amount);
-    const vault = await vaultOf(site, owner);
-    if (vault === zeroAddress) return { calls: [encode(site.factory, factoryAbi, "createVault")], intent, done: false, chainId: site.chainId };
+    const vault = await readyVault(site, owner, intent.seen);
+    if (vault === zeroAddress) return createVaultStep(site, intent);
     const idle = await site.client.readContract({
       address: vault,
       abi: vaultAbi,
@@ -358,9 +385,9 @@ async function planDeposit(owner: Address, intent: Extract<Intent, { kind: "depo
   const amount = parseAmount(intent.amount);
   const balance = await balanceOf(site, owner, token);
   if (intent.seen && balance <= BigInt(intent.seen) - amount) return done(intent, { href: "/home/add/status?done=1" });
-  const vault = await vaultOf(site, owner);
+  const vault = await readyVault(site, owner, intent.seen);
   const next = { ...intent, seen: intent.seen ?? balance.toString() };
-  if (vault === zeroAddress) return { calls: [encode(site.factory, factoryAbi, "createVault")], intent: next, done: false, chainId: site.chainId };
+  if (vault === zeroAddress) return createVaultStep(site, next);
   if (balance < withProtocolFee(amount)) {
     throw new Error(`This needs ${assetByAddress(token).symbol} in the wallet, including the 0.3% protocol fee.`);
   }
@@ -529,12 +556,6 @@ async function planLockAct(owner: Address, intent: Extract<Intent, { kind: "lock
   return { calls, intent: { ...intent, seen: entry[2].toString(), submitted: true }, done: false, chainId: site.chainId };
 }
 
-function netOf(value: { id?: string; network?: string }): GroupNet {
-  if (value.network && isGroupNet(value.network)) return value.network;
-  if (value.id) return parseGroupKey(value.id).net;
-  return appGroupNet();
-}
-
 async function groupOf(id: bigint, net: GroupNet) {
   return readGroup(id, net);
 }
@@ -606,7 +627,7 @@ async function planGroup(owner: Address, intent: Extract<Intent, { kind: "group"
 }
 
 async function planGroupCreate(owner: Address, intent: Extract<Intent, { kind: "groupCreate" }>): Promise<Plan> {
-  const net = netOf(intent);
+  const net = productNet(intent);
   const site = groupSite(net);
   const ids = (
     await site.client.readContract({ address: site.groups, abi: groupAbi, functionName: "groupsOf", args: [owner] })

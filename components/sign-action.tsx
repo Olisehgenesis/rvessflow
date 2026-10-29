@@ -14,6 +14,9 @@ function explain(error: unknown): string {
   if (/transfer amount exceeds balance|insufficient balance/i.test(message)) {
     return "This account does not have enough for that amount. The swap and the stream are checked together.";
   }
+  if (/0x4239717c/i.test(message)) {
+    return "This account already has a vault. Wait a moment and create the flow again.";
+  }
   const line = message.split("\n").find((item) => item.trim()) ?? message;
   return line.replace(/^Error:\s*/, "").slice(0, 220);
 }

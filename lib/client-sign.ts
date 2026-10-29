@@ -10,6 +10,7 @@ import { estimationSkipped, passkeyPaysWith, usdcCanPayFee, userOpCost } from "@
 import { celoFeeTx, celoFeeCurrencies, celoGasSkimCall, pickCeloFee, pickCeloFeeCovering, tokenAmountForCeloGas, withSkimGas } from "@/lib/celo-fee";
 import { celoSponsorPolicyId } from "@/lib/celo-sponsor";
 import { batchId, batchOutcome, batchUnsupported, walletSendCallsParam } from "@/lib/wallet-batch";
+import { isCreateVaultOnly, vaultAlreadyExists } from "@/lib/vault-create";
 
 const network = appNetwork();
 const chain = appChain();
@@ -358,6 +359,11 @@ export async function depositReceipt(hash: Hash): Promise<{ status: "pending" | 
 export async function sendCalls(sign: Pick<SignPayload, "calls" | "method" | "address" | "chainId">, options?: { onHash?: (hash: Hash) => void }) {
   if (!sign.calls.length) return;
   const where = settlement(sign.chainId);
-  if (sign.method === "passkey") return sendPasskey(sign.calls, sign.address, where, options?.onHash);
-  return sendWallet(sign.calls, sign.address, where, options?.onHash);
+  try {
+    if (sign.method === "passkey") return await sendPasskey(sign.calls, sign.address, where, options?.onHash);
+    return await sendWallet(sign.calls, sign.address, where, options?.onHash);
+  } catch (error) {
+    if (isCreateVaultOnly(sign.calls) && vaultAlreadyExists(error)) return;
+    throw error;
+  }
 }
