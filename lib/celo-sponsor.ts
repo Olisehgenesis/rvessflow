@@ -94,8 +94,22 @@ export function shouldSponsorCeloUserOp(input: { chainId?: number; callData?: st
   }
 }
 
+export const skipSponsorshipPolicy = "skipSponsorshipPolicy";
+
+export function policySpendReached(error: unknown): boolean {
+  const text = error instanceof Error ? `${error.message} ${error.cause ?? ""}` : String(error);
+  return /perUserMaximumSpend|per.?user.?maximum.?spend/i.test(text);
+}
+
 function withPolicyContext(value: unknown) {
-  const context = value && typeof value === "object" && !Array.isArray(value) ? { ...(value as object) } : {};
+  const context =
+    value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {};
+  if (context[skipSponsorshipPolicy] === true) {
+    const next = { ...context };
+    delete next[skipSponsorshipPolicy];
+    delete next.sponsorshipPolicyId;
+    return next;
+  }
   return { ...context, sponsorshipPolicyId: celoSponsorPolicyId };
 }
 

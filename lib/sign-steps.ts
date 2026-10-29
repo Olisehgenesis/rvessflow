@@ -91,7 +91,7 @@ export function leftoverSteps(intent: Intent, seen: ReadonlySet<string>): Omit<S
     rows.push({ id: "vault", title: "Vault ready", detail: "Created once for this account." });
   }
   if (product && intent.network === "celo" && !seen.has("fee")) {
-    rows.push({ id: "fee", title: "Celo network fee", detail: "Skipped when this passkey already holds CELO." });
+    rows.push({ id: "fee", title: "Celo network fee", detail: "CELO pays it when this passkey holds enough. Otherwise USDT covers sponsored gas." });
   }
   const pay = "pay" in intent ? intent.pay : undefined;
   if (product && (pay === "usdt" || pay === "eth") && !seen.has("swap")) {

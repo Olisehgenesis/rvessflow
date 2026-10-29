@@ -23,6 +23,12 @@ function explain(error: unknown): string {
   if (/0x1dc930eb/i.test(message)) {
     return "The vault did not receive enough after the protocol fee to open the stream. Try again.";
   }
+  if (/perUserMaximumSpend|Celo gas sponsorship for this passkey/i.test(message)) {
+    return "Celo gas sponsorship for this passkey is used up. Send a little CELO to this passkey address, then try again.";
+  }
+  if (/AA21|didn't pay prefund/i.test(message)) {
+    return "This passkey has no CELO for the network fee, and Celo gas sponsorship did not attach. Send a little CELO here, then try again.";
+  }
   if (/Invalid parameters were provided to the RPC method/i.test(message)) {
     const detail = message.split("\n").map((item) => item.trim()).find((item) => item && !/invalid parameters|double check/i.test(item));
     return detail ? detail.slice(0, 220) : "Celo rejected that gas request. Refresh and try again.";

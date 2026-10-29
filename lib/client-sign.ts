@@ -8,7 +8,7 @@ import type { PreparedCall, SignPayload } from "@/lib/intent";
 import { readPasskeys } from "@/lib/passkey-vault";
 import { estimationSkipped, passkeyPaysWith, usdcCanPayFee, userOpCost } from "@/lib/passkey-fee";
 import { celoFeeTx, celoFeeCurrencies, celoGasSkimCall, pickCeloFee, pickCeloFeeCovering, tokenAmountForCeloGas, withSkimGas } from "@/lib/celo-fee";
-import { celoSponsorPolicyId } from "@/lib/celo-sponsor";
+import { celoSponsorPolicyId, policySpendReached, skipSponsorshipPolicy } from "@/lib/celo-sponsor";
 import { batchId, batchOutcome, batchUnsupported, walletSendCallsParam } from "@/lib/wallet-batch";
 import { isCreateVaultOnly, vaultAlreadyExists } from "@/lib/vault-create";
 
@@ -229,57 +229,74 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
       : publicClient.readContract({ address: circleUsdc, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }),
   ]);
   if (where.id === 42220) {
-    let celoCost: bigint | null = null;
-    try {
-      celoCost = userOpCost(await smart.prepareUserOperation({ calls: batched }));
-    } catch (error) {
-      if (!estimationSkipped(error)) throw error;
-    }
-    if (celoCost !== null && celoCost > 0n && ethBalance >= celoCost) {
-      const hash = await smart.sendTransaction({ calls: batched });
-      onHash?.(hash);
-      await wait(hash, where.reader);
-      return hash;
+    if (ethBalance > 0n) {
+      try {
+        const celoCost = userOpCost(await smart.prepareUserOperation({ calls: batched }));
+        if (celoCost > 0n && ethBalance >= celoCost) {
+          const hash = await smart.sendTransaction({ calls: batched });
+          onHash?.(hash);
+          await wait(hash, where.reader);
+          return hash;
+        }
+      } catch (error) {
+        if (!estimationSkipped(error)) throw error;
+      }
     }
     const pimlicoPaymaster = createPimlicoClient({
       chain: viemChain,
       transport: transport(bundler),
       entryPoint: { address: accountAbstraction.entryPoint07Address, version: "0.7" },
     });
-    const sponsored = createSmartAccountClient({
-      account,
-      chain: viemChain,
-      bundlerTransport: transport(bundler),
-      client: publicClient,
-      paymaster: pimlicoPaymaster,
-      paymasterContext: { sponsorshipPolicyId: celoSponsorPolicyId },
-      userOperation: {
-        estimateFeesPerGas: async () => (await pimlicoPaymaster.getUserOperationGasPrice()).fast,
-      },
-    });
-    const quoted = await sponsored.prepareUserOperation({ calls: batched });
-    const dueWei = withSkimGas(userOpCost(quoted), quoted.maxFeePerGas ?? 0n);
-    const nativePrice = await hexGasPrice(where.reader);
-    const amounts = await Promise.all(
-      celoFeeCurrencies.map((row) =>
-        where.reader.readContract({ address: row.token, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }).catch(() => 0n),
-      ),
-    );
-    const needed = await Promise.all(
-      celoFeeCurrencies.map(async (row) => {
-        const tokenPrice = await hexGasPrice(where.reader, row.feeCurrency);
-        return tokenAmountForCeloGas({ costWei: dueWei, nativePrice, tokenPrice, decimals: row.decimals });
-      }),
-    );
-    const pick = pickCeloFeeCovering(amounts, needed);
-    const due = pick ? needed[celoFeeCurrencies.findIndex((row) => row.label === pick.label)] ?? 0n : 0n;
-    if (!pick || due === 0n) {
-      throw new Error("This passkey needs CELO, or USDT, USDC, or USDm at this address for the Celo network fee.");
+    const userOperationSponsored = {
+      estimateFeesPerGas: async () => (await pimlicoPaymaster.getUserOperationGasPrice()).fast,
+    };
+    const sendSponsored = async (paymasterContext: Record<string, unknown>) => {
+      const sponsored = createSmartAccountClient({
+        account,
+        chain: viemChain,
+        bundlerTransport: transport(bundler),
+        client: publicClient,
+        paymaster: pimlicoPaymaster,
+        paymasterContext,
+        userOperation: userOperationSponsored,
+      });
+      const quoted = await sponsored.prepareUserOperation({ calls: batched });
+      const dueWei = withSkimGas(userOpCost(quoted), quoted.maxFeePerGas ?? 0n);
+      const nativePrice = await hexGasPrice(where.reader);
+      const amounts = await Promise.all(
+        celoFeeCurrencies.map((row) =>
+          where.reader.readContract({ address: row.token, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }).catch(() => 0n),
+        ),
+      );
+      const needed = await Promise.all(
+        celoFeeCurrencies.map(async (row) => {
+          const tokenPrice = await hexGasPrice(where.reader, row.feeCurrency);
+          return tokenAmountForCeloGas({ costWei: dueWei, nativePrice, tokenPrice, decimals: row.decimals });
+        }),
+      );
+      const pick = pickCeloFeeCovering(amounts, needed);
+      const due = pick ? needed[celoFeeCurrencies.findIndex((row) => row.label === pick.label)] ?? 0n : 0n;
+      if (!pick || due === 0n) {
+        throw new Error("This passkey needs CELO, or USDT, USDC, or USDm at this address for the Celo network fee.");
+      }
+      const hash = await sponsored.sendTransaction({ calls: [celoGasSkimCall(pick.token, due), ...batched] });
+      onHash?.(hash);
+      await wait(hash, where.reader);
+      return hash;
+    };
+    try {
+      return await sendSponsored({ sponsorshipPolicyId: celoSponsorPolicyId });
+    } catch (error) {
+      if (!policySpendReached(error)) throw error;
+      try {
+        return await sendSponsored({ [skipSponsorshipPolicy]: true });
+      } catch (retry) {
+        if (policySpendReached(retry) || estimationSkipped(retry)) {
+          throw new Error("Celo gas sponsorship for this passkey is used up. Send a little CELO to this passkey address, then try again.");
+        }
+        throw retry;
+      }
     }
-    const hash = await sponsored.sendTransaction({ calls: [celoGasSkimCall(pick.token, due), ...batched] });
-    onHash?.(hash);
-    await wait(hash, where.reader);
-    return hash;
   }
   let ethCost: bigint | null = null;
   if (!usdcCanPayFee(usdcBalance) && ethBalance > 0n) {
