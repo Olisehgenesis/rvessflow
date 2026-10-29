@@ -221,7 +221,7 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
     client: publicClient,
     userOperation,
   });
-  const [ethBalance, usdcBalance] = await Promise.all([
+  let [ethBalance, usdcBalance] = await Promise.all([
     publicClient.getBalance({ address: account.address }),
     where.id === 42220
       ? Promise.resolve(0n)
