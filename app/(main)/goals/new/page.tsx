@@ -5,6 +5,7 @@ import Loading from "../../loading";
 import { KindIntro } from "@/components/product";
 import { Page } from "@/components/ui-bits";
 import { loadPayChoices } from "@/lib/holdings";
+import { nextLabel } from "@/lib/next-label";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
@@ -24,10 +25,11 @@ async function NewGoalBody({ searchParams }: { searchParams: Promise<{ kind?: st
   const title = kind === "flow" ? "Flow" : kind === "expense" ? "Streaming payment" : "Saving";
   const back = kind === "flow" ? "/goals/flow" : kind === "expense" ? "/goals/expense/stream" : "/goals/savings";
   const line = kind === "flow" ? "This pays you every second until the end date." : kind === "expense" ? "This pays someone else every second until the end date." : "This locks the money until the end date.";
-  const placeholder = kind === "flow" ? "Name this flow" : kind === "expense" ? "Name this payment" : "Name this saving";
+  const prefix = kind === "flow" ? "flow" : kind === "expense" ? "expense" : "saving";
+  const fallback = nextLabel(prefix, data.flows.filter((row) => row.kind === kind).map((row) => row.name));
   return (
     <Page title={title} back={back}>
-      <GoalName placeholder={placeholder}>
+      <GoalName placeholder={fallback} fallback={fallback}>
         <KindIntro kind={kind} rest={line} />
         {kind === "saving" ? (
           <SavingForm me={data.me.address} choices={choices} />

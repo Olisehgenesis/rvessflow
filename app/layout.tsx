@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Caveat, Geist_Mono, Inter, Manrope } from "next/font/google";
 import { PwaRegister } from "@/components/install-app";
+import { SignProgressHost } from "@/components/sign-progress";
 import "./globals.css";
 
 const inter = Inter({
@@ -85,6 +86,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to content
         </a>
         <PwaRegister />
+        <SignProgressHost />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

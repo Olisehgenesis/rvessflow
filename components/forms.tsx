@@ -76,13 +76,37 @@ export function AccountSwitch({ people, current }: { people: Person[]; current: 
   );
 }
 
+const durationDays = [7, 30, 50, 90, 180, 365];
+
+function Chip({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`h-8 rounded-full px-3 text-xs font-medium ${on ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}
+    >
+      {label}
+    </button>
+  );
+}
+
 function When({ start, end, onStart, onEnd }: { start: Date; end: Date; onStart: (next: Date) => void; onEnd: (next: Date) => void }) {
   const today = startOfDay(new Date());
   const latest = addDays(today, 30 * 365 - 1);
+  const span = Math.round((startOfDay(end).getTime() - startOfDay(start).getTime()) / 86400000);
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <DateField label="Starts" value={start} onChange={onStart} min={today} max={latest} />
-      <DateField label="Duration" value={end} onChange={onEnd} min={start} max={latest} summary={`${spanText(start, end)} · ${formatDay(end)}`} />
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <DateField label="Starts" value={start} onChange={onStart} min={today} max={latest} />
+        <DateField label="Ends" value={end} onChange={onEnd} min={start} max={latest} summary={`${spanText(start, end)} · ${formatDay(end)}`} />
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <Chip label="Today" on={startOfDay(start).getTime() === today.getTime()} onClick={() => onStart(today)} />
+        <Chip label="Tomorrow" on={startOfDay(start).getTime() === addDays(today, 1).getTime()} onClick={() => onStart(addDays(today, 1))} />
+        {durationDays.map((days) => (
+          <Chip key={days} label={days === 365 ? "1 year" : `${days}d`} on={span === days} onClick={() => onEnd(addDays(start, days))} />
+        ))}
+      </div>
     </div>
   );
 }

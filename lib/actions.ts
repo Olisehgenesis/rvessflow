@@ -64,6 +64,7 @@ import {
   savePhone,
   setDraftOpen,
 } from "@/lib/circle";
+import { filledName } from "@/lib/next-label";
 import { acceptedTerms, accountIndex, clearSession, currencyChoice, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet, viewer, type Viewer } from "@/lib/session";
 
 export type ActionState = { error?: string; sign?: SignPayload; saved?: boolean } | null;
@@ -385,7 +386,8 @@ export async function createSaving(_prev: ActionState, formData: FormData): Prom
     if (sendTo && sendTo.toLowerCase() !== who.address.toLowerCase()) {
       return { error: "A saving stays in your vault. Use Expense to pay another wallet." };
     }
-    const name = String(formData.get("name") ?? "");
+    const book = await loadPortfolio(who);
+    const name = filledName(String(formData.get("name") ?? ""), "saving", book.flows.filter((row) => row.kind === "saving").map((row) => row.name));
     const pay = payField(formData);
     const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const description = String(formData.get("description") ?? "").trim().slice(0, 280);
@@ -425,10 +427,15 @@ export async function createStream(_prev: ActionState, formData: FormData): Prom
     await requireTerms();
     const who = await viewer();
     const duration = readSpan(formData, FLOW_MIN);
-    const name = String(formData.get("name") ?? "");
+    const flowKind = formData.get("kind") === "expense" ? "expense" : "flow";
+    const book = await loadPortfolio(who);
+    const name = filledName(
+      String(formData.get("name") ?? ""),
+      flowKind,
+      book.flows.filter((row) => row.kind === flowKind).map((row) => row.name),
+    );
     const pay = payField(formData);
     const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
-    const flowKind = formData.get("kind") === "expense" ? "expense" : "flow";
     const description = String(formData.get("description") ?? "").trim().slice(0, 280);
     const intent = refIntent({
       kind: "stream" as const,
