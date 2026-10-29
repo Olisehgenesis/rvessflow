@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { encodeFunctionData, concatHex, toHex } from "viem";
-import { prepareCeloBundlerBody, policySpendReached, shouldSponsorCeloUserOp, skipSponsorshipPolicy, withCeloSponsorshipPolicy } from "@/lib/celo-sponsor";
+import { prepareCeloBundlerBody, shouldSponsorCeloUserOp, withCeloSponsorshipPolicy } from "@/lib/celo-sponsor";
 
 const executeAbi = [
   {
@@ -41,38 +41,26 @@ describe("Celo sponsorship policy", () => {
     );
   });
 
-  it("attaches the policy id to paymaster RPCs", () => {
+  it("does not attach a Pimlico policy id", () => {
     const next = withCeloSponsorshipPolicy({
       jsonrpc: "2.0",
       id: 1,
       method: "pm_sponsorUserOperation",
-      params: [{}, "0x0000000071727De22E5E9d8BAf0edAc6f37da032"],
-    }) as { params: [unknown, unknown, { sponsorshipPolicyId: string }] };
-    assert.equal(next.params[2].sponsorshipPolicyId, "sp_small_tusk");
+      params: [{}, "0x0000000071727De22E5E9d8BAf0edAc6f37da032", { sponsorshipPolicyId: "sp_small_tusk" }],
+    }) as { params: [unknown, unknown, Record<string, unknown>] };
+    assert.equal("sponsorshipPolicyId" in next.params[2], false);
   });
 
-  it("keeps ERC-7677 chain id and puts the policy in context", () => {
+  it("keeps ERC-7677 chain id and strips leftover policy ids", () => {
     const next = withCeloSponsorshipPolicy({
       jsonrpc: "2.0",
       id: 1,
       method: "pm_getPaymasterStubData",
-      params: [{}, "0x0000000071727De22E5E9d8BAf0edAc6f37da032", "0xa4ec", { foo: 1 }],
-    }) as { params: [unknown, unknown, string, { foo: number; sponsorshipPolicyId: string }] };
+      params: [{}, "0x0000000071727De22E5E9d8BAf0edAc6f37da032", "0xa4ec", { foo: 1, sponsorshipPolicyId: "sp_small_tusk" }],
+    }) as { params: [unknown, unknown, string, { foo: number; sponsorshipPolicyId?: string }] };
     assert.equal(next.params[2], "0xa4ec");
     assert.equal(next.params[3].foo, 1);
-    assert.equal(next.params[3].sponsorshipPolicyId, "sp_small_tusk");
-  });
-
-  it("omits the per-user policy when the client asks to skip it", () => {
-    const next = withCeloSponsorshipPolicy({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "pm_getPaymasterData",
-      params: [{}, "0x0000000071727De22E5E9d8BAf0edAc6f37da032", "0xa4ec", { [skipSponsorshipPolicy]: true }],
-    }) as { params: [unknown, unknown, string, Record<string, unknown>] };
-    assert.equal(next.params[2], "0xa4ec");
     assert.equal("sponsorshipPolicyId" in next.params[3], false);
-    assert.equal(policySpendReached(new Error("sponsorshipPolicy perUserMaximumSpend reached")), true);
   });
 
   it("drops null UserOp fields Alto rejects", () => {

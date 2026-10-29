@@ -1,7 +1,6 @@
 import { decodeAbiParameters, decodeFunctionData, type Address, type Hex } from "viem";
 
 /** Celo passkey gas: app contracts, Uniswap, tokens, Superfluid, Kernel. New wallets are not listed. */
-export const celoSponsorPolicyId = "sp_small_tusk";
 
 const executeAbi = [
   {
@@ -94,23 +93,12 @@ export function shouldSponsorCeloUserOp(input: { chainId?: number; callData?: st
   }
 }
 
-export const skipSponsorshipPolicy = "skipSponsorshipPolicy";
-
-export function policySpendReached(error: unknown): boolean {
-  const text = error instanceof Error ? `${error.message} ${error.cause ?? ""}` : String(error);
-  return /perUserMaximumSpend|per.?user.?maximum.?spend/i.test(text);
-}
-
-function withPolicyContext(value: unknown) {
+function rvessPaymasterContext(value: unknown) {
   const context =
     value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {};
-  if (context[skipSponsorshipPolicy] === true) {
-    const next = { ...context };
-    delete next[skipSponsorshipPolicy];
-    delete next.sponsorshipPolicyId;
-    return next;
-  }
-  return { ...context, sponsorshipPolicyId: celoSponsorPolicyId };
+  delete context.sponsorshipPolicyId;
+  delete context.skipSponsorshipPolicy;
+  return context;
 }
 
 function dropEmpty(value: unknown): unknown {
@@ -136,19 +124,19 @@ export function withCeloSponsorshipPolicy(body: unknown) {
   const params = (body as { params: unknown }).params;
   if (!Array.isArray(params) || params.length < 2) return body;
   if (method === "pm_sponsorUserOperation") {
-    return { ...body, params: [params[0], params[1], withPolicyContext(params[2])] };
+    return { ...body, params: [params[0], params[1], rvessPaymasterContext(params[2])] };
   }
   if (method === "pm_getPaymasterData" || method === "pm_getPaymasterStubData") {
     const chainId = params[2];
     if (typeof chainId === "string" || typeof chainId === "number") {
-      return { ...body, params: [params[0], params[1], chainId, withPolicyContext(params[3])] };
+      return { ...body, params: [params[0], params[1], chainId, rvessPaymasterContext(params[3])] };
     }
-    return { ...body, params: [params[0], params[1], "0xa4ec", withPolicyContext(typeof chainId === "object" ? chainId : params[3])] };
+    return { ...body, params: [params[0], params[1], "0xa4ec", rvessPaymasterContext(typeof chainId === "object" ? chainId : params[3])] };
   }
   return body;
 }
 
-/** Strip null UserOp fields and attach the Celo sponsorship policy. Alto rejects `factory: null`. */
+/** Strip null UserOp fields. Alto rejects `factory: null`. Paymaster calls go through Rvess, with no Pimlico policy id. */
 export function prepareCeloBundlerBody(body: unknown): unknown {
   if (Array.isArray(body)) return body.map(prepareCeloBundlerBody);
   if (!body || typeof body !== "object" || !("params" in body)) return withCeloSponsorshipPolicy(body);
