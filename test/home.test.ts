@@ -26,35 +26,66 @@ describe("home balance columns", () => {
     assert.equal(columns.available, 0n);
   });
 
-  it("credits a self-pay stream into available and keeps it in the total", () => {
+  it("credits a self-pay stream into available and raises the headline total", () => {
     const usdcUsd8 = 100_000_000n;
     const start = liveHomeColumns({
-      elapsed: 0n,
+      elapsedMs: 0n,
       availableUsd8: 4_670_000_000n,
       streamingUsd8: 720_000_000n,
       lockedUsd8: 0n,
       usdcUsd8,
       inWeiPerSec: 10n ** 15n,
       inCapWei: 10n ** 18n,
+      outWeiPerSec: 0n,
       streamWeiPerSec: 10n ** 15n,
       streamRemainingWei: 10n ** 18n,
     });
     const later = liveHomeColumns({
-      elapsed: 10n,
+      elapsedMs: 10_000n,
       availableUsd8: 4_670_000_000n,
       streamingUsd8: 720_000_000n,
       lockedUsd8: 0n,
       usdcUsd8,
       inWeiPerSec: 10n ** 15n,
       inCapWei: 10n ** 18n,
+      outWeiPerSec: 0n,
       streamWeiPerSec: 10n ** 15n,
       streamRemainingWei: 10n ** 18n,
     });
-    assert.equal(start.available + start.streaming + start.locked, start.total);
-    assert.equal(later.available + later.streaming + later.locked, later.total);
-    assert.equal(later.total, start.total);
     assert.ok(later.available > start.available);
     assert.ok(later.streaming < start.streaming);
+    assert.ok(later.total > start.total);
+  });
+
+  it("lowers the headline when a stream pays someone else", () => {
+    const usdcUsd8 = 100_000_000n;
+    const start = liveHomeColumns({
+      elapsedMs: 0n,
+      availableUsd8: 4_670_000_000n,
+      streamingUsd8: 720_000_000n,
+      lockedUsd8: 0n,
+      usdcUsd8,
+      inWeiPerSec: 0n,
+      inCapWei: 0n,
+      outWeiPerSec: 10n ** 15n,
+      streamWeiPerSec: 10n ** 15n,
+      streamRemainingWei: 10n ** 18n,
+    });
+    const later = liveHomeColumns({
+      elapsedMs: 10_000n,
+      availableUsd8: 4_670_000_000n,
+      streamingUsd8: 720_000_000n,
+      lockedUsd8: 0n,
+      usdcUsd8,
+      inWeiPerSec: 0n,
+      inCapWei: 0n,
+      outWeiPerSec: 10n ** 15n,
+      streamWeiPerSec: 10n ** 15n,
+      streamRemainingWei: 10n ** 18n,
+    });
+    assert.equal(later.available, start.available);
+    assert.ok(later.streaming < start.streaming);
+    assert.ok(later.total < start.total);
   });
 
   it("converts a dollar value into USDC at the Chainlink price", () => {

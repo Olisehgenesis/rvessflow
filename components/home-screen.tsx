@@ -86,6 +86,7 @@ async function HomeReady({
   const liveSelf = liveOwn.filter((flow) => flow.recipient.toLowerCase() === me);
   const inWeiPerSec = liveIn.reduce((sum, item) => sum + BigInt(item.flow.rate), 0n) + liveSelf.reduce((sum, flow) => sum + BigInt(flow.rate), 0n);
   const streamWeiPerSec = liveOwn.reduce((sum, flow) => sum + BigInt(flow.rate), 0n);
+  const outWeiPerSec = liveOwn.filter((flow) => flow.recipient.toLowerCase() !== me).reduce((sum, flow) => sum + BigInt(flow.rate), 0n);
   const inCapWei = liveIn.reduce((sum, item) => sum + BigInt(item.flow.remaining), 0n) + liveSelf.reduce((sum, flow) => sum + BigInt(flow.remaining), 0n);
   const streamRemainingWei = BigInt(portfolio.streaming);
   const amounts = holdings.rows.map((row) => row.amount);
@@ -131,6 +132,7 @@ async function HomeReady({
                 readAt: portfolio.readAt,
                 inWeiPerSec: inWeiPerSec.toString(),
                 inCapWei: inCapWei.toString(),
+                outWeiPerSec: outWeiPerSec.toString(),
                 streamWeiPerSec: streamWeiPerSec.toString(),
                 streamRemainingWei: streamRemainingWei.toString(),
                 totalUsd8: holdings.totalUsd8,

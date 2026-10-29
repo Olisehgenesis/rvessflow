@@ -1,42 +1,51 @@
 import { formatUsd8 } from "@/lib/pay-math";
 
-/** Home headline amounts: four places so a live stream is visible. */
-export const homeBalancePlaces = 4;
+/** Home headline amounts: six places so a live stream ticks every second. */
+export const homeBalancePlaces = 6;
 
 function weiToUsd8(wei: bigint, usdcUsd8: bigint): bigint {
   if (wei <= 0n || usdcUsd8 <= 0n) return 0n;
   return (wei * usdcUsd8) / 10n ** 18n;
 }
 
+function movedWei(rate: bigint, elapsedMs: bigint, cap: bigint) {
+  const gone = (rate * elapsedMs) / 1000n;
+  return gone > cap ? cap : gone;
+}
+
 /**
  * Move Available / Streaming / Total with the clock.
- * Incoming and self-pay flows credit Available. Own streams debit Streaming.
- * Available + Streaming + Locked stays the total.
+ * Incoming and self-pay credit Available. Own streams debit Streaming.
+ * The headline follows inbound the way the phone mock does: a flow you
+ * receive (including to yourself) raises Total every tick; a stream to
+ * someone else lowers it.
  */
 export function liveHomeColumns(input: {
-  elapsed: bigint;
+  elapsedMs: bigint;
   availableUsd8: bigint;
   streamingUsd8: bigint;
   lockedUsd8: bigint;
   usdcUsd8: bigint;
   inWeiPerSec: bigint;
   inCapWei: bigint;
+  outWeiPerSec: bigint;
   streamWeiPerSec: bigint;
   streamRemainingWei: bigint;
 }) {
-  const elapsed = input.elapsed > 0n ? input.elapsed : 0n;
-  const goneWei = input.streamWeiPerSec * elapsed;
-  const streamed = goneWei > input.streamRemainingWei ? input.streamRemainingWei : goneWei;
-  const gotWei = input.inWeiPerSec * elapsed;
-  const received = gotWei > input.inCapWei ? input.inCapWei : gotWei;
+  const elapsedMs = input.elapsedMs > 0n ? input.elapsedMs : 0n;
+  const streamed = movedWei(input.streamWeiPerSec, elapsedMs, input.streamRemainingWei);
+  const received = movedWei(input.inWeiPerSec, elapsedMs, input.inCapWei);
+  const paidOut = movedWei(input.outWeiPerSec, elapsedMs, input.streamRemainingWei);
   const streaming = input.streamingUsd8 > 0n ? input.streamingUsd8 - weiToUsd8(streamed, input.usdcUsd8) : 0n;
   const available = input.availableUsd8 + weiToUsd8(received, input.usdcUsd8);
   const locked = input.lockedUsd8 > 0n ? input.lockedUsd8 : 0n;
+  const start = input.availableUsd8 + input.streamingUsd8 + locked;
+  const total = start + weiToUsd8(received, input.usdcUsd8) - weiToUsd8(paidOut, input.usdcUsd8);
   return {
     available: available > 0n ? available : 0n,
     streaming: streaming > 0n ? streaming : 0n,
     locked,
-    total: (available > 0n ? available : 0n) + (streaming > 0n ? streaming : 0n) + locked,
+    total: total > 0n ? total : 0n,
   };
 }
 

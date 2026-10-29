@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
-import { RollingText } from "@/components/flowing";
+import { RollingText, SecondSweep, useFlowClock } from "@/components/flowing";
 import { IconChevron, IconEye, IconEyeOff } from "@/components/icons";
 import { RetryButton } from "@/components/retry-button";
+import { show, streamDigits } from "@/lib/display";
 import { homeBalancePlaces, liveHomeColumns } from "@/lib/home-math";
 import type { Quote } from "@/lib/quote";
 import { TopUpSheet, WithdrawSheet, type SavingBox } from "@/components/withdraw-sheet";
@@ -76,6 +77,7 @@ export type BalancePulse = {
   readAt: number;
   inWeiPerSec: string;
   inCapWei: string;
+  outWeiPerSec: string;
   streamWeiPerSec: string;
   streamRemainingWei: string;
   totalUsd8: string;
@@ -85,17 +87,6 @@ export type BalancePulse = {
   usdcUsd8: string;
   quote: Quote;
 };
-
-function useNow(readAt: number) {
-  const [now, setNow] = useState(readAt);
-  useEffect(() => {
-    const tick = () => setNow(Math.floor(Date.now() / 1000));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-  return now;
-}
 
 export function HomeBalance({
   totalLocal,
@@ -131,17 +122,18 @@ export function HomeBalance({
   layout?: "phone" | "desk";
 }) {
   const conceal = useConceal();
-  const now = useNow(pulse?.readAt ?? 0);
+  const now = useFlowClock(pulse?.readAt ?? 0);
   const ticking = Boolean(pulse && (BigInt(pulse.inWeiPerSec) > 0n || BigInt(pulse.streamWeiPerSec) > 0n));
   const live = ticking && pulse
     ? liveHomeColumns({
-        elapsed: BigInt(Math.max(0, now - pulse.readAt)),
+        elapsedMs: BigInt(Math.max(0, Math.floor((now - pulse.readAt) * 1000))),
         availableUsd8: BigInt(pulse.availableUsd8),
         streamingUsd8: BigInt(pulse.streamingUsd8),
         lockedUsd8: BigInt(pulse.lockedUsd8),
         usdcUsd8: BigInt(pulse.usdcUsd8),
         inWeiPerSec: BigInt(pulse.inWeiPerSec),
         inCapWei: BigInt(pulse.inCapWei),
+        outWeiPerSec: BigInt(pulse.outWeiPerSec),
         streamWeiPerSec: BigInt(pulse.streamWeiPerSec),
         streamRemainingWei: BigInt(pulse.streamRemainingWei),
       })
@@ -151,6 +143,9 @@ export function HomeBalance({
         locked: BigInt(lockedUsd8),
         total: BigInt(availableUsd8) + BigInt(streamingUsd8) + BigInt(lockedUsd8),
       };
+  const netWei = pulse ? BigInt(pulse.inWeiPerSec) - BigInt(pulse.outWeiPerSec) : 0n;
+  const netDigits = pulse ? streamDigits(netWei < 0n ? -netWei : netWei, pulse.quote) : homeBalancePlaces;
+  const pace = pulse && netWei !== 0n ? `${netWei < 0n ? "−" : "+"}${show(netWei < 0n ? -netWei : netWei, pulse.quote, netDigits)} ${pulse.quote.unit} each second` : "";
   const places = homeBalancePlaces;
   const shownTotal = formatUsdPlaces(live.total, places);
   const shownAvailable = formatUsdPlaces(live.available, places);
@@ -210,10 +205,12 @@ export function HomeBalance({
                 {conceal ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
               </button>
             </div>
-            <p className="mt-1 font-[family-name:var(--font-manrope)] text-5xl font-semibold tracking-[-0.04em] tabular-nums">
+            <p className="mt-1 whitespace-nowrap font-[family-name:var(--font-manrope)] text-5xl font-semibold tracking-[-0.04em] tabular-nums">
               {preferLocal ? figure(localUnit ?? "", shownLocal ?? "", ticking) : figure("$", shownTotal, ticking)}
             </p>
-            {preferLocal ? <p className="mt-0.5 text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal, ticking)}</p> : null}
+            {preferLocal ? <p className="mt-0.5 whitespace-nowrap text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal, ticking)}</p> : null}
+            {ticking && pace ? <p className="mt-1 text-xs font-medium text-[#3C4A2E] tabular-nums">{pace}</p> : null}
+            {ticking ? <SecondSweep /> : null}
           </div>
           <img src="/marks/saving.png" alt="" className="pointer-events-none hidden w-28 shrink-0 xl:block" />
         </div>
@@ -254,12 +251,14 @@ export function HomeBalance({
           </Link>
         </div>
       </div>
-      <p className="mt-2 font-display text-4xl font-semibold tracking-tight tabular-nums">
+      <p className="mt-2 whitespace-nowrap font-display text-4xl font-semibold tracking-tight tabular-nums">
         {preferLocal ? figure(localUnit ?? "", shownLocal ?? "", ticking) : figure("$", shownTotal, ticking)}
       </p>
       {preferLocal ? (
-        <p className="mt-0.5 text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal, ticking)}</p>
+        <p className="mt-0.5 whitespace-nowrap text-sm text-[#3C4A2E] tabular-nums">{figure("$", shownTotal, ticking)}</p>
       ) : null}
+      {ticking && pace ? <p className="mt-1 text-xs font-medium text-[#3C4A2E] tabular-nums">{pace}</p> : null}
+      {ticking ? <SecondSweep /> : null}
       <dl className="mt-4 grid grid-cols-3">
         {columns.map((column, index) => (
           <div key={column.label} className={index === 0 ? "pr-2" : "border-l border-[#141414]/10 px-3"}>

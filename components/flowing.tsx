@@ -1,34 +1,71 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { percent, show, streamDigits } from "@/lib/display";
 import { chainQuote, type Quote } from "@/lib/quote";
 import { Progress } from "@/components/ui/progress";
 
+let flowNow = 0;
+const flowListeners = new Set<() => void>();
+let flowRaf = 0;
+let flowInterval = 0;
+
+function emitFlowClock() {
+  flowNow = Date.now() / 1000;
+  flowListeners.forEach((listener) => listener());
+}
+
+function startFlowClock() {
+  if (flowRaf || flowInterval) return;
+  emitFlowClock();
+  const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) {
+    flowInterval = window.setInterval(emitFlowClock, 1000);
+    return;
+  }
+  const loop = () => {
+    emitFlowClock();
+    flowRaf = requestAnimationFrame(loop);
+  };
+  flowRaf = requestAnimationFrame(loop);
+}
+
+function stopFlowClock() {
+  if (flowListeners.size > 0) return;
+  if (flowRaf) cancelAnimationFrame(flowRaf);
+  if (flowInterval) window.clearInterval(flowInterval);
+  flowRaf = 0;
+  flowInterval = 0;
+}
+
+function subscribeFlowClock(listener: () => void) {
+  flowListeners.add(listener);
+  startFlowClock();
+  return () => {
+    flowListeners.delete(listener);
+    stopFlowClock();
+  };
+}
+
+export function useFlowClock(readAt = 0) {
+  return useSyncExternalStore(subscribeFlowClock, () => flowNow || Date.now() / 1000, () => readAt);
+}
+
 export function useFlowingValue(readAt: number, base: string, perSecond: string, floor?: string, ceiling?: string) {
-  const now = useNow(readAt);
+  const now = useFlowClock(readAt);
   return moved(readAt, now, base, perSecond, floor, ceiling);
 }
 
+const rollClass = "inline-flex w-max max-w-full flex-row flex-nowrap items-baseline whitespace-nowrap tabular-nums";
+
 export function RollingText({ text }: { text: string }) {
   return (
-    <span className="inline-flex w-max max-w-full flex-row flex-nowrap whitespace-nowrap tabular-nums" aria-label={text}>
+    <span className={rollClass} aria-label={text}>
       {text.split("").map((char, index) => (
         <RollChar key={`${index}-${text.length}`} char={char} />
       ))}
     </span>
   );
-}
-
-function useNow(readAt: number) {
-  const [now, setNow] = useState(readAt);
-  useEffect(() => {
-    const tick = () => setNow(Math.floor(Date.now() / 1000));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-  return now;
 }
 
 function asWei(value: string): bigint {
@@ -40,9 +77,9 @@ function asWei(value: string): bigint {
 }
 
 function moved(readAt: number, now: number, base: string, perSecond: string, floor = "0", ceiling?: string) {
-  const delta = Number.isFinite(now) && Number.isFinite(readAt) ? Math.max(0, Math.trunc(now - readAt)) : 0;
-  const elapsed = BigInt(delta);
-  let value = asWei(base) + asWei(perSecond) * elapsed;
+  const delta = Number.isFinite(now) && Number.isFinite(readAt) ? Math.max(0, now - readAt) : 0;
+  const elapsedMs = BigInt(Math.floor(delta * 1000));
+  let value = asWei(base) + (asWei(perSecond) * elapsedMs) / 1000n;
   const low = asWei(floor);
   if (value < low) value = low;
   if (ceiling !== undefined) {
@@ -55,9 +92,9 @@ function moved(readAt: number, now: number, base: string, perSecond: string, flo
 function RollingMoney({ value, quote, digits }: { value: bigint; quote: Quote; digits?: number }) {
   const text = show(value, quote, digits);
   return (
-    <span className="inline-flex w-max max-w-full flex-row flex-nowrap whitespace-nowrap tabular-nums" aria-label={text}>
+    <span className={rollClass} aria-label={text}>
       {text.split("").map((char, index) => (
-        <RollChar key={index} char={char} />
+        <RollChar key={`${index}-${text.length}`} char={char} />
       ))}
     </span>
   );
@@ -90,7 +127,7 @@ function RollChar({ char }: { char: string }) {
   );
 }
 
-function SecondSweep() {
+export function SecondSweep() {
   const [fraction, setFraction] = useState(0);
   const [reduce, setReduce] = useState(false);
 
@@ -138,8 +175,8 @@ export function HomeStream({
   streams: { rate: string; remaining: string; toMe: boolean; live: boolean }[];
   quote: Quote;
 }) {
-  const now = useNow(readAt);
-  const elapsed = BigInt(Math.max(0, now - readAt));
+  const now = useFlowClock(readAt);
+  const elapsed = BigInt(Math.max(0, Math.floor(now - readAt)));
   let liveRate = 0n;
   let streamingNow = 0n;
   let inflow = 0n;
@@ -221,10 +258,10 @@ export function FlowingText({
   plain?: boolean;
   quote?: Quote;
 }) {
-  const now = useNow(readAt);
+  const now = useFlowClock(readAt);
   const value = moved(readAt, now, base, perSecond, floor, ceiling);
   const digits = places ?? (fine ? streamDigits(BigInt(perSecond.startsWith("-") ? perSecond.slice(1) : perSecond), quote) : quote.digits);
-  if (plain || !fine) return show(value, quote, digits);
+  if (plain) return show(value, quote, digits);
   return <RollingMoney value={value} quote={quote} digits={digits} />;
 }
 
@@ -241,7 +278,7 @@ export function FlowingAmount({
   ceiling?: string;
   quote?: Quote;
 }) {
-  const now = useNow(readAt);
+  const now = useFlowClock(readAt);
   const value = moved(readAt, now, base, perSecond, "0", ceiling);
   return (
     <p className="flex items-baseline gap-2">
@@ -266,7 +303,7 @@ export function FlowingProgress({
   ceiling: string;
   whole: string;
 }) {
-  const now = useNow(readAt);
+  const now = useFlowClock(readAt);
   const value = moved(readAt, now, base, perSecond, "0", ceiling);
   return <Progress value={percent(value.toString(), whole)} className="mt-4 h-2" />;
 }
