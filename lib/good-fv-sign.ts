@@ -74,15 +74,6 @@ function signPasskey(from: Address, message: string): Promise<Hex> {
   });
 }
 
-/** Android PWAs do not give a cross-origin iframe the camera until this app has been allowed it. */
-export async function askFaceCamera() {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error("This phone cannot open a camera here. Open www.rvess.xyz in Chrome and try again.");
-  }
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  for (const track of stream.getTracks()) track.stop();
-}
-
 function webAuthnError(error: unknown) {
   const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   if (/timed out or was not allowed|NotAllowedError|Failed to request credential|AbortError/i.test(text)) {
@@ -94,7 +85,7 @@ function webAuthnError(error: unknown) {
 const erc1271Abi = parseAbi(["function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)"]);
 const ERC1271_MAGIC = "0x1626ba7e";
 
-/** GoodServer calls this on Celo before GoodID starts. Do not open the iframe unless it passes. */
+/** GoodServer calls this on Celo before GoodID starts. Do not open the tab unless it passes. */
 async function assertCeloFvSig(account: Address, message: string, signature: Hex) {
   const publicClient = createPublicClient({ chain: celo, transport: celoTransport() });
   const code = await publicClient.getCode({ address: account });
@@ -133,8 +124,8 @@ export function faceCheckHref(input: { address: Address; method: "passkey" | "wa
       account,
       nonce: Math.floor(Date.now() / 1000).toString(),
       signature,
-      callback: `${window.location.origin}/api/fv-callback`,
-      popup: true,
+      callback: `${window.location.origin}/settings?from=fv`,
+      popup: false,
     });
   });
 }

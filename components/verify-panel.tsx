@@ -6,7 +6,7 @@ import { Dialog } from "radix-ui";
 import { useSignedAction } from "@/components/sign-action";
 import { VerifiedTick } from "@/components/verify-badge";
 import { claimUbi, linkWallet } from "@/lib/actions";
-import { askFaceCamera, attachThisAccount, faceCheckHref, prepareFaceCheck } from "@/lib/good-fv-sign";
+import { attachThisAccount, faceCheckHref, prepareFaceCheck } from "@/lib/good-fv-sign";
 import { GOOD_IDENTITY_DOCS, WALLET_LINK_NOTICE } from "@/lib/good-fv";
 import { money, shortAddress } from "@/lib/display";
 import type { Address } from "viem";
@@ -42,8 +42,7 @@ export function VerifyPanel({
   const [note, setNote] = useState("");
   const [ok, setOk] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
-  const [fvSrc, setFvSrc] = useState("");
-  const [cameraHref, setCameraHref] = useState("");
+  const [fvHref, setFvHref] = useState("");
   const [passkeyReady, setPasskeyReady] = useState(method !== "passkey");
   const due = Number(claimable) > 0;
   const until = expiresAt > 0 ? new Date(expiresAt * 1000).toLocaleDateString() : "";
@@ -60,47 +59,37 @@ export function VerifyPanel({
   }, [address, method, verified]);
 
   useEffect(() => {
-    if (!fvSrc) return;
-    const tick = window.setInterval(() => router.refresh(), 4000);
-    return () => window.clearInterval(tick);
-  }, [fvSrc, router]);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("from") !== "fv" && params.get("verified") == null && params.get("isVerified") == null) return;
+    const passed = params.get("isVerified") === "true" || params.get("verified") === "true";
+    const reason = params.get("reason")?.trim();
+    setOk(passed);
+    setNote(passed ? "Face check finished. Refreshing this account…" : reason || "Come back here after the face check tab.");
+    window.history.replaceState(null, "", "/settings#verify");
+    if (passed) router.refresh();
+  }, [router]);
 
   useEffect(() => {
-    if (!fvSrc || !verified) return;
-    setFvSrc("");
+    if (!fvHref) return;
+    const tick = window.setInterval(() => router.refresh(), 4000);
+    return () => window.clearInterval(tick);
+  }, [fvHref, router]);
+
+  useEffect(() => {
+    if (!fvHref || !verified) return;
+    setFvHref("");
     setOk(true);
     setNote("Face check finished. Refreshing this account…");
-  }, [verified, fvSrc]);
+  }, [verified, fvHref]);
 
   function verify() {
     const href = faceCheckHref({ address, method });
     setNote("");
     setBusy(true);
     void href
-      .then((src) => setCameraHref(src))
+      .then(setFvHref)
       .catch((error) => setNote(error instanceof Error ? error.message : "Face verification did not start."))
       .finally(() => setBusy(false));
-  }
-
-  async function allowCamera() {
-    setNote("");
-    setBusy(true);
-    try {
-      await askFaceCamera();
-      setFvSrc(cameraHref);
-      setCameraHref("");
-    } catch (error) {
-      const denied = error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "NotFoundError");
-      setNote(
-        denied
-          ? "This installed app does not have camera yet. On Samsung: Settings → Apps → Rvess (or Chrome) → Permissions → Camera → Allow, then tap Allow camera again."
-          : error instanceof Error
-            ? error.message
-            : "The camera was not allowed.",
-      );
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function attach() {
@@ -207,7 +196,7 @@ export function VerifyPanel({
           </div>
           {method === "passkey" ? (
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              New face check unlocks this phone&apos;s passkey. Use Chrome on www.rvess.xyz. Already have the tick on Valora or another wallet? Use I already verified — that one does not use the passkey.
+              New face check unlocks this phone&apos;s passkey, then opens GoodDollar in a new tab so the camera can run. Already have the tick on Valora or another wallet? Use I already verified.
             </p>
           ) : null}
         </>
@@ -216,53 +205,27 @@ export function VerifyPanel({
         <p className={`mt-3 text-sm ${ok && note ? "text-foreground" : "text-destructive"}`}>{note || state?.error || linkState?.error}</p>
       ) : null}
 
-      {cameraHref && !fvSrc ? (
+      {fvHref ? (
         <div className="fixed inset-0 z-[80] flex flex-col bg-white px-5 pt-10">
-          <p className="text-lg font-semibold tracking-[-0.03em]">Allow camera</p>
+          <p className="text-lg font-semibold tracking-[-0.03em]">Open face check</p>
           <p className="mt-2 text-sm leading-relaxed text-[#5C6572]">
-            Face check runs inside this app. Android only turns the camera on after Rvess is allowed to use it. Tap below, then allow camera and microphone.
+            The camera cannot run inside this app on iPhone or Samsung. Continue in a new tab. Allow camera there. This page waits for you to come back.
           </p>
-          <button
-            type="button"
-            onClick={() => void allowCamera()}
-            disabled={busy}
-            className="mt-6 flex h-12 w-full items-center justify-center rounded-full bg-[#D6F34A] text-sm font-semibold text-[#141414] disabled:opacity-40"
+          <a
+            href={fvHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-6 flex h-12 w-full items-center justify-center rounded-full bg-[#D6F34A] text-sm font-semibold text-[#141414]"
           >
-            {busy ? "Waiting for this phone…" : "Allow camera"}
-          </button>
+            Open face check
+          </a>
           <button
             type="button"
-            onClick={() => setCameraHref("")}
+            onClick={() => setFvHref("")}
             className="mt-2 flex h-11 w-full items-center justify-center rounded-full text-sm font-medium text-[#5C6572]"
           >
             Close
           </button>
-        </div>
-      ) : null}
-
-      {fvSrc ? (
-        <div className="fixed inset-0 z-[80] flex flex-col bg-white">
-          <div className="flex h-12 shrink-0 items-center justify-between border-b border-[#E6EADF] px-3">
-            <p className="text-sm font-semibold">Face check</p>
-            <button
-              type="button"
-              onClick={() => {
-                setFvSrc("");
-                setCameraHref("");
-              }}
-              className="inline-flex h-9 items-center justify-center rounded-full px-3 text-sm font-medium text-[#5C6572]"
-            >
-              Close
-            </button>
-          </div>
-          <iframe
-            title="GoodDollar face verification"
-            src={fvSrc}
-            className="min-h-0 w-full flex-1 border-0"
-            allow="camera *; microphone *; fullscreen *; autoplay *; publickey-credentials-get *"
-            allowFullScreen
-            referrerPolicy="no-referrer-when-downgrade"
-          />
         </div>
       ) : null}
 
