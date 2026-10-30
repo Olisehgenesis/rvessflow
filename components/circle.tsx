@@ -1,11 +1,14 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { Dialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
+import { GroupRotationPlan } from "@/components/group-bits";
 import { useSignedAction } from "@/components/sign-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorNote } from "@/components/ui-bits";
+import { draftCycleSeconds, rotationPlan } from "@/lib/group-plan";
 import {
   acceptJoin,
   addMember,
@@ -58,7 +61,7 @@ export function DraftTerms() {
       <label className="block space-y-1.5">
         <Label htmlFor="contribution">Each contribution</Label>
         <Input id="contribution" name="contribution" placeholder="100" inputMode="decimal" className={field} aria-invalid={Boolean(state?.error)} />
-        <span className="block text-xs leading-relaxed text-muted-foreground">Each member posts contribution × cycles as collateral before the rotation can start.</span>
+        <span className="block text-xs leading-relaxed text-muted-foreground">Each member posts this amount for every turn before the rotation can start.</span>
       </label>
       <label className="block space-y-1.5">
         <Label htmlFor="payout">How each turn is paid</Label>
@@ -156,7 +159,7 @@ export function DraftDesk({ draft }: { draft: DraftView }) {
       {draft.mine ? <ApplicationsSwitch id={draft.id} open={draft.open} /> : null}
       {!draft.mine && !draft.member && draft.open && !draft.applied ? <Apply id={draft.id} /> : null}
       {draft.applied && !draft.member ? <p className="text-sm text-muted-foreground">You applied. The organizer adds you, then sets the order.</p> : null}
-      {draft.mine ? <StartGroup id={draft.id} count={draft.members.length} /> : null}
+      {draft.mine ? <StartGroup draft={draft} /> : null}
     </div>
   );
 }
@@ -256,25 +259,77 @@ export function ApplyLink({ id }: { id: string }) {
   return <Apply id={id} compact />;
 }
 
-function StartGroup({ id, count }: { id: string; count: number }) {
+function StartGroup({ draft }: { draft: DraftView }) {
+  const ready = draft.members.length >= 3;
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (ready) setOpen(true);
+  }, [ready, draft.members.length]);
   const [state, action, pending] = useSignedAction(startDraft);
   const [dropState, drop, dropping] = useActionState(removeDraft, null);
+  const plan = rotationPlan({
+    contribution: draft.contribution,
+    token: draft.token,
+    cycles: draft.cycles,
+    cycleSeconds: draftCycleSeconds(draft.cycle, draft.days),
+    members: draft.members,
+  });
   return (
     <div className="space-y-3">
-      <p className="text-sm leading-relaxed text-muted-foreground">
-        {count < 3
-          ? "Add at least 3 people, including you. Starting writes this order onto the group. Everyone then posts collateral, and you start the rotation."
-          : "Starting writes these members, in this order, onto the group. Everyone posts collateral, then you start the rotation."}
-      </p>
-      <form action={action} className="space-y-2">
-        <input type="hidden" name="id" value={id} />
-        <ErrorNote error={state?.error} />
-        <Button type="submit" disabled={pending} className="h-12 w-full rounded-full text-base">
-          {pending ? "Starting…" : "Start the group"}
+      {ready ? (
+        <GroupRotationPlan
+          youPost={plan.youPost}
+          othersCount={plan.othersCount}
+          othersPost={plan.othersPost}
+          eachTurn={plan.eachTurn}
+          turns={plan.turns}
+        />
+      ) : (
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Add at least 3 people, including you. Then you can start the group and see who is paid, how much, and when.
+        </p>
+      )}
+      {ready ? (
+        <Button type="button" onClick={() => setOpen(true)} className="h-12 w-full rounded-full text-base">
+          Start the group
         </Button>
-      </form>
+      ) : (
+        <Button type="button" disabled className="h-12 w-full rounded-full text-base">
+          Start the group
+        </Button>
+      )}
+      <Dialog.Root open={open && ready} onOpenChange={setOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-[#141414]/40 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
+          <Dialog.Content className="fixed top-1/2 left-1/2 z-50 max-h-[min(92dvh,36rem)] w-[min(100%-1.25rem,26rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.7rem] bg-white px-5 pt-5 pb-5 shadow-[0_28px_80px_-28px_rgba(0,0,0,0.55)] outline-none">
+            <Dialog.Title className="text-lg font-semibold tracking-[-0.03em]">Who pays, who gets paid</Dialog.Title>
+            <Dialog.Description className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+              You post {plan.youPost}. Each of the other members posts the same. Starting writes this order on-chain.
+            </Dialog.Description>
+            <div className="mt-4">
+              <GroupRotationPlan
+                youPost={plan.youPost}
+                othersCount={plan.othersCount}
+                othersPost={plan.othersPost}
+                eachTurn={plan.eachTurn}
+                turns={plan.turns}
+              />
+            </div>
+            <form action={action} className="mt-4 space-y-2">
+              <input type="hidden" name="id" value={draft.id} />
+              <ErrorNote error={state?.error} />
+              <Button type="submit" disabled={pending} className="h-12 w-full rounded-full text-base">
+                {pending ? "Starting…" : "Start the group"}
+              </Button>
+            </form>
+            <Dialog.Close className="mt-2 flex h-11 w-full items-center justify-center rounded-full text-sm font-medium text-[#5C6572]">
+              Not yet
+            </Dialog.Close>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       <form action={drop} className="space-y-2">
-        <input type="hidden" name="id" value={id} />
+        <input type="hidden" name="id" value={draft.id} />
         <ErrorNote error={dropState?.error} />
         <Button type="submit" disabled={dropping} variant="outline" className="h-12 w-full rounded-full text-base">
           {dropping ? "Deleting…" : "Delete this draft"}

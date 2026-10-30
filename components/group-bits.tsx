@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { TurnShare } from "@/lib/group-plan";
 
 export function GroupLead({ src, title, body }: { src: string; title: string; body?: string }) {
   return (
@@ -40,6 +41,61 @@ export function StatStrip({ items }: { items: { label: string; value: string }[]
         </div>
       ))}
     </dl>
+  );
+}
+
+export function GroupRotationPlan({
+  youPost,
+  othersCount,
+  othersPost,
+  eachTurn,
+  turns,
+}: {
+  youPost: string;
+  othersCount: number;
+  othersPost: string;
+  eachTurn: string;
+  turns: TurnShare[];
+}) {
+  return (
+    <div className="space-y-3">
+      <dl className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card text-sm">
+        <div className="flex items-start justify-between gap-4 px-4 py-3">
+          <dt className="text-muted-foreground">You post</dt>
+          <dd className="text-right font-semibold tabular-nums">{youPost}</dd>
+        </div>
+        <div className="flex items-start justify-between gap-4 px-4 py-3">
+          <dt className="text-muted-foreground">
+            {othersCount <= 0
+              ? "Other members post"
+              : othersCount === 1
+                ? "The other member posts"
+                : `Each of the other ${othersCount} members posts`}
+          </dt>
+          <dd className="text-right font-semibold tabular-nums">{othersPost}</dd>
+        </div>
+        <div className="flex items-start justify-between gap-4 px-4 py-3">
+          <dt className="text-muted-foreground">Each turn receives</dt>
+          <dd className="text-right font-semibold tabular-nums">{eachTurn}</dd>
+        </div>
+      </dl>
+      {turns.length > 0 ? (
+        <ol className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card text-sm">
+          {turns.map((turn) => (
+            <li key={turn.turn} className="px-4 py-3">
+              <p className="font-medium">
+                Turn {turn.turn}
+                <span className="font-normal text-muted-foreground"> · </span>
+                {turn.name}
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                Gets {turn.receives} · {turn.when}
+              </p>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </div>
   );
 }
 

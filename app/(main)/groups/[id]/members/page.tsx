@@ -42,7 +42,7 @@ async function MembersBody({ params }: { params: Promise<{ id: string }> }) {
                 {you ? `${member.name} (you)` : member.name}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {member.posted ? "Collateral in" : "Collateral not posted"}
+                {member.posted ? `${labeledGroup(group.collateral, group.token)} posted` : `Needs to post ${labeledGroup(group.collateral, group.token)}`}
                 {member.missed ? ` · Missed ${member.missed}` : ""}
                 {` · Received ${labeledGroup(member.received, group.token)}`}
               </p>

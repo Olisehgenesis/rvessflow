@@ -23,7 +23,7 @@ async function ActivityBody({ params }: { params: Promise<{ id: string }> }) {
   if (!group) notFound();
   return (
     <Page title="Activity" back={`/groups/${group.id}`}>
-      <GroupLead src="/marks/activity.png" title="What the contract shows" body="Collateral, payments, and misses. No times are invented." />
+      <GroupLead src="/marks/activity.png" title="What the contract shows" body="Posted contributions, payments, and misses. No times are invented." />
       <ul className="divide-y divide-border border-y border-border text-sm">
         <li className="py-3">
           <p className="font-medium">Group {group.started ? "started" : group.cancelled ? "cancelled" : "created"}</p>
@@ -33,7 +33,7 @@ async function ActivityBody({ params }: { params: Promise<{ id: string }> }) {
           <li key={member.account} className="py-3">
             <p className="font-medium">{member.name}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {member.posted ? "Collateral posted" : "Collateral not posted"}
+              {member.posted ? `${labeledGroup(group.collateral, group.token)} posted` : `Needs to post ${labeledGroup(group.collateral, group.token)}`}
               {` · Given ${labeledGroup(member.given, group.token)} · Received ${labeledGroup(member.received, group.token)}`}
               {member.missed ? ` · Missed ${member.missed}` : ""}
             </p>

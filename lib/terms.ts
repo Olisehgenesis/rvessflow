@@ -17,7 +17,7 @@ export const terms = [
   },
   {
     title: "Groups",
-    body: "A group takes collateral before it starts. A missed payment can move that collateral into the pot and pass the stream to the next member.",
+    body: "A group takes each member's posted contribution before it starts. A missed payment can move that money into the pot and pass the stream to the next member.",
   },
   {
     title: "Who can change the protocol",

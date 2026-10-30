@@ -3,9 +3,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import Loading from "../../loading";
 import { GroupButton } from "@/components/forms";
-import { GroupLead, GroupNav } from "@/components/group-bits";
+import { GroupLead, GroupNav, GroupRotationPlan } from "@/components/group-bits";
 import { Fact, Facts, Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
+import { liveRotationPlan } from "@/lib/group-plan";
 import { labeledGroup } from "@/lib/group-token";
 import { groupLabel } from "@/lib/circle";
 import { loadPortfolio } from "@/lib/protocol";
@@ -30,7 +31,22 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
   const mine = data.me.address.toLowerCase() === group.creator.toLowerCase();
   const status = group.finalized ? "Finished" : group.started ? "Active" : group.cancelled ? "Cancelled" : "Not started";
   const base = `/groups/${group.id}`;
-  const payLabel = !group.started && !group.cancelled && me && !me.posted ? "Post collateral" : group.started && group.cycleOpen ? "Pay this cycle" : "";
+  const plan = liveRotationPlan({
+    contributionWei: group.contribution,
+    token: group.token,
+    cycles: group.cycles,
+    cycleSeconds: group.cycleSeconds,
+    members: group.members.map((member) => ({
+      name: member.name,
+      you: member.account.toLowerCase() === data.me.address.toLowerCase(),
+    })),
+  });
+  const payLabel =
+    !group.started && !group.cancelled && me && !me.posted
+      ? `Post ${labeledGroup(group.collateral, group.token)}`
+      : group.started && group.cycleOpen
+        ? `Pay ${labeledGroup(group.contribution, group.token)}`
+        : "";
   return (
     <Page title={label?.name || `Group ${group.id}`} back="/groups">
       <div className="contents lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] lg:items-start lg:gap-6">
@@ -46,6 +62,17 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
         <Fact label="Cycles" value={String(group.cycles)} />
         <Fact label="Organizer" value={group.creatorName} />
       </Facts>
+      {!group.started && !group.cancelled ? (
+        <div className="mt-4">
+          <GroupRotationPlan
+            youPost={plan.youPost}
+            othersCount={plan.othersCount}
+            othersPost={plan.othersPost}
+            eachTurn={plan.eachTurn}
+            turns={plan.turns}
+          />
+        </div>
+      ) : null}
       </div>
       <div className="lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
       <GroupNav

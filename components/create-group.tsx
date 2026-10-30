@@ -61,7 +61,9 @@ export function CreateGroup({ live }: { live: Record<GroupNet, boolean> }) {
           <Row label="You pay, all turns" value={total ? `${total} ${token === "gdx" ? "G$" : "USD"}` : "—"} />
           <Row label="Paid as" value={payout === "plain" ? "Transfer each turn" : "Stream"} />
         </div>
-        <p className="text-sm text-muted-foreground">You add people on the next screen. The group is written on-chain only when you start it.</p>
+        <p className="text-sm text-muted-foreground">
+          You add people on the next screen. When they are in, you start the group. Each of you posts {total ? `${total} ${token === "gdx" ? "G$" : "USD"}` : "your contribution for every turn"} before the rotation pays.
+        </p>
         <ErrorNote error={state?.error} />
         <Button type="submit" disabled={pending || !plan} className="h-12 w-full rounded-full text-base">
           {pending ? "Creating…" : "Create group"}

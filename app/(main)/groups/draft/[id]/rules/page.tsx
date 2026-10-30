@@ -24,7 +24,7 @@ async function RulesBody({ params }: { params: Promise<{ id: string }> }) {
         <li className="py-3">Each cycle, every member pays {draft.contribution} {draft.token === "gdx" ? "G$" : "USD"}. A cycle lasts {draft.cycleLabel}.</li>
         <li className="py-3">{draft.plain ? "Each payment goes straight to the person whose turn it is." : "The pot streams to the person whose turn it is."}</li>
         <li className="py-3">Turn 1 receives the first cycle. The organizer can change the order until the rotation starts.</li>
-        <li className="py-3">Everyone posts collateral before the rotation can start. Collateral comes back if the group is cancelled before it starts, or when it finishes.</li>
+        <li className="py-3">Before it starts, each member posts their contribution for every turn. Each turn, the person whose turn it is receives everyone&apos;s contribution for that turn. Posted money comes back if the group is cancelled before it starts, or when it finishes.</li>
         <li className="py-3">A missed payment is recorded on the member. The window and the grace period are set from the cycle length.</li>
       </ul>
     </Page>

@@ -76,7 +76,7 @@ async function SettingsBody({ params }: { params: Promise<{ id: string }> }) {
       </ul>
       <p className="mt-4 text-sm leading-relaxed text-muted-foreground">A group has one organizer. The organizer cannot pause a running group, and cannot change the amount or the cycle after the group is on-chain.</p>
       <div className="mt-4 space-y-3">
-        {!group.started && !group.cancelled && me ? <GroupButton id={group.id} fn="exitBeforeStart" label="Leave and take collateral back" /> : null}
+        {!group.started && !group.cancelled && me ? <GroupButton id={group.id} fn="exitBeforeStart" label="Leave and take your contribution back" /> : null}
         {!group.started && !group.cancelled && mine ? <GroupButton id={group.id} fn="cancelBeforeStart" label="Cancel group" /> : null}
       </div>
     </Page>

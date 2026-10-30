@@ -4,6 +4,7 @@ import Loading from "../../../loading";
 import { GroupLead } from "@/components/group-bits";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
+import { weiTimes } from "@/lib/group-plan";
 import { labeledGroup } from "@/lib/group-token";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
@@ -29,7 +30,7 @@ async function RulesBody({ params }: { params: Promise<{ id: string }> }) {
         <li className="py-3">Each cycle, every member pays {labeledGroup(group.contribution, group.token)}. A cycle lasts {spanLabel(group.cycleSeconds)}.</li>
         <li className="py-3">There are {spanLabel(group.windowSeconds)} to pay, then {spanLabel(group.graceSeconds)} of grace.</li>
         <li className="py-3">Turn 1 receives the first cycle. The order locks when the rotation starts.</li>
-        <li className="py-3">Collateral is {labeledGroup(group.collateral, group.token)}. It comes back if the group is cancelled before it starts, or when the group finishes.</li>
+        <li className="py-3">Before it starts, each member posts {labeledGroup(group.collateral, group.token)} — their contribution for every turn. Each turn, the person whose turn it is receives {labeledGroup(weiTimes(group.contribution, group.members.length), group.token)}. Posted money comes back if the group is cancelled before it starts, or when it finishes.</li>
         <li className="py-3">A missed payment stays on the member&apos;s record. Pausing the group is not something the organizer can do.</li>
       </ul>
     </Page>
