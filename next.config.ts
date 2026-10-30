@@ -5,11 +5,12 @@ const network = picked === "sepolia" || picked === "celo" ? picked : "base";
 
 const contentSecurityPolicy = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "connect-src 'self' https: wss:",
+  "worker-src 'self' blob:",
   "frame-src 'self' https:",
   "frame-ancestors 'self'",
   "base-uri 'self'",

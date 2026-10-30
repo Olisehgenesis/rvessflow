@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useRef } from "react";
 import Link from "next/link";
+import posthog from "posthog-js";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { AvatarTick } from "@/components/verify-badge";
 
@@ -18,6 +19,18 @@ export function AccountFrame({
   verified?: boolean;
   children: React.ReactNode;
 }) {
+  const identifiedAddress = useRef<string | null>(null);
+
+  useEffect(() => {
+    try {
+      if (identifiedAddress.current && identifiedAddress.current !== address) posthog.reset();
+      posthog.identify(address, { name });
+      identifiedAddress.current = address;
+    } catch {
+      // Identity must not block the signed-in shell.
+    }
+  }, [address, name]);
+
   return <AccountContext.Provider value={{ name, address, verified }}>{children}</AccountContext.Provider>;
 }
 

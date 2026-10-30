@@ -13,6 +13,8 @@ import type { Intent, SignPayload } from "@/lib/intent";
 import { inferFrequency } from "@/lib/intent";
 import { goalNotes, patchGoalNote, recordActivity, saveGoalNote, type ActivityRecord } from "@/lib/notes";
 import { parseUsd, readPay, readReceive, type PayAsset } from "@/lib/pay-math";
+import { captureServerEvent } from "@/lib/posthog-server";
+import { logPostHogInfo } from "@/lib/posthog-logger";
 import { activityUnits, isSendAsset, parseSendAmount, type SendAsset } from "@/lib/send-math";
 import { sendRoute } from "@/lib/send";
 import { appGroupNet, groupNetLabel, netFromLabel, parseGroupKey, type GroupNet } from "@/lib/group-network";
@@ -420,6 +422,7 @@ export async function createSaving(_prev: ActionState, formData: FormData): Prom
       network: networkField(formData),
       ref: "",
     });
+    await captureServerEvent(who.address, "saving_creation_started", { network: intent.network, has_external_payment: Boolean(pay) });
     if (who.method === "tester") {
       if (pay || intent.network !== appGroupNet()) return await finishTester(intent);
       const id = await openSaving(await accountIndex(), { name, amount, target: "", duration, startAt: start });
@@ -468,6 +471,7 @@ export async function createStream(_prev: ActionState, formData: FormData): Prom
       network: networkField(formData),
       ref: "",
     });
+    await captureServerEvent(who.address, "stream_creation_started", { network: intent.network, stream_type: flowKind, has_external_payment: Boolean(pay) });
     if (who.method === "tester") {
       if (pay || intent.network !== appGroupNet()) return await finishTester(intent);
       const id = await openStream(await accountIndex(), {
@@ -511,6 +515,8 @@ export async function createLock(_prev: ActionState, formData: FormData): Promis
       network,
       ref: "",
     });
+    await captureServerEvent(who.address, "lock_creation_started", { network, has_external_payment: Boolean(pay), earns_yield: intent.earnYield });
+    await logPostHogInfo("Lock creation started", { action: "lock_creation", network, has_external_payment: Boolean(pay), earns_yield: intent.earnYield });
     if (who.method === "tester") {
       if (pay || network !== appGroupNet()) return await finishTester(intent);
       const id = await openLock(await accountIndex(), {
@@ -547,6 +553,8 @@ export async function addMoney(_prev: ActionState, formData: FormData): Promise<
       network,
       ref: "",
     });
+    await captureServerEvent(who.address, "deposit_started", { network, has_external_payment: Boolean(pay) });
+    await logPostHogInfo("Deposit started", { action: "deposit", network, has_external_payment: Boolean(pay) });
     if (who.method === "tester") {
       if (pay || network !== appGroupNet()) return await finishTester(intent);
       const { depositIdle } = await import("@/lib/protocol");
@@ -565,6 +573,9 @@ export async function addMoney(_prev: ActionState, formData: FormData): Promise<
 export async function createDraft(_prev: ActionState, formData: FormData): Promise<ActionState> {
   let id = "";
   try {
+    const who = await viewer();
+    const network = String(formData.get("network") ?? "");
+    const token = String(formData.get("token") ?? "usd");
     id = await openDraft({
       name: String(formData.get("name") ?? ""),
       description: String(formData.get("description") ?? ""),
@@ -573,9 +584,10 @@ export async function createDraft(_prev: ActionState, formData: FormData): Promi
       cycle: String(formData.get("cycle") ?? ""),
       days: String(formData.get("days") ?? ""),
       plain: String(formData.get("payout") ?? "") === "plain",
-      network: String(formData.get("network") ?? ""),
-      token: String(formData.get("token") ?? "usd"),
+      network,
+      token,
     });
+    await captureServerEvent(who.address, "group_draft_created", { network, token, uses_streaming_payout: String(formData.get("payout") ?? "") !== "plain" });
   } catch (error) {
     return spoken(error);
   }
@@ -659,7 +671,9 @@ export async function removeMember(_prev: ActionState, formData: FormData): Prom
 
 export async function applyJoin(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
+    const who = await viewer();
     await applyToDraft(String(formData.get("id") ?? ""));
+    await captureServerEvent(who.address, "group_join_application_submitted");
   } catch (error) {
     return spoken(error);
   }
@@ -712,6 +726,7 @@ export async function startDraft(_prev: ActionState, formData: FormData): Promis
     await requireTerms();
     const who = await viewer();
     const draftId = String(formData.get("id") ?? "");
+    await captureServerEvent(who.address, "group_start_started");
     if (who.method === "tester") {
       const chainId = await launchDraft(draftId);
       refresh();
@@ -1043,6 +1058,8 @@ export async function sendFunds(_prev: ActionState, formData: FormData): Promise
       label = shortAddress(to);
     }
     const intent = refIntent({ kind: "send" as const, asset, amount: amount.replace(/,/g, "").trim(), to, label, ref: "" });
+    await captureServerEvent(who.address, "funds_send_started", { asset, recipient_type: contact ? "saved_contact" : "wallet_address" });
+    await logPostHogInfo("Funds send started", { action: "funds_send", asset, recipient_type: contact ? "saved_contact" : "wallet_address" });
     if (who.method === "tester") return await finishTester(intent);
     return await handoff(intent);
   } catch (error) {
@@ -1058,6 +1075,7 @@ export async function withdrawUsd(_prev: ActionState, formData: FormData): Promi
     const amount = usdField(formData);
     const receive = readReceive(String(formData.get("receive") ?? "usdc"));
     const intent = refIntent({ kind: "withdraw" as const, amount, receive, ref: "" });
+    await captureServerEvent(who.address, "funds_withdrawal_started", { receive_asset: receive });
     if (who.method === "tester") return await finishTester(intent);
     return await handoff(intent);
   } catch (error) {
@@ -1107,6 +1125,7 @@ export async function swapGdx(_prev: ActionState, formData: FormData): Promise<A
     const amount = String(formData.get("amount") ?? "");
     parseSendAmount(side === "buy" ? gdxViaSend(viaRaw) : "celo-gdx", amount);
     const intent = refIntent({ kind: "gdxSwap" as const, side, via: viaRaw, amount: amount.replace(/,/g, "").trim(), ref: "" });
+    await captureServerEvent(who.address, "gdx_swap_started", { side, via: viaRaw });
     if (who.method === "tester") return await finishTester(intent);
     return await handoff(intent);
   } catch (error) {
@@ -1139,6 +1158,7 @@ export async function claimUbi(_prev: ActionState, _formData: FormData): Promise
     await requireTerms();
     const who = await viewer();
     const intent = refIntent({ kind: "claim" as const, ref: "" });
+    await captureServerEvent(who.address, "ubi_claim_started");
     if (who.method === "tester") return await finishTester(intent);
     return await handoff(intent);
   } catch (error) {

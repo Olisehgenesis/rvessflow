@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { signOut } from "@/lib/actions";
 
 export function SignOutForm({ className }: { className: string }) {
@@ -9,7 +10,9 @@ export function SignOutForm({ className }: { className: string }) {
       onSubmit={(event) => {
         if (window.matchMedia("(min-width: 64rem)").matches && !window.confirm("Sign out of Rvess on this browser?")) {
           event.preventDefault();
+          return;
         }
+        posthog.reset();
       }}
     >
       <button type="submit" className={className}>
