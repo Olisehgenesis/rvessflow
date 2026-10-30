@@ -25,10 +25,11 @@ coverage/
 # group directory (phones, emails, link passwords)
 /data
 
-# private key stays on this machine. encrypted .env files are safe to commit.
+# secrets stay local. private keys are stored on Vercel, not in git.
+.env
+.env*
+!.env.example
 .env.keys
-.env.local
-.env*.local
 wallet/
 *.pem
 
