@@ -738,7 +738,13 @@ async function planGdxSwap(owner: Address, intent: Extract<Intent, { kind: "gdxS
   }
   const quoted = await quoteGdxSwap(side, amount);
   const calls: PreparedCall[] = [];
-  await approveIfNeeded(calls, owner, quoted.tokenIn, GDX_BROKER, amount, gdxCeloClient());
+  const allowance = await gdxCeloClient.readContract({
+    address: quoted.tokenIn,
+    abi: erc20,
+    functionName: "allowance",
+    args: [owner, GDX_BROKER],
+  });
+  if (allowance < amount) calls.push(encode(quoted.tokenIn, erc20, "approve", [GDX_BROKER, amount]));
   calls.push(
     encode(GDX_BROKER, gdxBrokerAbi, "swapIn", [
       GDX_EXCHANGE_PROVIDER,

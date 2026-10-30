@@ -63,15 +63,10 @@ export function exitContributionPct(raw = GDX_EXIT_CONTRIBUTION): number {
   return Number((raw * 100n) / GDX_RATIO_SCALE);
 }
 
-let reader: ReturnType<typeof createPublicClient> | null = null;
-
-export function gdxCeloClient() {
-  if (!reader) reader = createPublicClient({ chain: celo, transport: celoTransport() });
-  return reader;
-}
+export const gdxCeloClient = createPublicClient({ chain: celo, transport: celoTransport() });
 
 export async function readGdxUsd8(): Promise<bigint> {
-  const price = await gdxCeloClient().readContract({
+  const price = await gdxCeloClient.readContract({
     address: GDX_EXCHANGE_PROVIDER,
     abi: gdxProviderAbi,
     functionName: "currentPrice",
@@ -83,7 +78,7 @@ export async function readGdxUsd8(): Promise<bigint> {
 export async function quoteGdxSwap(side: GdxSide, amountIn: bigint) {
   if (amountIn <= 0n) throw new Error("Enter an amount greater than zero.");
   const pair = gdxPair(side);
-  const amountOut = await gdxCeloClient().readContract({
+  const amountOut = await gdxCeloClient.readContract({
     address: GDX_BROKER,
     abi: gdxBrokerAbi,
     functionName: "getAmountOut",
