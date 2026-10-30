@@ -75,8 +75,10 @@ function withBudget<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
   });
 }
 
+type Rpc = Pick<PublicClient, "getBlockNumber" | "getLogs" | "readContract">;
+
 async function logsInRange(
-  client: PublicClient,
+  client: Rpc,
   params: { address: Address; event: LogEvent; args?: object },
   from: bigint,
   to: bigint,
@@ -103,7 +105,7 @@ function argsOf(log: Log): Record<string, unknown> {
   return ((log as { args?: Record<string, unknown> }).args ?? {}) as Record<string, unknown>;
 }
 
-async function readChain(client: PublicClient, site: Site): Promise<ChainStats> {
+async function readChain(client: Rpc, site: Site): Promise<ChainStats> {
   const latest = await client.getBlockNumber();
   const from = latest > LOG_SPAN ? latest - LOG_SPAN : 0n;
   const to = latest;
@@ -141,12 +143,13 @@ async function readChain(client: PublicClient, site: Site): Promise<ChainStats> 
   }
 
   let gdx = 0n;
-  if (site.goodDollar) {
+  const token = site.goodDollar;
+  if (token) {
     const touch = [site.locks, site.groups];
     const legs = await Promise.all(
       touch.flatMap((addr) => [
-        logsInRange(client, { address: site.goodDollar, event: transfer, args: { to: addr } }, from, to),
-        logsInRange(client, { address: site.goodDollar, event: transfer, args: { from: addr } }, from, to),
+        logsInRange(client, { address: token, event: transfer, args: { to: addr } }, from, to),
+        logsInRange(client, { address: token, event: transfer, args: { from: addr } }, from, to),
       ]),
     );
     const seen = new Set<string>();
@@ -188,8 +191,8 @@ export async function loadProtocolStats(): Promise<ProtocolStats> {
   });
 
   const [celoStats, baseStats] = await Promise.all([
-    readChain(celoClient, celoSite).catch(() => blank(celoSite)),
-    readChain(baseClient, baseSite).catch(() => blank(baseSite)),
+    readChain(celoClient as Rpc, celoSite).catch(() => blank(celoSite)),
+    readChain(baseClient as Rpc, baseSite).catch(() => blank(baseSite)),
   ]);
 
   const chains = [celoStats, baseStats];
