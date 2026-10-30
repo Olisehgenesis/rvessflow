@@ -74,6 +74,15 @@ function signPasskey(from: Address, message: string): Promise<Hex> {
   });
 }
 
+/** Android PWAs do not give a cross-origin iframe the camera until this app has been allowed it. */
+export async function askFaceCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("This phone cannot open a camera here. Open www.rvess.xyz in Chrome and try again.");
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  for (const track of stream.getTracks()) track.stop();
+}
+
 function webAuthnError(error: unknown) {
   const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   if (/timed out or was not allowed|NotAllowedError|Failed to request credential|AbortError/i.test(text)) {

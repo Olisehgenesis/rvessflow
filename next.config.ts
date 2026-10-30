@@ -39,7 +39,11 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           {
             key: "Permissions-Policy",
-            value: 'camera=(self "https://goodid.gooddollar.org"), microphone=(self "https://goodid.gooddollar.org"), geolocation=()',
+            value: 'camera=*, microphone=*, geolocation=()',
+          },
+          {
+            key: "Feature-Policy",
+            value: "camera *; microphone *",
           },
           { key: "Strict-Transport-Security", value: "max-age=15552000; includeSubDomains" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },

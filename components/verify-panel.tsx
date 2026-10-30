@@ -6,7 +6,7 @@ import { Dialog } from "radix-ui";
 import { useSignedAction } from "@/components/sign-action";
 import { VerifiedTick } from "@/components/verify-badge";
 import { claimUbi, linkWallet } from "@/lib/actions";
-import { attachThisAccount, faceCheckHref, prepareFaceCheck } from "@/lib/good-fv-sign";
+import { askFaceCamera, attachThisAccount, faceCheckHref, prepareFaceCheck } from "@/lib/good-fv-sign";
 import { GOOD_IDENTITY_DOCS, WALLET_LINK_NOTICE } from "@/lib/good-fv";
 import { money, shortAddress } from "@/lib/display";
 import type { Address } from "viem";
@@ -43,6 +43,7 @@ export function VerifyPanel({
   const [ok, setOk] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [fvSrc, setFvSrc] = useState("");
+  const [cameraHref, setCameraHref] = useState("");
   const [passkeyReady, setPasskeyReady] = useState(method !== "passkey");
   const due = Number(claimable) > 0;
   const until = expiresAt > 0 ? new Date(expiresAt * 1000).toLocaleDateString() : "";
@@ -76,9 +77,30 @@ export function VerifyPanel({
     setNote("");
     setBusy(true);
     void href
-      .then(setFvSrc)
+      .then((src) => setCameraHref(src))
       .catch((error) => setNote(error instanceof Error ? error.message : "Face verification did not start."))
       .finally(() => setBusy(false));
+  }
+
+  async function allowCamera() {
+    setNote("");
+    setBusy(true);
+    try {
+      await askFaceCamera();
+      setFvSrc(cameraHref);
+      setCameraHref("");
+    } catch (error) {
+      const denied = error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "NotFoundError");
+      setNote(
+        denied
+          ? "This installed app does not have camera yet. On Samsung: Settings → Apps → Rvess (or Chrome) → Permissions → Camera → Allow, then tap Allow camera again."
+          : error instanceof Error
+            ? error.message
+            : "The camera was not allowed.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function attach() {
@@ -194,13 +216,40 @@ export function VerifyPanel({
         <p className={`mt-3 text-sm ${ok && note ? "text-foreground" : "text-destructive"}`}>{note || state?.error || linkState?.error}</p>
       ) : null}
 
+      {cameraHref && !fvSrc ? (
+        <div className="fixed inset-0 z-[80] flex flex-col bg-white px-5 pt-10">
+          <p className="text-lg font-semibold tracking-[-0.03em]">Allow camera</p>
+          <p className="mt-2 text-sm leading-relaxed text-[#5C6572]">
+            Face check runs inside this app. Android only turns the camera on after Rvess is allowed to use it. Tap below, then allow camera and microphone.
+          </p>
+          <button
+            type="button"
+            onClick={() => void allowCamera()}
+            disabled={busy}
+            className="mt-6 flex h-12 w-full items-center justify-center rounded-full bg-[#D6F34A] text-sm font-semibold text-[#141414] disabled:opacity-40"
+          >
+            {busy ? "Waiting for this phone…" : "Allow camera"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setCameraHref("")}
+            className="mt-2 flex h-11 w-full items-center justify-center rounded-full text-sm font-medium text-[#5C6572]"
+          >
+            Close
+          </button>
+        </div>
+      ) : null}
+
       {fvSrc ? (
         <div className="fixed inset-0 z-[80] flex flex-col bg-white">
           <div className="flex h-12 shrink-0 items-center justify-between border-b border-[#E6EADF] px-3">
             <p className="text-sm font-semibold">Face check</p>
             <button
               type="button"
-              onClick={() => setFvSrc("")}
+              onClick={() => {
+                setFvSrc("");
+                setCameraHref("");
+              }}
               className="inline-flex h-9 items-center justify-center rounded-full px-3 text-sm font-medium text-[#5C6572]"
             >
               Close
@@ -210,7 +259,8 @@ export function VerifyPanel({
             title="GoodDollar face verification"
             src={fvSrc}
             className="min-h-0 w-full flex-1 border-0"
-            allow="camera *; microphone *; fullscreen *; publickey-credentials-get *"
+            allow="camera *; microphone *; fullscreen *; autoplay *; publickey-credentials-get *"
+            allowFullScreen
             referrerPolicy="no-referrer-when-downgrade"
           />
         </div>
