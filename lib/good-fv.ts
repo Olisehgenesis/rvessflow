@@ -1,4 +1,4 @@
-import { parseAbi, type Address } from "viem";
+import { getAddress, parseAbi, type Address } from "viem";
 import LZString from "lz-string";
 
 /** GoodDollar IdentityV2, UBIScheme, and faucet on Celo production. */
@@ -43,7 +43,7 @@ export const FV_IDENTIFIER_MSG2 =
   "Sign this message to request verifying your account and to create your own secret unique identifier for your anonymized record.\nYou can use this identifier in the future to delete this anonymized record.\nWARNING: do not sign this message unless you trust the website/application requesting this signature.";
 
 export function fvIdentifierMessage(account: Address) {
-  return FV_IDENTIFIER_MSG2.replace(" ", account);
+  return FV_IDENTIFIER_MSG2.replace(" ", getAddress(account));
 }
 
 export function fvLink(input: {
@@ -53,9 +53,12 @@ export function fvLink(input: {
   callback: string;
   popup: boolean;
 }) {
+  if (!input.popup && !input.callback) {
+    throw new Error("A return URL is required for the face check.");
+  }
   const url = new URL(GOOD_ID_URL);
   const params: Record<string, string | number> = {
-    account: input.account,
+    account: getAddress(input.account),
     nonce: input.nonce,
     fvsig: input.signature,
     chain: 42220,

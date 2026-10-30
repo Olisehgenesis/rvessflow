@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import LZString from "lz-string";
 import { toFunctionSelector } from "viem";
 import { fvIdentifierMessage, fvLink, identityAbi, identityExpiry, ubiAbi } from "@/lib/good-fv";
 
@@ -14,14 +15,24 @@ describe("GoodDollar face check", () => {
 
   it("packs the face-check URL the way GoodID reads", () => {
     const href = fvLink({
-      account,
+      account: account.toLowerCase() as typeof account,
       nonce: "1",
       signature: "0xab",
-      callback: "https://rvess.xyz/settings",
+      callback: "https://rvess.xyz/settings?from=fv",
       popup: false,
     });
     assert.equal(href.startsWith("https://goodid.gooddollar.org/?lz="), true);
-    assert.equal(href.includes("rdu"), false);
+    const packed = new URL(href).searchParams.get("lz") ?? "";
+    const params = JSON.parse(LZString.decompressFromEncodedURIComponent(packed) ?? "{}") as {
+      account: string;
+      rdu: string;
+      cbu?: string;
+      chain: number;
+    };
+    assert.equal(params.account, account);
+    assert.equal(params.rdu, "https://rvess.xyz/settings?from=fv");
+    assert.equal(params.cbu, undefined);
+    assert.equal(params.chain, 42220);
   });
 
   it("expires identity after the authentication period", () => {

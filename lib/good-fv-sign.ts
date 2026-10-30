@@ -48,14 +48,15 @@ export async function faceCheckHref(input: { address: Address; method: "passkey"
   if (input.method === "tester") {
     throw new Error("A test account cannot complete face verification. Use a passkey or a connected wallet.");
   }
-  const message = fvIdentifierMessage(input.address);
-  const signature = input.method === "passkey" ? await signPasskey(input.address, message) : await signWallet(input.address, message);
+  const account = getAddress(input.address);
+  const message = fvIdentifierMessage(account);
+  const signature = input.method === "passkey" ? await signPasskey(account, message) : await signWallet(account, message);
   return fvLink({
-    account: input.address,
+    account,
     nonce: Math.floor(Date.now() / 1000).toString(),
     signature,
-    callback: `${window.location.origin}/settings`,
-    popup: true,
+    callback: `${window.location.origin}/settings?from=fv`,
+    popup: false,
   });
 }
 

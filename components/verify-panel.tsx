@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "radix-ui";
 import { useSignedAction } from "@/components/sign-action";
@@ -40,19 +40,29 @@ export function VerifyPanel({
   const [linkState, runLink, linking] = useSignedAction(linkWallet);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
-  const [frame, setFrame] = useState("");
+  const [ok, setOk] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const due = Number(claimable) > 0;
   const until = expiresAt > 0 ? new Date(expiresAt * 1000).toLocaleDateString() : "";
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("from") !== "fv" && params.get("isVerified") == null) return;
+    const passed = params.get("isVerified") === "true";
+    const reason = params.get("reason")?.trim();
+    setOk(passed);
+    setNote(passed ? "Face check finished. Refreshing this account…" : reason || "Face check did not finish.");
+    window.history.replaceState(null, "", "/settings#verify");
+    if (passed) router.refresh();
+  }, [router]);
 
   async function verify() {
     setNote("");
     setBusy(true);
     try {
-      setFrame(await faceCheckHref({ address, method }));
+      window.location.assign(await faceCheckHref({ address, method }));
     } catch (error) {
       setNote(error instanceof Error ? error.message : "Face verification did not start.");
-    } finally {
       setBusy(false);
     }
   }
@@ -144,43 +154,23 @@ export function VerifyPanel({
         <div className="mt-5 flex flex-wrap gap-2">
           <button
             type="button"
+            onClick={() => void verify()}
+            disabled={busy}
+            className="inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#D6F34A] px-5 text-sm font-semibold text-[#141414] disabled:opacity-40"
+          >
+            {busy ? "Opening GoodDollar…" : "New face check"}
+          </button>
+          <button
+            type="button"
             onClick={() => setLinkOpen(true)}
-            className="inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#D6F34A] px-5 text-sm font-semibold text-[#141414]"
+            className="inline-flex h-12 min-w-40 items-center justify-center rounded-full border border-[#E6EADF] bg-white px-5 text-sm font-semibold"
           >
             I already verified
           </button>
-          <button
-            type="button"
-            onClick={() => void verify()}
-            disabled={busy}
-            className="inline-flex h-12 min-w-40 items-center justify-center rounded-full border border-[#E6EADF] bg-white px-5 text-sm font-semibold disabled:opacity-40"
-          >
-            {busy ? "Signing…" : "New face check"}
-          </button>
         </div>
       )}
-      {frame ? (
-        <div className="mt-4 overflow-hidden rounded-3xl border border-[#E6EADF] bg-white">
-          <iframe
-            title="GoodDollar face check"
-            src={frame}
-            className="h-[32rem] w-full border-0"
-            allow="camera https://goodid.gooddollar.org; microphone https://goodid.gooddollar.org"
-          />
-          <button
-            type="button"
-            className="flex min-h-12 w-full items-center justify-center text-sm font-medium"
-            onClick={() => {
-              setFrame("");
-              router.refresh();
-            }}
-          >
-            Done
-          </button>
-        </div>
-      ) : null}
       {note || state?.error || linkState?.error ? (
-        <p className="mt-3 text-sm text-destructive">{note || state?.error || linkState?.error}</p>
+        <p className={`mt-3 text-sm ${ok && note ? "text-foreground" : "text-destructive"}`}>{note || state?.error || linkState?.error}</p>
       ) : null}
 
       <Dialog.Root open={linkOpen} onOpenChange={setLinkOpen}>
