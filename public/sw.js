@@ -1,4 +1,4 @@
-const revision = "4";
+const revision = "5";
 const cacheName = `rvessflow-v${revision}`;
 const imageCache = `rvessflow-images-v${revision}`;
 const assetCache = `rvessflow-assets-v${revision}`;
@@ -55,6 +55,7 @@ async function staleWhileRevalidate(request) {
 }
 
 self.addEventListener("install", (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(cacheName).then(async (cache) => {
       const shell = precache.map((item) => ({ url: item.url, revision: item.revision }));
@@ -108,7 +109,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (request.destination === "script" || request.destination === "style" || request.destination === "font") {
+  if (request.destination === "script" || request.destination === "style") {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  if (request.destination === "font") {
     event.respondWith(staleWhileRevalidate(request));
     return;
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { createPublicClient, encodeFunctionData, getAddress, stringToHex, zeroAddress, type Address, type Hex } from "viem";
+import { createPublicClient, encodeFunctionData, getAddress, hashMessage, parseAbi, stringToHex, zeroAddress, type Address, type Hex } from "viem";
 import { celo } from "viem/chains";
 import { requestCeloWalletAccount, walletProvider } from "@/lib/auth-client";
 import { readPasskeys } from "@/lib/passkey-vault";
@@ -31,7 +31,28 @@ async function signPasskey(from: Address, message: string): Promise<Hex> {
   if (account.address.toLowerCase() !== from.toLowerCase()) {
     throw new Error("This passkey does not match the signed-in account.");
   }
-  return account.signMessage({ message });
+  const signature = await account.signMessage({ message });
+  await assertCeloFvSig(from, message, signature);
+  return signature;
+}
+
+const erc1271Abi = parseAbi(["function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)"]);
+const ERC1271_MAGIC = "0x1626ba7e";
+
+/** GoodServer calls this on Celo before GoodID starts. Do not open the iframe unless it passes. */
+async function assertCeloFvSig(account: Address, message: string, signature: Hex) {
+  const publicClient = createPublicClient({ chain: celo, transport: celoTransport() });
+  const code = await publicClient.getCode({ address: account });
+  if (!code || code === "0x") return;
+  const magic = await publicClient.readContract({
+    address: account,
+    abi: erc1271Abi,
+    functionName: "isValidSignature",
+    args: [hashMessage(message), signature],
+  });
+  if (magic.toLowerCase().slice(0, 10) !== ERC1271_MAGIC) {
+    throw new Error("Celo did not accept this face-check signature. Close Account fully, open it again, and sign the text that includes this account in the middle of the sentence.");
+  }
 }
 
 async function signWallet(from: Address, message: string): Promise<Hex> {
