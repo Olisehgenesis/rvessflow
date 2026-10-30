@@ -275,5 +275,5 @@ export function IconTarget(props: IconProps) {
 }
 
 export function IconMark({ className }: { className?: string }) {
-  return <img src="/icon-192.png" alt="" className={`rounded-[22%] object-cover ${className ?? "size-8"}`} />;
+  return <img src="/mark.png" alt="" className={`rounded-[22%] object-cover ${className ?? "size-8"}`} />;
 }

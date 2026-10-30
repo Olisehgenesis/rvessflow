@@ -81,7 +81,7 @@ export function InstallButton({ className = "", row = false }: { className?: str
         onClick={() => void install()}
         className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
       >
-        <img src="/icon-192.png" alt="" width={22} height={22} className="size-[22px] rounded-md" />
+        <img src="/mark.png" alt="" width={22} height={22} className="size-[22px] rounded-md" />
         Install
       </button>
       {help ? (
