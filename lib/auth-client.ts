@@ -258,10 +258,15 @@ async function joinBase(provider: WalletConnection) {
 
 /** Opens WalletConnect. Every external wallet, including Base, is chosen there. */
 export function requestWalletAccount(): Promise<string> {
-  return connectWalletConnect();
+  return connectWalletConnect("base");
 }
 
-async function connectWalletConnect(): Promise<string> {
+/** Opens WalletConnect for a Celo signature. Does not switch the wallet onto Base first. */
+export function requestCeloWalletAccount(): Promise<string> {
+  return connectWalletConnect("celo");
+}
+
+async function connectWalletConnect(network: "base" | "celo"): Promise<string> {
   if (!walletConnectProjectId) throw new Error("WalletConnect is not configured.");
   const provider = await walletConnectProvider();
   clearInjectedConnection();
@@ -273,7 +278,7 @@ async function connectWalletConnect(): Promise<string> {
     if (!peekInjectedConnection()) throw error;
   }
   const active: WalletConnection = takeInjectedConnection() ?? provider;
-  await joinBase(active);
+  if (network === "base") await joinBase(active);
   const address = active.accounts?.[0];
   if (address && isAddress(address)) return rememberConnection(active, address);
   return rememberConnection(active, await accountFrom(active));

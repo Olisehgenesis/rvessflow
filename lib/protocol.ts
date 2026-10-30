@@ -26,6 +26,7 @@ import { appGroupNet, groupKey, type GroupNet } from "@/lib/group-network";
 import { groupPlainOn, groupsOfOn, groupSite, otherGroupNet } from "@/lib/group-site";
 import { vaultSite } from "@/lib/vault-site";
 import { appChain, appNetwork, appRpc, celoTransport, explorerUrl, networkLabel, stableName } from "@/lib/network";
+import { requestNowSeconds } from "@/lib/request-time";
 
 const network = appNetwork();
 
@@ -590,7 +591,7 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
   let held = 0n;
   let streaming = 0n;
   let flows: FlowRow[] = [];
-  let readAt = Math.floor(Date.now() / 1000);
+  let readAt = await requestNowSeconds();
 
   if (hasVault) {
     const [sheet, count] = await Promise.all([
@@ -620,7 +621,7 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
         })),
         allowFailure: false,
       });
-      readAt = Math.floor(Date.now() / 1000);
+      readAt = await requestNowSeconds();
       const now = BigInt(readAt);
       flows = records.map((flow, i) => toFlowRow(ids[i], flow, now, appGroupNet()));
     }
@@ -735,7 +736,7 @@ export const loadIncoming = cache(async (me: Address): Promise<IncomingItem[]> =
     })),
     allowFailure: false,
   });
-  const now = BigInt(Math.floor(Date.now() / 1000));
+  const now = BigInt(await requestNowSeconds());
   const mine = me.toLowerCase();
   const found = await Promise.all(
     others.map(async (person, index) => {

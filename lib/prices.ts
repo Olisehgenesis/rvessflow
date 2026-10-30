@@ -3,6 +3,7 @@ import "server-only";
 import { parseAbi, type Address } from "viem";
 import { baseMarket } from "@/lib/base-market";
 import { chain, publicClient } from "@/lib/protocol";
+import { requestNowMs, requestNowSeconds } from "@/lib/request-time";
 
 const feedAbi = parseAbi([
   "function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
@@ -79,8 +80,9 @@ async function gdxFallback(): Promise<bigint> {
 }
 
 export async function loadPrices(): Promise<Prices> {
-  if (cache && Date.now() - cache.at < ttlMs) return cache.prices;
-  const now = Math.floor(Date.now() / 1000);
+  const at = await requestNowMs();
+  if (cache && at - cache.at < ttlMs) return cache.prices;
+  const now = Math.floor(at / 1000);
   if (chain.id === 84532 || chain.id === 42220) {
     let ethUsd8 = 0n;
     try {
@@ -89,7 +91,7 @@ export async function loadPrices(): Promise<Prices> {
       ethUsd8 = 0n;
     }
     const prices: Prices = { ethUsd8, usdcUsd8: 100_000_000n, usdtUsd8: 100_000_000n, gdxUsd8: await gdxFallback(), updatedAt: now };
-    cache = { at: Date.now(), prices };
+    cache = { at, prices };
     return prices;
   }
   const fresh = (updatedAt: number) => updatedAt > 0 && now - updatedAt < maxAgeSeconds;
@@ -106,7 +108,7 @@ export async function loadPrices(): Promise<Prices> {
       gdxUsd8: await gdxFallback(),
       updatedAt: Math.min(eth.updatedAt, usdc.updatedAt, usdt.updatedAt),
     };
-    cache = { at: Date.now(), prices };
+    cache = { at, prices };
     return prices;
   } catch (error) {
     if (cache) return cache.prices;

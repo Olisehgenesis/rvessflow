@@ -2,7 +2,7 @@
 
 import { createPublicClient, encodeFunctionData, getAddress, stringToHex, zeroAddress, type Address, type Hex } from "viem";
 import { celo } from "viem/chains";
-import { requestWalletAccount, walletProvider } from "@/lib/auth-client";
+import { requestCeloWalletAccount, walletProvider } from "@/lib/auth-client";
 import { readPasskeys } from "@/lib/passkey-vault";
 import { celoRpcUrls, celoTransport } from "@/lib/network";
 import { CELO_IDENTITY, fvIdentifierMessage, fvLink, identityAbi } from "@/lib/good-fv";
@@ -84,7 +84,7 @@ async function onCelo(provider: Awaited<ReturnType<typeof walletProvider>>) {
 
 /** The original verified wallet signs connectAccount(this Rvess account). */
 export async function attachThisAccount(thisAccount: Address) {
-  const from = getAddress(await requestWalletAccount());
+  const from = getAddress(await requestCeloWalletAccount());
   if (from.toLowerCase() === thisAccount.toLowerCase()) {
     throw new Error("That is this account. Connect the other wallet that already has the tick.");
   }

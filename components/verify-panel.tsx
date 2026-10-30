@@ -161,7 +161,12 @@ export function VerifyPanel({
       )}
       {frame ? (
         <div className="mt-4 overflow-hidden rounded-3xl border border-[#E6EADF] bg-white">
-          <iframe title="GoodDollar face check" src={frame} className="h-[32rem] w-full border-0" allow="camera; microphone" />
+          <iframe
+            title="GoodDollar face check"
+            src={frame}
+            className="h-[32rem] w-full border-0"
+            allow="camera https://goodid.gooddollar.org; microphone https://goodid.gooddollar.org"
+          />
           <button
             type="button"
             className="flex min-h-12 w-full items-center justify-center text-sm font-medium"

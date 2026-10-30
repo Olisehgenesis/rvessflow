@@ -10,6 +10,7 @@ import { labeled, percent } from "@/lib/display";
 import { loadQuote } from "@/lib/rates";
 import { loadIncoming } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
+import { requestNowSeconds } from "@/lib/request-time";
 import { Progress } from "@/components/ui/progress";
 
 export default function IncomingGoalPage({ params }: { params: Promise<{ vault: string; id: string }> }) {
@@ -31,7 +32,7 @@ async function IncomingBody({ params }: { params: Promise<{ vault: string; id: s
   const whole = flow.reserved;
   const part = (BigInt(flow.reserved) - BigInt(flow.remaining)).toString();
   const live = flow.active && !flow.paused && !flow.settled;
-  const readAt = Math.floor(Date.now() / 1000);
+  const readAt = await requestNowSeconds();
   const status = flow.settled ? "Closed" : flow.paused ? "Paused" : flow.active ? "Active" : "Waiting";
   return (
     <Page title={flow.name} back="/goals/flow">
