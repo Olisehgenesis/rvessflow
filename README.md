@@ -131,4 +131,6 @@ npm run dev -- sepolia
 npm run build -- base
 ```
 
+Those scripts run through `dotenvx run --convention=nextjs`, which decrypts `.env` (and Next’s usual overlay files) just in time. Keep `.env.keys` off git. On Vercel, dashboard env is already in the process, so a missing local file is ignored.
+
 `npm run lint` checks the app. `npm test` checks the payment math. Contract tests still run from `contracts/` with `forge test`. The last full run of that suite in this workspace passed (69 tests).
