@@ -72,6 +72,7 @@ const links = [
   { href: "#features", label: "Features" },
   { href: "#how-it-works", mobileHref: "#features", label: "How it works" },
   { href: "#about", label: "About" },
+  { href: "/stats", label: "On-chain" },
 ];
 
 const stats = [
