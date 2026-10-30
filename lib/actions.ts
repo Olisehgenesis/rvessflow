@@ -1097,11 +1097,14 @@ export async function swapGdx(_prev: ActionState, formData: FormData): Promise<A
     await requireTerms();
     const who = await viewer();
     const { isGdxSide } = await import("@/lib/gdx-reserve");
+    const { isGdxVia, gdxViaSend } = await import("@/lib/gdx-route");
     const side = String(formData.get("side") ?? "");
     if (!isGdxSide(side)) return { error: "Pick buy or sell." };
+    const viaRaw = String(formData.get("via") ?? "usdm");
+    if (!isGdxVia(viaRaw)) return { error: "Pick a token." };
     const amount = String(formData.get("amount") ?? "");
-    parseSendAmount(side === "buy" ? "celo-usdm" : "celo-gdx", amount);
-    const intent = refIntent({ kind: "gdxSwap" as const, side, amount: amount.replace(/,/g, "").trim(), ref: "" });
+    parseSendAmount(side === "buy" ? gdxViaSend(viaRaw) : "celo-gdx", amount);
+    const intent = refIntent({ kind: "gdxSwap" as const, side, via: viaRaw, amount: amount.replace(/,/g, "").trim(), ref: "" });
     if (who.method === "tester") return await finishTester(intent);
     return await handoff(intent);
   } catch (error) {
@@ -1110,16 +1113,20 @@ export async function swapGdx(_prev: ActionState, formData: FormData): Promise<A
   }
 }
 
-export async function previewGdxSwap(input: { side: string; amount: string }): Promise<{ out?: string; error?: string }> {
+export async function previewGdxSwap(input: { side: string; amount: string; via?: string }): Promise<{ out?: string; outLabel?: string; error?: string }> {
   try {
     await viewer();
     const { formatAmount } = await import("@/lib/pay-math");
-    const { isGdxSide, quoteGdxSwap } = await import("@/lib/gdx-reserve");
+    const { isGdxSide } = await import("@/lib/gdx-reserve");
+    const { gdxViaSend, gdxVias, quoteGdxTrade, readGdxVia } = await import("@/lib/gdx-route");
     if (!isGdxSide(input.side)) return { error: "Pick buy or sell." };
-    const amount = parseSendAmount(input.side === "buy" ? "celo-usdm" : "celo-gdx", input.amount);
-    const quoted = await quoteGdxSwap(input.side, amount);
-    const digits = input.side === "buy" ? 4 : 6;
-    return { out: formatAmount(quoted.amountOut, 18, digits) };
+    const via = readGdxVia(input.via || "usdm");
+    const amount = parseSendAmount(input.side === "buy" ? gdxViaSend(via) : "celo-gdx", input.amount);
+    const quoted = await quoteGdxTrade(input.side, via, amount);
+    const outLabel = input.side === "buy" ? "G$" : gdxVias.find((row) => row.id === via)?.label ?? "USDm";
+    const scale = input.side === "buy" || via === "usdm" || via === "celo" ? 18 : 6;
+    const digits = input.side === "buy" ? 4 : scale === 6 ? 2 : 6;
+    return { out: formatAmount(quoted.amountOut, scale, digits), outLabel };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The quote failed." };
   }

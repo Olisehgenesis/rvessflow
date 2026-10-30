@@ -8,11 +8,13 @@ export async function SendScreen({
   title,
   lead,
   back = "/goals/expense/now",
+  start,
 }: {
   mode: "address" | "friend";
   title: string;
   lead: string;
   back?: string;
+  start?: string;
 }) {
   const who = await viewer();
   const choices = await loadSendChoices(who.address);
@@ -20,7 +22,7 @@ export async function SendScreen({
     <main className="px-4 pb-8">
       <FlowHeader title={title} back={back} />
       <p className="mb-4 text-sm leading-relaxed text-muted-foreground">{lead}</p>
-      <SendForm mode={mode} choices={choices} />
+      <SendForm mode={mode} choices={choices} start={start} />
     </main>
   );
 }

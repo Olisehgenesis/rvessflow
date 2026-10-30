@@ -29,8 +29,8 @@ async function GroupBody({ params }: { params: Promise<{ group: string }> }) {
   if (!row?.parts) notFound();
   return (
     <Page title={title} back="/home">
-      <p className="mb-4 text-sm text-muted-foreground">Tokens with a balance show first. View all to see empty lines on Base and Celo.</p>
-      <AssetList rows={row.parts} localUnit={holdings.localUnit} hideEmpty />
+      <p className="mb-4 text-sm text-muted-foreground">Tap a mark to see the token, then send, receive, or swap.</p>
+      <AssetList rows={row.parts} localUnit={holdings.localUnit} hideEmpty trade={holdings.gdxTrade} />
     </Page>
   );
 }

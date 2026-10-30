@@ -97,7 +97,7 @@ async function HomeReady({
     groups: portfolio.groups.length,
     amounts,
   });
-  const assets = hasTokenAmount(holdings.goodDollar.amount) ? [...holdings.rows, holdings.goodDollar] : holdings.rows;
+  const assets = [...holdings.rows, holdings.goodDollar];
   const openFlows = portfolio.flows.filter((flow) => !flow.settled);
   function balanceCard(layout?: "desk") {
     return (
@@ -217,7 +217,7 @@ async function HomeReady({
                   View all
                 </Link>
               </div>
-              <AssetList rows={assets} localUnit={holdings.localUnit} desk />
+              <AssetList rows={assets} localUnit={holdings.localUnit} desk trade={holdings.gdxTrade} />
               {funded ? null : (
                 <Link href="/home/add" className="mt-3 inline-flex h-11 items-center rounded-full bg-[#D6F34A] px-4 text-sm font-semibold text-[#17210C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]">
                   Top up
@@ -288,7 +288,7 @@ async function HomeReady({
             View all
           </Link>
         </div>
-        <AssetList rows={assets} localUnit={holdings.localUnit} />
+        <AssetList rows={assets} localUnit={holdings.localUnit} trade={holdings.gdxTrade} />
       </section>
       <QuickActions />
       <Suspense fallback={<p className="mt-6 text-sm text-muted-foreground">Loading activity…</p>}>

@@ -13,6 +13,7 @@ import type { GroupNet } from "@/lib/group-network";
 import { cashTokens, finderTokens, GOOD_DOLLAR, type FinderToken } from "@/lib/stables";
 import type { Quote } from "@/lib/quote";
 import type { HoldingRow } from "@/lib/holding-row";
+import type { GdxTradeBalances } from "@/lib/token-face";
 
 export type { HoldingRow };
 
@@ -44,8 +45,7 @@ export type HoldingsView = {
   choices: PayChoice[];
   /** Celo G$ as its own line. Not mixed into USD. */
   goodDollar: HoldingRow;
-  /** Celo Mento USDm in the wallet, for the G$ Reserve swap. */
-  gdxUsdm: string;
+  gdxTrade: GdxTradeBalances;
 };
 
 function valueOf(amount: bigint, scale: number, price8: bigint): bigint {
@@ -461,7 +461,13 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
       listed.find((row) => row.token.key === "celo-gooddollar")?.amount ?? 0n,
     ),
     goodDollar,
-    gdxUsdm: formatAmount(listed.find((row) => row.token.key === "celo-usdm")?.amount ?? 0n, 18, 4),
+    gdxTrade: {
+      usdm: formatAmount(listed.find((row) => row.token.key === "celo-usdm")?.amount ?? 0n, 18, 4),
+      gdx: goodDollar.amount,
+      usdc: formatAmount(listed.find((row) => row.token.key === "celo-usdc")?.amount ?? 0n, 6, 2),
+      usdt: formatAmount(listed.find((row) => row.token.key === "celo-usdt")?.amount ?? 0n, 6, 2),
+      celo: formatAmount(celoWei, 18, 6),
+    },
   };
 }
 

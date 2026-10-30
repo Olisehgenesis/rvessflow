@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import Link from "next/link";
 import Loading from "../../loading";
 import { AssetList } from "@/components/asset-list";
-import { GdxSwap } from "@/components/gdx-swap";
 import { Page } from "@/components/ui-bits";
 import { loadHoldings } from "@/lib/holdings";
 import { loadPortfolio } from "@/lib/protocol";
@@ -23,11 +22,8 @@ async function AssetsBody() {
   const holdings = await loadHoldings(who.address, data, quote);
   return (
     <Page title="Your assets" back="/home">
-      <p className="mb-4 text-sm text-muted-foreground">USD, ETH, and CELO each open onto the tokens behind them. G$ is its own Celo line. Buy and sell it through the GoodDollar Reserve below.</p>
-      <AssetList rows={[...holdings.rows, holdings.goodDollar]} localUnit={holdings.localUnit} />
-      <div className="mt-6">
-        <GdxSwap usdm={holdings.gdxUsdm} gdx={holdings.goodDollar.amount} />
-      </div>
+      <p className="mb-4 text-sm text-muted-foreground">Tap a token to send, receive, or swap. G$ is on Celo.</p>
+      <AssetList rows={[...holdings.rows, holdings.goodDollar]} localUnit={holdings.localUnit} trade={holdings.gdxTrade} />
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Link href="/home/add/receive" className="flex h-11 items-center justify-center rounded-full border border-border bg-card text-sm font-medium">
           Receive

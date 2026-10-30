@@ -16,8 +16,8 @@ import type { SendChoice } from "@/lib/send-math";
 
 const field = "h-12 rounded-2xl border-border bg-white px-4 text-base shadow-none";
 
-export function SendForm({ mode, choices }: { mode: "address" | "friend"; choices: SendChoice[] }) {
-  const [asset, setAsset] = useState(choices[0]?.asset ?? "");
+export function SendForm({ mode, choices, start }: { mode: "address" | "friend"; choices: SendChoice[]; start?: string }) {
+  const [asset, setAsset] = useState(start && choices.some((choice) => choice.asset === start) ? start : choices[0]?.asset ?? "");
   const [amount, setAmount] = useState("");
   const [who, setWho] = useState("");
   const [to, setTo] = useState("");
@@ -81,11 +81,9 @@ export function SendForm({ mode, choices }: { mode: "address" | "friend"; choice
               >
                 <TokenIcon symbol={choice.label} network={choice.network} className="size-10" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold">{choice.label}</span>
+                  {on ? <span className="block text-sm font-semibold">{choice.label}</span> : <span className="sr-only">{choice.label}</span>}
                   <span className="block text-xs text-muted-foreground">{choice.network}</span>
-                  <span className="block text-xs text-muted-foreground tabular-nums">
-                    {choice.balance} {choice.label}
-                  </span>
+                  <span className="block text-xs text-muted-foreground tabular-nums">{choice.balance}</span>
                 </span>
               </button>
             );

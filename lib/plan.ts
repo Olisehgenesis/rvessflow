@@ -6,7 +6,9 @@ import { fundingCalls, superForUsd, superForWithdraw, withdrawCalls } from "@/li
 import type { Intent, Plan, PreparedCall } from "@/lib/intent";
 import { isSuperPay, readPay, type PayAsset } from "@/lib/pay-math";
 import { sendLabel, sendRoute, sendToken, walletBalance } from "@/lib/send";
-import { GDX_BROKER, GDX_EXCHANGE_ID, GDX_EXCHANGE_PROVIDER, gdxBrokerAbi, gdxCeloClient, quoteGdxSwap, readGdxSide } from "@/lib/gdx-reserve";
+import { celoMarket } from "@/lib/celo-market";
+import { GDX_BROKER, GDX_EXCHANGE_ID, GDX_EXCHANGE_PROVIDER, GDX_TOKEN, GDX_USDM, gdxBrokerAbi, gdxCeloClient, readGdxSide } from "@/lib/gdx-reserve";
+import { gdxViaSend, quoteGdxTrade, readGdxVia, uniswapExactInCall } from "@/lib/gdx-route";
 import { isSendAsset, parseSendAmount, spendableEth } from "@/lib/send-math";
 import { appGroupNet, groupKey, netFromLabel, parseGroupKey, type GroupNet } from "@/lib/group-network";
 import { groupSite } from "@/lib/group-site";
@@ -725,8 +727,9 @@ async function planPayout(owner: Address, intent: Extract<Intent, { kind: "payou
 
 async function planGdxSwap(owner: Address, intent: Extract<Intent, { kind: "gdxSwap" }>): Promise<Plan> {
   const side = readGdxSide(intent.side);
-  const inAsset = side === "buy" ? "celo-usdm" : "celo-gdx";
-  const outAsset = side === "buy" ? "celo-gdx" : "celo-usdm";
+  const via = readGdxVia(intent.via || "usdm");
+  const inAsset = side === "buy" ? gdxViaSend(via) : "celo-gdx";
+  const outAsset = side === "buy" ? "celo-gdx" : gdxViaSend(via);
   const amount = parseSendAmount(inAsset, intent.amount);
   const [inBal, outBal] = await Promise.all([walletBalance(owner, inAsset), walletBalance(owner, outAsset)]);
   if (intent.seen) {
@@ -736,26 +739,83 @@ async function planGdxSwap(owner: Address, intent: Extract<Intent, { kind: "gdxS
   if (amount > inBal) {
     throw new Error(`The wallet does not have that much ${sendLabel(inAsset)} on Celo.`);
   }
-  const quoted = await quoteGdxSwap(side, amount);
+  const quoted = await quoteGdxTrade(side, via, amount);
   const calls: PreparedCall[] = [];
-  const allowance = await gdxCeloClient.readContract({
-    address: quoted.tokenIn,
-    abi: erc20,
-    functionName: "allowance",
-    args: [owner, GDX_BROKER],
-  });
-  if (allowance < amount) calls.push(encode(quoted.tokenIn, erc20, "approve", [GDX_BROKER, amount]));
-  calls.push(
-    encode(GDX_BROKER, gdxBrokerAbi, "swapIn", [
-      GDX_EXCHANGE_PROVIDER,
-      GDX_EXCHANGE_ID,
-      quoted.tokenIn,
-      quoted.tokenOut,
-      amount,
-      quoted.minOut,
-    ]),
-  );
-  return { calls, intent: { ...intent, seen: outBal.toString(), submitted: true }, done: false, chainId: 42220 };
+  if (via === "usdm") {
+    const allowance = await gdxCeloClient.readContract({
+      address: quoted.tokenIn,
+      abi: erc20,
+      functionName: "allowance",
+      args: [owner, GDX_BROKER],
+    });
+    if (allowance < amount) calls.push(encode(quoted.tokenIn, erc20, "approve", [GDX_BROKER, amount]));
+    calls.push(
+      encode(GDX_BROKER, gdxBrokerAbi, "swapIn", [
+        GDX_EXCHANGE_PROVIDER,
+        GDX_EXCHANGE_ID,
+        quoted.tokenIn,
+        quoted.tokenOut,
+        amount,
+        quoted.minOut,
+      ]),
+    );
+  } else if (side === "buy") {
+    const routerAllow = await gdxCeloClient.readContract({
+      address: quoted.tokenIn,
+      abi: erc20,
+      functionName: "allowance",
+      args: [owner, celoMarket.swapRouter02],
+    });
+    if (via === "usdt" && routerAllow > 0n && routerAllow < amount) {
+      calls.push(encode(quoted.tokenIn, erc20, "approve", [celoMarket.swapRouter02, 0n]));
+    }
+    if (routerAllow < amount) calls.push(encode(quoted.tokenIn, erc20, "approve", [celoMarket.swapRouter02, amount]));
+    calls.push(uniswapExactInCall(quoted.tokenIn, GDX_USDM, quoted.feeTier, owner, amount, quoted.usdm));
+    const brokerAllow = await gdxCeloClient.readContract({
+      address: GDX_USDM,
+      abi: erc20,
+      functionName: "allowance",
+      args: [owner, GDX_BROKER],
+    });
+    if (brokerAllow < quoted.usdm) calls.push(encode(GDX_USDM, erc20, "approve", [GDX_BROKER, quoted.usdm]));
+    calls.push(
+      encode(GDX_BROKER, gdxBrokerAbi, "swapIn", [
+        GDX_EXCHANGE_PROVIDER,
+        GDX_EXCHANGE_ID,
+        GDX_USDM,
+        GDX_TOKEN,
+        quoted.usdm,
+        quoted.minOut,
+      ]),
+    );
+  } else {
+    const brokerAllow = await gdxCeloClient.readContract({
+      address: GDX_TOKEN,
+      abi: erc20,
+      functionName: "allowance",
+      args: [owner, GDX_BROKER],
+    });
+    if (brokerAllow < amount) calls.push(encode(GDX_TOKEN, erc20, "approve", [GDX_BROKER, amount]));
+    calls.push(
+      encode(GDX_BROKER, gdxBrokerAbi, "swapIn", [
+        GDX_EXCHANGE_PROVIDER,
+        GDX_EXCHANGE_ID,
+        GDX_TOKEN,
+        GDX_USDM,
+        amount,
+        quoted.usdm,
+      ]),
+    );
+    const routerAllow = await gdxCeloClient.readContract({
+      address: GDX_USDM,
+      abi: erc20,
+      functionName: "allowance",
+      args: [owner, celoMarket.swapRouter02],
+    });
+    if (routerAllow < quoted.usdm) calls.push(encode(GDX_USDM, erc20, "approve", [celoMarket.swapRouter02, quoted.usdm]));
+    calls.push(uniswapExactInCall(GDX_USDM, quoted.tokenOut, quoted.feeTier, owner, quoted.usdm, quoted.minOut));
+  }
+  return { calls, intent: { ...intent, via, seen: outBal.toString(), submitted: true }, done: false, chainId: 42220 };
 }
 
 async function planClaim(owner: Address, intent: Extract<Intent, { kind: "claim" }>): Promise<Plan> {

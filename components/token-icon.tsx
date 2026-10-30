@@ -4,14 +4,14 @@ const sources: Record<string, string> = {
   USDCx: "/tokens/usdc.svg",
   cUSDx: "/tokens/usdc.svg",
   fUSDCx: "/tokens/usdc.svg",
-  USDm: "/tokens/usdc.svg",
+  USDm: "/tokens/usdm.png",
   USDM: "/tokens/usdc.svg",
   ETH: "/tokens/eth.png",
   ETHx: "/tokens/eth.png",
   USDT: "/tokens/usdt.png",
   CELO: "/tokens/celo.svg",
   CELOx: "/tokens/celo.svg",
-  "G$": "/tokens/gdx.svg",
+  "G$": "/tokens/gdx.png",
 };
 
 const chainMark: Record<"base" | "celo", { src: string; round: string }> = {

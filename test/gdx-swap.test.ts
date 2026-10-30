@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { encodeFunctionData, zeroAddress } from "viem";
+import { concatHex, toHex } from "viem";
 import { GOOD_DOLLAR } from "@/lib/stables";
-import { GDX_UNISWAP_USDM, gdxReserveHref, gdxSwaps, uniswapSwapHref } from "@/lib/gdx-swap";
 import {
   GDX_BROKER,
   GDX_EXCHANGE_ID,
@@ -13,9 +13,10 @@ import {
   gdxUsd8FromPrice,
   minGdxOut,
 } from "@/lib/gdx-reserve";
+import { gdxViaFromKey, gdxViaSend, isGdxVia } from "@/lib/gdx-route";
+import { canSwapToken, sendAssetForKey } from "@/lib/token-face";
 import { describeCalls } from "@/lib/sign-steps";
 import { shouldSponsorCeloUserOp } from "@/lib/celo-sponsor";
-import { concatHex, toHex } from "viem";
 
 const executeAbi = [
   {
@@ -53,6 +54,14 @@ describe("G$ Reserve", () => {
     assert.equal(sell.tokenOut, GDX_USDM);
   });
 
+  it("maps Uniswap hops through USDm without an SDK", () => {
+    assert.equal(isGdxVia("usdc"), true);
+    assert.equal(gdxViaSend("usdt"), "celo-usdt");
+    assert.equal(gdxViaFromKey("celo-usdc"), "usdc");
+    assert.equal(sendAssetForKey("celo-gooddollar"), "celo-gdx");
+    assert.equal(canSwapToken({ key: "celo-usdt", label: "USDT", network: "Celo", amount: "0", usd: "0" }), true);
+  });
+
   it("encodes swapIn for the Celo broker", () => {
     const data = encodeFunctionData({
       abi: gdxBrokerAbi,
@@ -71,15 +80,5 @@ describe("G$ Reserve", () => {
       args: ["0x".padEnd(66, "0") as `0x${string}`, concatHex([GDX_BROKER, toHex(0n, { size: 32 }), "0x"])],
     });
     assert.equal(shouldSponsorCeloUserOp({ chainId: 42220, callData }), true);
-  });
-});
-
-describe("G$ Uniswap fallback", () => {
-  it("still opens Uniswap on Celo for CELO or USDC", () => {
-    const href = uniswapSwapHref("NATIVE", GOOD_DOLLAR);
-    assert.equal(href.includes("chain=celo"), true);
-    assert.equal(gdxSwaps.length, 2);
-    assert.equal(gdxReserveHref.includes("0x94A3"), true);
-    assert.equal(GDX_UNISWAP_USDM.startsWith("0x"), true);
   });
 });
