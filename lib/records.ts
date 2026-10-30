@@ -40,22 +40,32 @@ const tableSql = (bucket: Bucket) => [
   `CREATE TABLE IF NOT EXISTS ${bucket}.milestones (id VARCHAR PRIMARY KEY, owner VARCHAR NOT NULL, subject_kind VARCHAR NOT NULL, subject_ref VARCHAR NOT NULL, position INTEGER NOT NULL, label VARCHAR NOT NULL, amount VARCHAR NOT NULL DEFAULT '', rate_per_day VARCHAR NOT NULL DEFAULT '', days INTEGER NOT NULL DEFAULT 0, reached BOOLEAN NOT NULL DEFAULT false)`,
 ];
 
+async function addColumn(bucket: Bucket, table: "profiles" | "drafts", column: string, definition: string) {
+  if (!/^[a-z_]+$/.test(column)) throw new Error("Unexpected column.");
+  try {
+    await rows(sql.raw(`ALTER TABLE ${bucket}.${table} ADD COLUMN IF NOT EXISTS ${column} ${definition}`));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/already exists|duplicate column/i.test(message)) return;
+    throw error;
+  }
+}
+
 async function applySchema() {
   await rows(sql.raw(`CREATE SCHEMA IF NOT EXISTS app`));
   await rows(sql.raw(`CREATE TABLE IF NOT EXISTS app.meta (key VARCHAR PRIMARY KEY, value VARCHAR NOT NULL)`));
   for (const bucket of buckets) {
     for (const statement of tableSql(bucket)) await rows(sql.raw(statement));
-    const profiles = raw(bucket, "profiles");
-    await rows(sql.raw(`ALTER TABLE ${profiles} ADD COLUMN IF NOT EXISTS member_code VARCHAR DEFAULT ''`));
-    await rows(sql.raw(`ALTER TABLE ${profiles} ADD COLUMN IF NOT EXISTS id_status VARCHAR DEFAULT 'none'`));
-    await rows(sql.raw(`ALTER TABLE ${profiles} ADD COLUMN IF NOT EXISTS kin_name VARCHAR DEFAULT ''`));
-    await rows(sql.raw(`ALTER TABLE ${profiles} ADD COLUMN IF NOT EXISTS kin_contact VARCHAR DEFAULT ''`));
-    await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS plain BOOLEAN NOT NULL DEFAULT false`));
-    await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS name VARCHAR NOT NULL DEFAULT ''`));
-    await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS description VARCHAR NOT NULL DEFAULT ''`));
-    await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS code VARCHAR NOT NULL DEFAULT ''`));
-    await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS network VARCHAR NOT NULL DEFAULT 'base'`));
-    await rows(sql.raw(`ALTER TABLE ${raw(bucket, "drafts")} ADD COLUMN IF NOT EXISTS token VARCHAR NOT NULL DEFAULT 'usd'`));
+    await addColumn(bucket, "profiles", "member_code", "VARCHAR DEFAULT ''");
+    await addColumn(bucket, "profiles", "id_status", "VARCHAR DEFAULT 'none'");
+    await addColumn(bucket, "profiles", "kin_name", "VARCHAR DEFAULT ''");
+    await addColumn(bucket, "profiles", "kin_contact", "VARCHAR DEFAULT ''");
+    await addColumn(bucket, "drafts", "plain", "BOOLEAN DEFAULT false");
+    await addColumn(bucket, "drafts", "name", "VARCHAR DEFAULT ''");
+    await addColumn(bucket, "drafts", "description", "VARCHAR DEFAULT ''");
+    await addColumn(bucket, "drafts", "code", "VARCHAR DEFAULT ''");
+    await addColumn(bucket, "drafts", "network", "VARCHAR DEFAULT 'base'");
+    await addColumn(bucket, "drafts", "token", "VARCHAR DEFAULT 'usd'");
     await rows(sql.raw(`CREATE TABLE IF NOT EXISTS ${bucket}.group_labels (ref VARCHAR PRIMARY KEY, name VARCHAR NOT NULL, description VARCHAR NOT NULL, code VARCHAR NOT NULL)`));
     await rows(
       sql.raw(

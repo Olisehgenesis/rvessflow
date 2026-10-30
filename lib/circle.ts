@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { getAddress, isAddress, type Address } from "viem";
 import { cyclePlan, readCycles, spanLabel } from "@/lib/cycle";
@@ -239,12 +239,6 @@ async function readBucket(bucket: Bucket): Promise<Store> {
 }
 
 async function writeBucket(bucket: Bucket, store: Store) {
-  if (usingFile) {
-    const cached = loadFileWorld();
-    cached[bucket] = store;
-    persistFile();
-    return;
-  }
   await transaction(async (query) => {
     await query(sql`DELETE FROM ${sql.raw(`${bucket}.group_labels`)}`);
     await query(sql`DELETE FROM ${table(bucket, "applications")}`);
@@ -285,9 +279,14 @@ async function writeBucket(bucket: Bucket, store: Store) {
   });
 }
 
+function circlePath() {
+  return path.join(process.cwd(), "data", "circle.json");
+}
+
 function localFile(): Store {
+  if (!existsSync(circlePath())) return empty();
   try {
-    const parsed = JSON.parse(readFileSync(circleFile, "utf8")) as Store;
+    const parsed = JSON.parse(readFileSync(circlePath(), "utf8")) as Store;
     return {
       profiles: Array.isArray(parsed.profiles) ? parsed.profiles : [],
       drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
@@ -298,88 +297,21 @@ function localFile(): Store {
   }
 }
 
-const circleFile = path.join(process.cwd(), "data", "circle.json");
-let fileCache: World | null = null;
-let usingFile = false;
-let source: Promise<"remote" | "file"> | null = null;
+let source: Promise<void> | null = null;
 
 function chooseSource() {
   source ??= (async () => {
-    try {
-      await ensureSchema();
-      await importLocal();
-      return "remote" as const;
-    } catch {
-      usingFile = true;
-      loadFileWorld();
-      return "file" as const;
-    }
-  })();
+    await ensureSchema();
+    await importLocal();
+  })().catch((error) => {
+    source = null;
+    throw error;
+  });
   return source;
 }
 
-function loadFileWorld(): World {
-  if (fileCache) return fileCache;
-  const file = localFile();
-  const loaded: World = { demo: empty(), app: empty() };
-  for (const profile of file.profiles) {
-    const address = asAddress(profile.address);
-    if (!address) continue;
-    loaded[bucketFor(address)].profiles.push({
-      ...profile,
-      address,
-      phones: profile.phones ?? [],
-      email: profile.email ?? "",
-      password: profile.password ?? "",
-      memberCode: profile.memberCode ?? "",
-      idStatus: statusOf(profile.idStatus),
-      kinName: profile.kinName ?? "",
-      kinContact: profile.kinContact ?? "",
-    });
-  }
-  for (const draft of file.drafts) {
-    const creator = asAddress(draft.creator);
-    if (!creator) continue;
-    loaded[bucketFor(creator)].drafts.push({
-      ...draft,
-      creator,
-      members: (draft.members ?? []).flatMap((item) => {
-        const address = asAddress(item);
-        return address ? [address] : [];
-      }),
-      applications: (draft.applications ?? []).flatMap((item) => {
-        const address = asAddress(item.address);
-        return address ? [{ address, name: item.name }] : [];
-      }),
-      name: draft.name ?? "",
-      description: draft.description ?? "",
-      code: draft.code ?? "",
-      open: Boolean(draft.open),
-      plain: Boolean(draft.plain),
-      network: asGroupNet(draft.network),
-      token: asGroupToken(draft.token),
-      cycles: num(draft.cycles),
-    });
-  }
-  loaded.app.labels = (file.labels ?? []).filter((label) => label && label.ref);
-  fileCache = loaded;
-  return loaded;
-}
-
-function persistFile() {
-  if (!fileCache) return;
-  mkdirSync(path.dirname(circleFile), { recursive: true });
-  writeFileSync(
-    circleFile,
-    JSON.stringify({
-      profiles: [...fileCache.demo.profiles, ...fileCache.app.profiles],
-      drafts: [...fileCache.demo.drafts, ...fileCache.app.drafts],
-      labels: [...fileCache.demo.labels, ...fileCache.app.labels],
-    }),
-  );
-}
-
 async function importLocal() {
+  if (!existsSync(circlePath())) return;
   const flag = await rows<{ value: string }>(sql`SELECT value FROM app.meta WHERE key = ${"circle_file"}`);
   if (flag.length > 0) return;
   const file = localFile();
@@ -417,7 +349,7 @@ async function importLocal() {
 }
 
 async function world(): Promise<World> {
-  if ((await chooseSource()) === "file") return loadFileWorld();
+  await chooseSource();
   const [demo, app] = await Promise.all([readBucket("demo"), readBucket("app")]);
   return { demo, app };
 }

@@ -290,7 +290,7 @@ function spoken(error: unknown): ActionState {
     throw error;
   }
   const message = error instanceof Error ? error.message : "";
-  if (/Failed query:|Connection terminated|MotherDuck is not configured/i.test(message)) {
+  if (/Failed query:|Connection terminated|MotherDuck is not configured|ENOENT|mkdir|\/var\/task|Jwt is expired|not authenticated/i.test(message)) {
     return { error: "The member directory is unavailable, so this cannot be saved right now." };
   }
   if (message && message.length < 180 && !message.includes("\n")) return { error: message };
