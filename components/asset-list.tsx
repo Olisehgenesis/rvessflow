@@ -6,7 +6,7 @@ import { IconChevron } from "@/components/icons";
 import { PrivateLine, PrivateUsd } from "@/components/private-money";
 import { TokenIcon } from "@/components/token-icon";
 import { TokenSheet } from "@/components/token-sheet";
-import { hasTokenAmount } from "@/lib/home-math";
+import { hasTokenAmount, sortHoldingsByBalance } from "@/lib/home-math";
 import type { HoldingRow } from "@/lib/holding-row";
 import type { GdxTradeBalances } from "@/lib/token-face";
 
@@ -25,8 +25,9 @@ export function AssetList({
 }) {
   const [all, setAll] = useState(false);
   const [picked, setPicked] = useState<HoldingRow | null>(null);
-  const funded = rows.filter((row) => hasTokenAmount(row.amount) || hasTokenAmount(row.usd));
-  const shown = hideEmpty && !all ? funded : rows;
+  const ranked = sortHoldingsByBalance(rows);
+  const funded = ranked.filter((row) => hasTokenAmount(row.amount) || hasTokenAmount(row.usd) || hasTokenAmount(row.local ?? ""));
+  const shown = hideEmpty && !all ? funded : ranked;
   const hidden = hideEmpty ? rows.length - funded.length : 0;
   const listClass = desk
     ? "divide-y divide-[#EEF1E6] overflow-hidden rounded-3xl border border-[#E6EADF] bg-white shadow-[0_1px_0_rgba(20,20,20,0.04)]"

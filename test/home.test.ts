@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { balanceColumns, hasTokenAmount, holdingCaption, liveHomeColumns, showGettingStarted, usdcEquivalent } from "@/lib/home-math";
+import { balanceColumns, hasTokenAmount, holdingCaption, liveHomeColumns, showGettingStarted, sortHoldingsByBalance, usdcEquivalent } from "@/lib/home-math";
 
 describe("home balance columns", () => {
   it("splits a total into available, streaming, and locked that add back up", () => {
@@ -110,5 +110,16 @@ describe("getting started", () => {
     assert.equal(showGettingStarted({ goals: 0, locks: 2, groups: 0, amounts: [] }), false);
     assert.equal(showGettingStarted({ goals: 0, locks: 0, groups: 1, amounts: ["0.00"] }), false);
     assert.equal(hasTokenAmount("0.000307"), true);
+  });
+
+  it("puts the largest asset first", () => {
+    const rows = sortHoldingsByBalance([
+      { key: "usd", amount: "0.99", usd: "0.99", local: "4325" },
+      { key: "eth", amount: "0", usd: "0", local: "0" },
+      { key: "gdx", amount: "23403.400259", usd: "2.97", local: "12971" },
+    ]);
+    assert.equal(rows[0]?.key, "gdx");
+    assert.equal(rows[1]?.key, "usd");
+    assert.equal(rows[2]?.key, "eth");
   });
 });

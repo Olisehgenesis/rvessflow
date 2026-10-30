@@ -81,6 +81,25 @@ export function hasTokenAmount(amount: string): boolean {
   return Number.isFinite(value) && value > 0;
 }
 
+function moneyValue(amount: string | undefined): number {
+  if (!amount) return 0;
+  const value = Number(amount.replace(/,/g, ""));
+  return Number.isFinite(value) ? value : 0;
+}
+
+/** Rank a holding so the largest wallet balance sits first. Prefer local, then USD, then token units. */
+export function holdingRank(row: { amount: string; usd: string; local?: string }): number {
+  const local = moneyValue(row.local);
+  if (local > 0) return local;
+  const usd = moneyValue(row.usd);
+  if (usd > 0) return usd;
+  return moneyValue(row.amount);
+}
+
+export function sortHoldingsByBalance<T extends { amount: string; usd: string; local?: string }>(rows: readonly T[]): T[] {
+  return [...rows].sort((left, right) => holdingRank(right) - holdingRank(left));
+}
+
 /**
  * Short “get started” rows. A zero balance is not enough: someone with a goal,
  * lock, or group has already started, even if the wallet reads $0.00.
