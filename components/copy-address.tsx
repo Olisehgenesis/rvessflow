@@ -23,7 +23,7 @@ export function CopyAddress({ address, compact = false }: { address: string; com
         type="button"
         onClick={() => void copy()}
         aria-label={label}
-        className="mt-2 inline-flex size-8 items-center justify-center rounded-full text-[#5C6572] hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
+        className="-mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-[#5C6572] hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
       >
         {copied === "copied" ? <Check className="size-4" strokeWidth={2} /> : <Copy className="size-4" strokeWidth={1.75} />}
       </button>

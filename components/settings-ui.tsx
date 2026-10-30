@@ -45,8 +45,11 @@ export function SettingsHubList() {
     <ul className="overflow-hidden rounded-[1.6rem] border border-[#E6EADF] bg-white">
       {settingsLinks.map((item, index) => (
         <li key={item.href} className={index === 0 ? "" : "border-t border-[#E6EADF]"}>
-          <Link href={item.href === "/settings" ? "/settings/account" : item.href} className="flex min-h-[4.25rem] items-center gap-3 px-4 py-3">
-            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#F3F7E8] text-[#141414]">
+          <Link
+            href={item.href === "/settings" ? "/settings/account" : item.href}
+            className={`flex min-h-[4.25rem] items-center gap-3 px-4 py-3 ${item.href === "/settings" ? "bg-[#E7F4C4]" : ""}`}
+          >
+            <span className={`grid size-11 shrink-0 place-items-center rounded-2xl text-[#141414] ${item.href === "/settings" ? "bg-white/70" : "bg-[#F3F7E8]"}`}>
               <item.Icon className="size-5" strokeWidth={1.75} />
             </span>
             <span className="min-w-0 flex-1">
