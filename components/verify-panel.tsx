@@ -6,7 +6,7 @@ import { Dialog } from "radix-ui";
 import { useSignedAction } from "@/components/sign-action";
 import { VerifiedTick } from "@/components/verify-badge";
 import { claimUbi, linkWallet } from "@/lib/actions";
-import { attachThisAccount, faceCheckHref } from "@/lib/good-fv-sign";
+import { attachThisAccount, faceCheckHref, prepareFaceCheck } from "@/lib/good-fv-sign";
 import { GOOD_IDENTITY_DOCS, WALLET_LINK_NOTICE } from "@/lib/good-fv";
 import { money, shortAddress } from "@/lib/display";
 import type { Address } from "viem";
@@ -43,8 +43,20 @@ export function VerifyPanel({
   const [ok, setOk] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [fvSrc, setFvSrc] = useState("");
+  const [passkeyReady, setPasskeyReady] = useState(method !== "passkey");
   const due = Number(claimable) > 0;
   const until = expiresAt > 0 ? new Date(expiresAt * 1000).toLocaleDateString() : "";
+
+  useEffect(() => {
+    if (method !== "passkey" || verified) {
+      setPasskeyReady(true);
+      return;
+    }
+    setPasskeyReady(false);
+    void prepareFaceCheck(address)
+      .then(() => setPasskeyReady(true))
+      .catch((error) => setNote(error instanceof Error ? error.message : "This phone could not prepare the passkey."));
+  }, [address, method, verified]);
 
   useEffect(() => {
     if (!fvSrc) return;
@@ -59,16 +71,14 @@ export function VerifyPanel({
     setNote("Face check finished. Refreshing this account…");
   }, [verified, fvSrc]);
 
-  async function verify() {
+  function verify() {
+    const href = faceCheckHref({ address, method });
     setNote("");
     setBusy(true);
-    try {
-      setFvSrc(await faceCheckHref({ address, method }));
-    } catch (error) {
-      setNote(error instanceof Error ? error.message : "Face verification did not start.");
-    } finally {
-      setBusy(false);
-    }
+    void href
+      .then(setFvSrc)
+      .catch((error) => setNote(error instanceof Error ? error.message : "Face verification did not start."))
+      .finally(() => setBusy(false));
   }
 
   async function attach() {
@@ -158,11 +168,11 @@ export function VerifyPanel({
         <div className="mt-5 flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void verify()}
-            disabled={busy}
+            onClick={verify}
+            disabled={busy || !passkeyReady}
             className="inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#D6F34A] px-5 text-sm font-semibold text-[#141414] disabled:opacity-40"
           >
-            {busy ? "Sign to open the face check…" : "New face check"}
+            {busy ? "Sign to open the face check…" : passkeyReady ? "New face check" : "Preparing passkey…"}
           </button>
           <button
             type="button"
@@ -172,6 +182,11 @@ export function VerifyPanel({
             I already verified
           </button>
         </div>
+        {method === "passkey" ? (
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            New face check unlocks this phone&apos;s passkey. Use Chrome on www.rvess.xyz. Already have the tick on Valora or another wallet? Use I already verified — that one does not use the passkey.
+          </p>
+        ) : null}
       )}
       {note || state?.error || linkState?.error ? (
         <p className={`mt-3 text-sm ${ok && note ? "text-foreground" : "text-destructive"}`}>{note || state?.error || linkState?.error}</p>
