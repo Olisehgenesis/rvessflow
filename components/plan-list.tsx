@@ -3,6 +3,7 @@ import { GoalLink } from "@/components/product";
 import { Page } from "@/components/ui-bits";
 import { goalNotes } from "@/lib/notes";
 import { loadIncoming, loadPortfolio, type FlowRow } from "@/lib/protocol";
+import { loadPrices } from "@/lib/prices";
 import { loadQuote } from "@/lib/rates";
 import { viewer } from "@/lib/session";
 
@@ -24,12 +25,14 @@ export async function PlanList({
   showIncoming?: boolean;
 }) {
   const who = await viewer();
-  const [data, quote, notes, incoming] = await Promise.all([
+  const [data, quote, notes, incoming, priced] = await Promise.all([
     loadPortfolio(who),
     loadQuote(),
     goalNotes(who.address),
     showIncoming ? loadIncoming(who.address) : Promise.resolve([]),
+    loadPrices(),
   ]);
+  const prices = { usdcUsd8: priced.usdcUsd8, ethUsd8: priced.ethUsd8, gdxUsd8: priced.gdxUsd8 };
   const flows = data.flows.filter((flow) => flow.kind === kind);
   const open = flows.filter((flow) => !flow.settled && !flow.paused && !(kind === "saving" && notes[flow.id]?.paused)).length;
   return (
@@ -54,6 +57,7 @@ export async function PlanList({
                 flow={item.flow}
                 readAt={data.readAt}
                 quote={quote}
+                prices={prices}
                 caption={`From ${item.from}`}
                 href={`/goals/from/${item.vault}/${item.flow.id}`}
               />
@@ -75,7 +79,7 @@ export async function PlanList({
         <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
           {flows.map((flow) => (
             <li key={flow.id}>
-              <GoalLink flow={flow} readAt={data.readAt} quote={quote} appPaused={Boolean(notes[flow.id]?.paused)} />
+              <GoalLink flow={flow} readAt={data.readAt} quote={quote} prices={prices} appPaused={Boolean(notes[flow.id]?.paused)} />
             </li>
           ))}
         </ul>

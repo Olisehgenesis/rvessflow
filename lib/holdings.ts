@@ -38,6 +38,8 @@ export type HoldingsView = {
   streamingUsd8: string;
   lockedUsd8: string;
   usdcUsd8: string;
+  ethUsd8: string;
+  gdxUsd8: string;
   available: string;
   streaming: string;
   locked: string;
@@ -438,6 +440,8 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
     streamingUsd8: columns.streaming.toString(),
     lockedUsd8: columns.locked.toString(),
     usdcUsd8: prices.usdcUsd8.toString(),
+    ethUsd8: prices.ethUsd8.toString(),
+    gdxUsd8: prices.gdxUsd8.toString(),
     available: money(columns.available),
     streaming: money(columns.streaming),
     locked: money(columns.locked),

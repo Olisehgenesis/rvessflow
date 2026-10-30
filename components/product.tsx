@@ -3,12 +3,14 @@ import { FlowingText } from "@/components/flowing";
 import { IconCalendar, IconChevron, IconLock } from "@/components/icons";
 import { PenaltyHint } from "@/components/penalty-hint";
 import { TokenMark } from "@/components/forms";
+import { TokenIcon } from "@/components/token-icon";
 import { when } from "@/components/ui-bits";
 import { Progress } from "@/components/ui/progress";
 import { assetByAddress } from "@/lib/assets";
+import { tokenUsdWei, type FlowPrices } from "@/lib/flow-value";
 import { networkLabel } from "@/lib/network";
 import { percent, show } from "@/lib/display";
-import type { Quote } from "@/lib/quote";
+import { chainQuote, type Quote } from "@/lib/quote";
 import type { FlowRow, LockRow } from "@/lib/protocol";
 
 export type ProductKind = "saving" | "flow" | "expense" | "lock" | "group";
@@ -68,13 +70,27 @@ const statusTone: Record<string, string> = {
   "Not started": "bg-muted text-foreground",
 };
 
-export function ProductMark({ kind, size = "md", quiet = false }: { kind: ProductKind; size?: keyof typeof sizes; quiet?: boolean }) {
+export function ProductMark({
+  kind,
+  size = "md",
+  quiet = false,
+  token,
+}: {
+  kind: ProductKind;
+  size?: keyof typeof sizes;
+  quiet?: boolean;
+  token?: string;
+}) {
+  const asset = token ? assetByAddress(token) : null;
   return (
-    <img
-      src={meta[kind].art}
-      alt=""
-      className={`${sizes[size]} shrink-0 object-contain ${quiet ? "opacity-45" : ""}`}
-    />
+    <span className={`relative ${sizes[size]} shrink-0`}>
+      <img src={meta[kind].art} alt="" className={`size-full object-contain ${quiet ? "opacity-45" : ""}`} />
+      {asset && asset.symbol !== "Token" ? (
+        <span className="absolute -right-0.5 -bottom-0.5 rounded-full bg-white ring-2 ring-white">
+          <TokenIcon symbol={asset.symbol} className="size-3.5" withChain={false} />
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -134,6 +150,11 @@ export function goalStatus(flow: FlowRow, readAt: number, appPaused = false) {
   return "Waiting";
 }
 
+function usdAmount(wei: string, token: string, prices?: FlowPrices) {
+  if (!prices) return wei;
+  return tokenUsdWei(BigInt(wei || "0"), token, prices).toString();
+}
+
 export function GoalLink({
   flow,
   readAt,
@@ -141,6 +162,7 @@ export function GoalLink({
   appPaused = false,
   href,
   caption,
+  prices,
 }: {
   flow: FlowRow;
   readAt: number;
@@ -148,14 +170,21 @@ export function GoalLink({
   appPaused?: boolean;
   href?: string;
   caption?: string;
+  prices?: FlowPrices;
 }) {
-  const { whole, part, label, progress } = goalFigures(flow);
+  const figures = goalFigures(flow);
+  const whole = usdAmount(figures.whole, flow.token, prices);
+  const part = usdAmount(figures.part, flow.token, prices);
+  const rate = usdAmount(flow.rate, flow.token, prices);
+  const { label, progress } = figures;
   const pace = goalStatus(flow, readAt, appPaused);
   const live = pace === "Active" && flow.kind !== "saving" && flow.active && !flow.paused;
+  const local = quote.code !== "usd" && quote.code !== "fusdcx";
+  const usdLine = show(part, chainQuote(), 2);
   return (
     <Link href={href ?? `/goals/${flow.id}`} className="block rounded-2xl border border-border bg-card p-4 lg:transition-colors lg:duration-150 lg:hover:border-[#C9D7A4] lg:focus-visible:outline-2 lg:focus-visible:outline-offset-2 lg:focus-visible:outline-[#141414]">
       <div className="flex items-start gap-3">
-        <ProductMark kind={flow.kind} size="sm" quiet={flow.settled} />
+        <ProductMark kind={flow.kind} size="sm" quiet={flow.settled} token={flow.token} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -169,11 +198,12 @@ export function GoalLink({
       <div className="mt-3 flex flex-nowrap items-baseline justify-between gap-3">
         <p className="flex min-w-0 flex-1 flex-nowrap items-baseline gap-1 overflow-hidden font-display text-sm font-semibold whitespace-nowrap tabular-nums">
           <span>{quote.unit}</span>
-          {live ? <FlowingText readAt={readAt} base={part} perSecond={flow.rate} ceiling={flow.reserved} fine plain quote={quote} /> : show(part, quote, 6)}
-          <span className="font-medium text-muted-foreground"> / {show(whole, quote, 6)}</span>
+          {live ? <FlowingText readAt={readAt} base={part} perSecond={rate} ceiling={whole} fine plain quote={quote} /> : show(part, quote, 4)}
+          <span className="font-medium text-muted-foreground"> / {show(whole, quote, 4)}</span>
         </p>
         <p className="shrink-0 text-xs font-medium tabular-nums whitespace-nowrap">{progress === 0 && BigInt(part || "0") > 0n ? "<1%" : `${progress}%`}</p>
       </div>
+      {local ? <p className="mt-0.5 text-[11px] text-muted-foreground">${usdLine}</p> : null}
       <Progress value={progress} indicatorClassName="bg-foreground" className="mt-2 h-1.5 bg-muted" />
       <div className="mt-3 flex items-center justify-between gap-3 text-xs">
         <span className="flex items-center gap-1.5 text-muted-foreground">

@@ -7,6 +7,8 @@ import { ProductMark } from "@/components/product";
 import { IconCalendar } from "@/components/icons";
 import { Amount, Page, when } from "@/components/ui-bits";
 import { labeled, percent } from "@/lib/display";
+import { tokenUsdWei } from "@/lib/flow-value";
+import { loadPrices } from "@/lib/prices";
 import { loadQuote } from "@/lib/rates";
 import { loadIncoming } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
@@ -25,12 +27,14 @@ async function IncomingBody({ params }: { params: Promise<{ vault: string; id: s
   const { vault, id } = await params;
   if (!isAddress(vault) || !/^\d+$/.test(id)) notFound();
   const who = await viewer();
-  const [incoming, quote] = await Promise.all([loadIncoming(who.address), loadQuote()]);
+  const [incoming, quote, priced] = await Promise.all([loadIncoming(who.address), loadQuote(), loadPrices()]);
   const item = incoming.find((entry) => entry.vault.toLowerCase() === vault.toLowerCase() && entry.flow.id === id);
   if (!item) notFound();
   const flow = item.flow;
-  const whole = flow.reserved;
-  const part = (BigInt(flow.reserved) - BigInt(flow.remaining)).toString();
+  const px = { usdcUsd8: priced.usdcUsd8, ethUsd8: priced.ethUsd8, gdxUsd8: priced.gdxUsd8 };
+  const whole = tokenUsdWei(BigInt(flow.reserved), flow.token, px).toString();
+  const part = tokenUsdWei(BigInt(flow.reserved) - BigInt(flow.remaining), flow.token, px).toString();
+  const rate = tokenUsdWei(BigInt(flow.rate), flow.token, px).toString();
   const live = flow.active && !flow.paused && !flow.settled;
   const readAt = await requestNowSeconds();
   const status = flow.settled ? "Closed" : flow.paused ? "Paused" : flow.active ? "Active" : "Waiting";
@@ -38,7 +42,7 @@ async function IncomingBody({ params }: { params: Promise<{ vault: string; id: s
     <Page title={flow.name} back="/goals/flow">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <ProductMark kind={flow.kind} size="md" />
+          <ProductMark kind={flow.kind} size="md" token={flow.token} />
           <div>
             <p className="font-medium">{flow.name}</p>
             <p className="text-sm text-muted-foreground">From {item.from}</p>
@@ -49,13 +53,13 @@ async function IncomingBody({ params }: { params: Promise<{ vault: string; id: s
       <p className="mb-3 text-sm text-muted-foreground">This streams into your wallet. {item.from} owns the goal, so only they can pause or close it.</p>
       <div className="flex items-end justify-between gap-3">
         <div>
-          {live ? <FlowingAmount readAt={readAt} base={part} perSecond={flow.rate} ceiling={whole} quote={quote} /> : <Amount value={part} quote={quote} />}
+          {live ? <FlowingAmount readAt={readAt} base={part} perSecond={rate} ceiling={whole} quote={quote} /> : <Amount value={part} quote={quote} />}
           <p className="text-sm text-muted-foreground">of {labeled(whole, quote)}</p>
         </div>
         <p className="text-sm font-medium tabular-nums">{percent(part, whole)}%</p>
       </div>
       {live ? (
-        <FlowingProgress readAt={readAt} base={part} perSecond={flow.rate} ceiling={whole} whole={whole} />
+        <FlowingProgress readAt={readAt} base={part} perSecond={rate} ceiling={whole} whole={whole} />
       ) : (
         <Progress value={percent(part, whole)} className="mt-4 h-2" />
       )}

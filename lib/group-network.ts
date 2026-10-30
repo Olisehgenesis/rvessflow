@@ -26,16 +26,24 @@ export function groupNetLabel(net: GroupNet): string {
 
 export function groupKey(net: GroupNet, id: bigint | string): string {
   const value = typeof id === "bigint" ? id.toString() : id;
-  return net === appGroupNet() ? value : `${net}:${value}`;
+  return net === appGroupNet() ? value : `${net}-${value}`;
 }
 
 export function parseGroupKey(key: string): { net: GroupNet; id: bigint } {
-  const split = key.indexOf(":");
-  if (split > 0) {
-    const net = key.slice(0, split);
-    if (isGroupNet(net)) return { net, id: BigInt(key.slice(split + 1)) };
+  const raw = decodeURIComponent(key).trim();
+  const marked = raw.match(/^(celo|base)[:\-](\d+)$/i);
+  if (marked) return { net: marked[1].toLowerCase() as GroupNet, id: BigInt(marked[2]) };
+  return { net: appGroupNet(), id: BigInt(raw) };
+}
+
+export function sameGroupKey(left: string, right: string): boolean {
+  try {
+    const a = parseGroupKey(left);
+    const b = parseGroupKey(right);
+    return a.net === b.net && a.id === b.id;
+  } catch {
+    return left === right;
   }
-  return { net: appGroupNet(), id: BigInt(key) };
 }
 
 export const recommendedGroupNet: GroupNet = "celo";

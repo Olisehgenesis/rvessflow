@@ -7,6 +7,7 @@ import { Fact, Facts, Notice, Page, when } from "@/components/ui-bits";
 import { labeled } from "@/lib/display";
 import { loadPayChoices } from "@/lib/holdings";
 import { loadQuote } from "@/lib/rates";
+import { sameGroupKey } from "@/lib/group-network";
 import { addresses, loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
@@ -22,7 +23,7 @@ async function LockBody({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const who = await viewer();
   const [data, quote] = await Promise.all([loadPortfolio(who), loadQuote()]);
-  const lock = data.locks.find((item) => item.id === id);
+  const lock = data.locks.find((item) => sameGroupKey(item.id, id));
   if (!lock) notFound();
   const usdLock = lock.token.toLowerCase() === addresses.fusdcx.toLowerCase();
   const choices = usdLock ? await loadPayChoices(who.address) : undefined;

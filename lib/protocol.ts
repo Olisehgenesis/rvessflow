@@ -22,7 +22,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { money, shortAddress } from "@/lib/display";
-import { appGroupNet, groupKey, type GroupNet } from "@/lib/group-network";
+import { appGroupNet, groupKey, parseGroupKey, type GroupNet } from "@/lib/group-network";
 import { groupPlainOn, groupsOfOn, groupSite, otherGroupNet } from "@/lib/group-site";
 import { vaultSite } from "@/lib/vault-site";
 import { appChain, appNetwork, appRpc, celoTransport, explorerUrl, networkLabel, stableName } from "@/lib/network";
@@ -459,6 +459,27 @@ function toFlowRow(id: bigint, flow: FlowRecord, now: bigint, net: GroupNet = ap
     saved: (kind === 1 && !flow.settled ? flow.reserved : 0n).toString(),
     remaining: remaining.toString(),
   };
+}
+
+export async function loadFlow(owner: Address, key: string): Promise<FlowRow | null> {
+  const { net, id } = parseGroupKey(key);
+  const site = vaultSite(net);
+  const vault = await site.client.readContract({
+    address: site.factory,
+    abi: factoryAbi,
+    functionName: "vaultOf",
+    args: [owner],
+  });
+  if (vault === zeroAddress) return null;
+  const flow = (await site.client.readContract({
+    address: vault,
+    abi: vaultAbi,
+    functionName: "getFlow",
+    args: [id],
+  })) as unknown as FlowRecord;
+  if (!flow?.createdAt) return null;
+  const now = BigInt(await requestNowSeconds());
+  return toFlowRow(id, flow, now, net);
 }
 
 function streamRemaining(flow: {

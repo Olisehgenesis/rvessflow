@@ -40,13 +40,15 @@ export function TokenIcon({
   symbol,
   network,
   className = "size-11",
+  withChain = true,
 }: {
   symbol: string;
   network?: string;
   className?: string;
+  withChain?: boolean;
 }) {
   const src = sources[symbol];
-  const marks = chainKeys(network, symbol);
+  const marks = withChain ? chainKeys(network, symbol) : [];
   const face = src ? (
     <img src={src} alt="" className="size-full rounded-full object-cover" />
   ) : (

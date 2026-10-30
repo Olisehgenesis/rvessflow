@@ -17,12 +17,23 @@ function emitFlowClock() {
 function startFlowClock() {
   if (flowInterval) return;
   emitFlowClock();
-  flowInterval = window.setInterval(emitFlowClock, 1000);
+  const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) {
+    flowInterval = window.setInterval(emitFlowClock, 1000);
+    return;
+  }
+  const loop = () => {
+    emitFlowClock();
+    flowInterval = window.requestAnimationFrame(loop);
+  };
+  flowInterval = window.requestAnimationFrame(loop);
 }
 
 function stopFlowClock() {
   if (flowListeners.size > 0) return;
-  if (flowInterval) window.clearInterval(flowInterval);
+  if (!flowInterval) return;
+  window.clearInterval(flowInterval);
+  window.cancelAnimationFrame(flowInterval);
   flowInterval = 0;
 }
 
@@ -275,7 +286,7 @@ export function FlowingAmount({
   return (
     <p className="flex items-baseline gap-2">
       <span className="font-mono text-[2.6rem] leading-none font-medium tracking-tight tabular-nums">
-        <RollingMoney value={value} quote={quote} digits={streamDigits(BigInt(perSecond), quote)} />
+        {show(value, quote, streamDigits(BigInt(perSecond), quote))}
       </span>
       <span className="text-sm font-medium text-muted-foreground">{quote.unit}</span>
     </p>

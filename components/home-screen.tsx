@@ -10,6 +10,7 @@ import { ActivityList } from "@/components/activity-list";
 import { AssetList } from "@/components/asset-list";
 import { PrivateLine, PrivateUsd } from "@/components/private-money";
 import { percent, show } from "@/lib/display";
+import { flowPricesFrom, sumTokenUsd, tokenUsdWei } from "@/lib/flow-value";
 import { hasTokenAmount, showGettingStarted } from "@/lib/home-math";
 import { loadActivity, type ActivityView } from "@/lib/activity";
 import { loadHoldings, type HoldingsView } from "@/lib/holdings";
@@ -81,14 +82,17 @@ async function HomeReady({
   incoming: IncomingItem[];
 }) {
   const me = who.address.toLowerCase();
+  const prices = flowPricesFrom(holdings);
   const liveIn = incoming.filter((item) => item.flow.active && !item.flow.paused && !item.flow.settled && BigInt(item.flow.rate) > 0n);
   const liveOwn = portfolio.flows.filter((flow) => flow.active && !flow.paused && !flow.settled && BigInt(flow.rate) > 0n);
   const liveSelf = liveOwn.filter((flow) => flow.recipient.toLowerCase() === me);
-  const inWeiPerSec = liveIn.reduce((sum, item) => sum + BigInt(item.flow.rate), 0n) + liveSelf.reduce((sum, flow) => sum + BigInt(flow.rate), 0n);
-  const streamWeiPerSec = liveOwn.reduce((sum, flow) => sum + BigInt(flow.rate), 0n);
-  const outWeiPerSec = liveOwn.filter((flow) => flow.recipient.toLowerCase() !== me).reduce((sum, flow) => sum + BigInt(flow.rate), 0n);
-  const inCapWei = liveIn.reduce((sum, item) => sum + BigInt(item.flow.remaining), 0n) + liveSelf.reduce((sum, flow) => sum + BigInt(flow.remaining), 0n);
-  const streamRemainingWei = BigInt(portfolio.streaming);
+  const inRows = [...liveIn.map((item) => item.flow), ...liveSelf];
+  const outRows = liveOwn.filter((flow) => flow.recipient.toLowerCase() !== me);
+  const inWeiPerSec = sumTokenUsd(inRows, prices, "rate");
+  const streamWeiPerSec = sumTokenUsd(liveOwn, prices, "rate");
+  const outWeiPerSec = sumTokenUsd(outRows, prices, "rate");
+  const inCapWei = sumTokenUsd(inRows, prices, "remaining");
+  const streamRemainingWei = sumTokenUsd(liveOwn, prices, "remaining");
   const amounts = [...holdings.rows, holdings.goodDollar].map((row) => row.amount);
   const funded = amounts.some(hasTokenAmount);
   const starting = showGettingStarted({
@@ -114,8 +118,8 @@ async function HomeReady({
           .map((flow) => ({
             id: flow.id,
             name: flow.name,
-            saved: show(flow.saved, quote),
-            goal: show(flow.goal, quote),
+            saved: show(tokenUsdWei(BigInt(flow.saved), flow.token, prices).toString(), quote),
+            goal: show(tokenUsdWei(BigInt(flow.goal), flow.token, prices).toString(), quote),
             progress: percent(flow.saved, flow.goal),
           }))}
         unit={quote.unit}
@@ -187,7 +191,7 @@ async function HomeReady({
                 <ul className="grid gap-3 lg:grid-cols-2">
                   {openFlows.slice(0, 4).map((flow) => (
                     <li key={flow.id}>
-                      <GoalLink flow={flow} readAt={portfolio.readAt} quote={quote} />
+                      <GoalLink flow={flow} readAt={portfolio.readAt} quote={quote} prices={prices} />
                     </li>
                   ))}
                 </ul>
@@ -240,7 +244,7 @@ async function HomeReady({
                 <ul className="mt-2 space-y-3">
                   {incoming.map((item) => (
                     <li key={`${item.vault}-${item.flow.id}`}>
-                      <GoalLink flow={item.flow} readAt={portfolio.readAt} quote={quote} caption={`From ${item.from}`} href={`/goals/from/${item.vault}/${item.flow.id}`} />
+                      <GoalLink flow={item.flow} readAt={portfolio.readAt} quote={quote} prices={prices} caption={`From ${item.from}`} href={`/goals/from/${item.vault}/${item.flow.id}`} />
                     </li>
                   ))}
                 </ul>
@@ -272,6 +276,7 @@ async function HomeReady({
                   flow={item.flow}
                   readAt={portfolio.readAt}
                   quote={quote}
+                  prices={prices}
                   caption={`From ${item.from}`}
                   href={`/goals/from/${item.vault}/${item.flow.id}`}
                 />
@@ -281,6 +286,23 @@ async function HomeReady({
         </section>
       ) : null}
       {starting && incoming.length === 0 ? <GettingStarted /> : null}
+      {openFlows.length > 0 ? (
+        <section className="mt-6">
+          <div className="mb-2 flex items-end justify-between">
+            <h2 className="text-base font-semibold">Goals and streams</h2>
+            <Link href="/goals" className="text-sm font-medium text-muted-foreground">
+              View all
+            </Link>
+          </div>
+          <ul className="space-y-3">
+            {openFlows.slice(0, 4).map((flow) => (
+              <li key={flow.id}>
+                <GoalLink flow={flow} readAt={portfolio.readAt} quote={quote} prices={prices} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <section className="mt-6">
         <div className="mb-2 flex items-end justify-between">
           <h2 className="text-base font-semibold">Your assets</h2>
