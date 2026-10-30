@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { IconMark } from "@/components/icons";
 
 type InstallEvent = Event & {
   prompt: () => Promise<void>;
@@ -81,7 +82,7 @@ export function InstallButton({ className = "", row = false }: { className?: str
         onClick={() => void install()}
         className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
       >
-        <img src="/mark.png" alt="" width={22} height={22} className="size-[22px] rounded-md" />
+        <IconMark className="size-[22px]" />
         Install
       </button>
       {help ? (
