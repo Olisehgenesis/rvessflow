@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "Rvess",
     short_name: "Rvess",
-    description: "Beta. Savings, streams, locks, and groups. One account on Base and Celo.",
+    description: "Beta. Savings, streams, locks, and groups. One account.",
     lang: "en",
     dir: "ltr",
     start_url: "/",

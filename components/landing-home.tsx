@@ -195,7 +195,7 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
               in motion.
             </h1>
             <p className="mt-5 max-w-[28rem] text-[15px] leading-relaxed text-[#5C6572] sm:text-base">
-              Save for your goals, stream payments, lock your funds, and grow together. One account on Base and Celo.
+              Save for your goals, stream payments, lock your funds, and grow together. One account.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
               <LimeButton onClick={() => openAuth("start")} className="h-12 w-full px-5 text-[15px] sm:w-auto sm:px-6">
