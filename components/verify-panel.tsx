@@ -42,27 +42,31 @@ export function VerifyPanel({
   const [note, setNote] = useState("");
   const [ok, setOk] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [fvSrc, setFvSrc] = useState("");
   const due = Number(claimable) > 0;
   const until = expiresAt > 0 ? new Date(expiresAt * 1000).toLocaleDateString() : "";
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("from") !== "fv" && params.get("isVerified") == null) return;
-    const passed = params.get("isVerified") === "true";
-    const reason = params.get("reason")?.trim();
-    setOk(passed);
-    setNote(passed ? "Face check finished. Refreshing this account…" : reason || "Face check did not finish.");
-    window.history.replaceState(null, "", "/settings#verify");
-    if (passed) router.refresh();
-  }, [router]);
+    if (!fvSrc) return;
+    const tick = window.setInterval(() => router.refresh(), 4000);
+    return () => window.clearInterval(tick);
+  }, [fvSrc, router]);
+
+  useEffect(() => {
+    if (!fvSrc || !verified) return;
+    setFvSrc("");
+    setOk(true);
+    setNote("Face check finished. Refreshing this account…");
+  }, [verified, fvSrc]);
 
   async function verify() {
     setNote("");
     setBusy(true);
     try {
-      window.location.assign(await faceCheckHref({ address, method }));
+      setFvSrc(await faceCheckHref({ address, method }));
     } catch (error) {
       setNote(error instanceof Error ? error.message : "Face verification did not start.");
+    } finally {
       setBusy(false);
     }
   }
@@ -158,7 +162,7 @@ export function VerifyPanel({
             disabled={busy}
             className="inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#D6F34A] px-5 text-sm font-semibold text-[#141414] disabled:opacity-40"
           >
-            {busy ? "Opening GoodDollar…" : "New face check"}
+            {busy ? "Sign to open the face check…" : "New face check"}
           </button>
           <button
             type="button"
@@ -171,6 +175,28 @@ export function VerifyPanel({
       )}
       {note || state?.error || linkState?.error ? (
         <p className={`mt-3 text-sm ${ok && note ? "text-foreground" : "text-destructive"}`}>{note || state?.error || linkState?.error}</p>
+      ) : null}
+
+      {fvSrc ? (
+        <div className="fixed inset-0 z-[80] flex flex-col bg-white">
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-[#E6EADF] px-3">
+            <p className="text-sm font-semibold">Face check</p>
+            <button
+              type="button"
+              onClick={() => setFvSrc("")}
+              className="inline-flex h-9 items-center justify-center rounded-full px-3 text-sm font-medium text-[#5C6572]"
+            >
+              Close
+            </button>
+          </div>
+          <iframe
+            title="GoodDollar face verification"
+            src={fvSrc}
+            className="min-h-0 w-full flex-1 border-0"
+            allow="camera *; microphone *; fullscreen *; publickey-credentials-get *"
+            referrerPolicy="no-referrer-when-downgrade"
+          />
+        </div>
       ) : null}
 
       <Dialog.Root open={linkOpen} onOpenChange={setLinkOpen}>

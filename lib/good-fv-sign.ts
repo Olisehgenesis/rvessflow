@@ -55,8 +55,8 @@ export async function faceCheckHref(input: { address: Address; method: "passkey"
     account,
     nonce: Math.floor(Date.now() / 1000).toString(),
     signature,
-    callback: `${window.location.origin}/settings?from=fv`,
-    popup: false,
+    callback: `${window.location.origin}/api/fv-callback`,
+    popup: true,
   });
 }
 

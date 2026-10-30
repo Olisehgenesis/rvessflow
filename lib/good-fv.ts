@@ -38,12 +38,12 @@ export function belowFaucetNeed(balance: bigint, toppingAmount: bigint, minToppi
   return ((toppingAmount - balance) * 100n) / toppingAmount >= BigInt(minTopping);
 }
 
-/** Same text the GoodDollar Identity SDK signs. The first space is replaced with the account. */
+/** Same text GoodID and /auth/fv2 verify. `<account>` is replaced with the checksum address. */
 export const FV_IDENTIFIER_MSG2 =
-  "Sign this message to request verifying your account and to create your own secret unique identifier for your anonymized record.\nYou can use this identifier in the future to delete this anonymized record.\nWARNING: do not sign this message unless you trust the website/application requesting this signature.";
+  "Sign this message to request verifying your account <account> and to create your own secret unique identifier for your anonymized record.\nYou can use this identifier in the future to delete this anonymized record.\nWARNING: do not sign this message unless you trust the website/application requesting this signature.";
 
 export function fvIdentifierMessage(account: Address) {
-  return FV_IDENTIFIER_MSG2.replace(" ", getAddress(account));
+  return FV_IDENTIFIER_MSG2.replace("<account>", getAddress(account));
 }
 
 export function fvLink(input: {
@@ -63,8 +63,10 @@ export function fvLink(input: {
     fvsig: input.signature,
     chain: 42220,
   };
-  params[input.popup ? "cbu" : "rdu"] = input.callback;
-  url.searchParams.set("lz", LZString.compressToEncodedURIComponent(JSON.stringify(params)));
+  if (input.callback) {
+    params[input.popup ? "cbu" : "rdu"] = input.callback;
+  }
+  url.searchParams.append("lz", LZString.compressToEncodedURIComponent(JSON.stringify(params)));
   return url.toString();
 }
 

@@ -7,9 +7,10 @@ import { fvIdentifierMessage, fvLink, identityAbi, identityExpiry, ubiAbi } from
 const account = "0xf7dbD2867f55832E4A05E16Cd69cB57A70923cDD";
 
 describe("GoodDollar face check", () => {
-  it("puts the account where the Identity SDK puts it", () => {
+  it("puts the checksum account where GoodID substitutes <account>", () => {
     const message = fvIdentifierMessage(account);
-    assert.equal(message.startsWith(`Sign${account}`), true);
+    assert.equal(message.includes(`account ${account}`), true);
+    assert.equal(message.includes("<account>"), false);
     assert.equal(message.includes("unique identifier"), true);
   });
 
@@ -28,11 +29,32 @@ describe("GoodDollar face check", () => {
       rdu: string;
       cbu?: string;
       chain: number;
+      fvsig: string;
+      nonce: string;
     };
     assert.equal(params.account, account);
     assert.equal(params.rdu, "https://rvess.xyz/settings?from=fv");
     assert.equal(params.cbu, undefined);
     assert.equal(params.chain, 42220);
+    assert.equal(params.fvsig, "0xab");
+    assert.equal(params.nonce, "1");
+  });
+
+  it("packs iframe callbacks as cbu", () => {
+    const href = fvLink({
+      account,
+      nonce: "2",
+      signature: "0xcd",
+      callback: "https://www.rvess.xyz/api/fv-callback",
+      popup: true,
+    });
+    const packed = new URL(href).searchParams.get("lz") ?? "";
+    const params = JSON.parse(LZString.decompressFromEncodedURIComponent(packed) ?? "{}") as {
+      cbu?: string;
+      rdu?: string;
+    };
+    assert.equal(params.cbu, "https://www.rvess.xyz/api/fv-callback");
+    assert.equal(params.rdu, undefined);
   });
 
   it("expires identity after the authentication period", () => {
