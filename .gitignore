@@ -25,11 +25,10 @@ coverage/
 # group directory (phones, emails, link passwords)
 /data
 
-# secrets
-.env
-.env*
-!.env.example
+# private key stays on this machine. encrypted .env files are safe to commit.
 .env.keys
+.env.local
+.env*.local
 wallet/
 *.pem
 
