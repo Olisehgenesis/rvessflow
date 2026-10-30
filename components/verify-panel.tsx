@@ -165,28 +165,30 @@ export function VerifyPanel({
           ) : null}
         </>
       ) : (
-        <div className="mt-5 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={verify}
-            disabled={busy || !passkeyReady}
-            className="inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#D6F34A] px-5 text-sm font-semibold text-[#141414] disabled:opacity-40"
-          >
-            {busy ? "Sign to open the face check…" : passkeyReady ? "New face check" : "Preparing passkey…"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setLinkOpen(true)}
-            className="inline-flex h-12 min-w-40 items-center justify-center rounded-full border border-[#E6EADF] bg-white px-5 text-sm font-semibold"
-          >
-            I already verified
-          </button>
-        </div>
-        {method === "passkey" ? (
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            New face check unlocks this phone&apos;s passkey. Use Chrome on www.rvess.xyz. Already have the tick on Valora or another wallet? Use I already verified — that one does not use the passkey.
-          </p>
-        ) : null}
+        <>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={verify}
+              disabled={busy || !passkeyReady}
+              className="inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#D6F34A] px-5 text-sm font-semibold text-[#141414] disabled:opacity-40"
+            >
+              {busy ? "Sign to open the face check…" : passkeyReady ? "New face check" : "Preparing passkey…"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setLinkOpen(true)}
+              className="inline-flex h-12 min-w-40 items-center justify-center rounded-full border border-[#E6EADF] bg-white px-5 text-sm font-semibold"
+            >
+              I already verified
+            </button>
+          </div>
+          {method === "passkey" ? (
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              New face check unlocks this phone&apos;s passkey. Use Chrome on www.rvess.xyz. Already have the tick on Valora or another wallet? Use I already verified — that one does not use the passkey.
+            </p>
+          ) : null}
+        </>
       )}
       {note || state?.error || linkState?.error ? (
         <p className={`mt-3 text-sm ${ok && note ? "text-foreground" : "text-destructive"}`}>{note || state?.error || linkState?.error}</p>
