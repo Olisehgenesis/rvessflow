@@ -107,6 +107,7 @@ export type Intent = (
       phones: { account: string; phone: string }[];
       plain?: boolean;
       network?: "base" | "celo";
+      token?: "usd" | "gdx";
     }
   | { kind: "payout"; id: string; from: number; dir: -1 | 1 }
   | { kind: "phone"; id: string; phone: string }

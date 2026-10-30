@@ -8,7 +8,7 @@ import { IconBack } from "@/components/icons";
 export function TopBar({ title, back, action, desk = true }: { title: string; back?: string; action?: React.ReactNode; desk?: boolean }) {
   return (
     <>
-      <header className="sticky top-0 z-20 -mx-4 mb-4 flex min-h-14 items-center gap-2 border-b border-border bg-background px-3 pt-[env(safe-area-inset-top)] lg:hidden">
+      <header className="sticky top-0 z-20 -mx-4 mb-4 flex min-h-14 items-center gap-2 bg-background px-3 pt-[env(safe-area-inset-top)] lg:hidden">
         {back ? (
           <Link href={back} aria-label="Back" className="grid size-10 shrink-0 place-items-center rounded-full text-foreground">
             <IconBack className="size-5" />

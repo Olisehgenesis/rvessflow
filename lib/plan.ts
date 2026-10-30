@@ -11,6 +11,7 @@ import { GDX_BROKER, GDX_EXCHANGE_ID, GDX_EXCHANGE_PROVIDER, GDX_TOKEN, GDX_USDM
 import { gdxViaSend, quoteGdxTrade, readGdxVia, uniswapExactInCall } from "@/lib/gdx-route";
 import { isSendAsset, parseSendAmount, spendableEth } from "@/lib/send-math";
 import { appGroupNet, groupKey, netFromLabel, parseGroupKey, type GroupNet } from "@/lib/group-network";
+import { groupTokenAddress } from "@/lib/group-token";
 import { groupSite } from "@/lib/group-site";
 import { siteSuper, vaultSite, type VaultSite } from "@/lib/vault-site";
 import { CELO_IDENTITY, CELO_UBI, identityAbi, ubiAbi } from "@/lib/good-fv";
@@ -615,7 +616,7 @@ async function planGroup(owner: Address, intent: Extract<Intent, { kind: "group"
     const calls: PreparedCall[] = [];
     const due = withProtocolFee(group[4]);
     if (intent.pay) await coverWallet(calls, vaultSite(net), owner, readPay(intent.pay), due);
-    await approveIfNeeded(calls, owner, site.token, site.groups, due, site.client);
+    await approveIfNeeded(calls, owner, group[1], site.groups, due, site.client);
     calls.push(encode(site.groups, groupAbi, "postCollateral", [id]));
     return { calls, intent: { ...intent, submitted: true }, done: false, chainId: site.chainId };
   }
@@ -630,7 +631,7 @@ async function planGroup(owner: Address, intent: Extract<Intent, { kind: "group"
   const calls: PreparedCall[] = [];
   const due = withProtocolFee(group[3]);
   if (intent.pay) await coverWallet(calls, vaultSite(net), owner, readPay(intent.pay), due);
-  await approveIfNeeded(calls, owner, site.token, site.groups, due, site.client);
+  await approveIfNeeded(calls, owner, group[1], site.groups, due, site.client);
   calls.push(encode(site.groups, groupAbi, "contribute", [id]));
   return { calls, intent: { ...intent, seen: given.toString(), submitted: true }, done: false, chainId: site.chainId };
 }
@@ -654,7 +655,7 @@ async function planGroupCreate(owner: Address, intent: Extract<Intent, { kind: "
     return {
       calls: [
         encode(site.groups, groupAbi, intent.plain ? "createPlainGroup" : "createGroup", [
-          site.token,
+          groupTokenAddress(net, intent.token === "gdx" ? "gdx" : "usd"),
           contribution,
           BigInt(intent.cycleSeconds),
           BigInt(intent.windowSeconds),

@@ -23,6 +23,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { money, shortAddress } from "@/lib/display";
 import { appGroupNet, groupKey, parseGroupKey, type GroupNet } from "@/lib/group-network";
+import { groupTokenAddress } from "@/lib/group-token";
 import { groupPlainOn, groupsOfOn, groupSite, otherGroupNet } from "@/lib/group-site";
 import { vaultSite } from "@/lib/vault-site";
 import { appChain, appNetwork, appRpc, celoTransport, explorerUrl, networkLabel, stableName } from "@/lib/network";
@@ -386,6 +387,7 @@ export type GroupRow = {
   startTime: number;
   cycle: string;
   cycleOpen: boolean;
+  token: Address;
 };
 
 export type Portfolio = {
@@ -1055,6 +1057,7 @@ export async function openGroup(
     windowSeconds: number;
     graceSeconds: number;
     plain?: boolean;
+    token?: "usd" | "gdx";
   },
 ) {
   const contribution = parseAmount(input.contribution);
@@ -1081,7 +1084,7 @@ export async function openGroup(
     address: addresses.groups,
     abi: groupAbi,
     functionName: input.plain ? "createPlainGroup" : "createGroup",
-    args: [addresses.fusdcx, contribution, cycle, window, grace, input.cycles, unique, unique.map(() => 0n)],
+    args: [groupTokenAddress(appGroupNet(), input.token === "gdx" ? "gdx" : "usd"), contribution, cycle, window, grace, input.cycles, unique, unique.map(() => 0n)],
   });
   const after = await publicClient.readContract({
     address: addresses.groups,
@@ -1115,6 +1118,7 @@ function homeGroup(id: bigint, net: GroupNet): GroupRow {
     startTime: 0,
     cycle: "0",
     cycleOpen: false,
+    token: groupSite(net).token,
   };
 }
 
@@ -1191,6 +1195,7 @@ async function readGroupRow(id: bigint, net: GroupNet): Promise<GroupRow> {
     startTime: Number(group[8]),
     cycle: (current?.[0] ?? 0n).toString(),
     cycleOpen: current?.[1] ?? false,
+    token: group[1],
     members: members.map((member, index) => ({
       account: member[0],
       name: personName(member[0]),

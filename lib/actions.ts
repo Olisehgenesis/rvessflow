@@ -574,6 +574,7 @@ export async function createDraft(_prev: ActionState, formData: FormData): Promi
       days: String(formData.get("days") ?? ""),
       plain: String(formData.get("payout") ?? "") === "plain",
       network: String(formData.get("network") ?? ""),
+      token: String(formData.get("token") ?? "usd"),
     });
   } catch (error) {
     return spoken(error);
@@ -594,6 +595,7 @@ export async function saveDraft(_prev: ActionState, formData: FormData): Promise
       days: String(formData.get("days") ?? ""),
       plain: String(formData.get("payout") ?? "") === "plain",
       network: String(formData.get("network") ?? ""),
+      token: String(formData.get("token") ?? "usd"),
     });
   } catch (error) {
     return spoken(error);

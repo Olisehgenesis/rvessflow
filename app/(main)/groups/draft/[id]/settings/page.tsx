@@ -25,7 +25,7 @@ async function SettingsBody({ params }: { params: Promise<{ id: string }> }) {
       <dl className="divide-y divide-border border-y border-border text-sm">
         <Fact label="Group name" value={draft.name} />
         <Fact label="Description" value={draft.description || "None"} />
-        <Fact label="Contribution" value={`${draft.contribution} USD`} />
+        <Fact label="Contribution" value={`${draft.contribution} ${draft.token === "gdx" ? "G$" : "USD"}`} />
         <Fact label="Cycle" value={draft.cycleLabel} />
         <Fact label="Total cycles" value={String(draft.cycles)} />
         <Fact label="Each turn" value={draft.plain ? "Paid as a transfer" : "Streams"} />

@@ -69,12 +69,9 @@ export function DraftTerms() {
         <span className="block text-xs leading-relaxed text-muted-foreground">Paid each turn sends the contribution to the person whose turn it is. A streaming pot pays that person every second.</span>
       </label>
       <label className="block space-y-1.5">
-        <Label htmlFor="cycles">Cycles</Label>
-        <select id="cycles" name="cycles" className={`${field} w-full`} defaultValue="4">
-          <option value="4">4 cycles</option>
-          <option value="8">8 cycles</option>
-          <option value="12">12 cycles</option>
-        </select>
+        <Label htmlFor="cycles">How many turns</Label>
+        <Input id="cycles" name="cycles" defaultValue="2" inputMode="numeric" className={field} />
+        <span className="block text-xs leading-relaxed text-muted-foreground">Two people, every week: pick Week, then 2 turns, or 52 for a year.</span>
       </label>
       <label className="block space-y-1.5">
         <Label htmlFor="cycle">Each cycle</Label>

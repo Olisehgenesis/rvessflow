@@ -8,7 +8,6 @@ import { AccountMark } from "@/components/account-mark";
 import { GoalLink, LockLink, ProductMark, type ProductKind } from "@/components/product";
 import { ActivityList } from "@/components/activity-list";
 import { AssetList } from "@/components/asset-list";
-import { PrivateLine, PrivateUsd } from "@/components/private-money";
 import { percent, show } from "@/lib/display";
 import { flowPricesFrom, sumTokenUsd, tokenUsdWei } from "@/lib/flow-value";
 import { hasTokenAmount, showGettingStarted } from "@/lib/home-math";
@@ -16,22 +15,17 @@ import { loadActivity, type ActivityView } from "@/lib/activity";
 import { loadHoldings, type HoldingsView } from "@/lib/holdings";
 import { loadIncoming, loadPortfolio, networkName, type IncomingItem, type Portfolio } from "@/lib/protocol";
 import { loadQuote } from "@/lib/rates";
+import { viewer } from "@/lib/session";
 import type { Quote } from "@/lib/quote";
 import type { Address } from "viem";
 
-export async function HomeScreen({
-  who,
-  notice,
-}: {
-  who: { address: Address; name: string; index: number };
-  notice?: string;
-}) {
+export function HomeScreen({ notice }: { notice?: string }) {
   return (
     <main className="px-4 pb-8 lg:px-0">
       <TopBar title="Home" action={<HomeTools />} desk={false} />
       {notice ? <p className="mb-4 rounded-2xl border border-border bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">{notice}</p> : null}
       <Suspense fallback={<BalanceSkeleton />}>
-        <HomeFigures who={who} />
+        <HomeFigures />
       </Suspense>
     </main>
   );
@@ -48,7 +42,8 @@ function HomeTools({ alert = false }: { alert?: boolean }) {
   );
 }
 
-async function HomeFigures({ who }: { who: { address: Address; name: string; index: number } }) {
+async function HomeFigures() {
+  const who = await viewer();
   const loaded = await readHome(who);
   if (!loaded.ok) return <BalanceError message={loaded.message} />;
   return <HomeReady who={who} portfolio={loaded.portfolio} holdings={loaded.holdings} quote={loaded.quote} incoming={loaded.incoming} />;
@@ -235,7 +230,7 @@ async function HomeReady({
             ) : null}
           </div>
           <div className="space-y-5">
-            <Suspense fallback={<p className="text-sm text-[#5C6572]">Loading activity…</p>}>
+            <Suspense fallback={null}>
               <RecentActivity who={who} portfolio={portfolio} quote={quote} desk />
             </Suspense>
             {incoming.length > 0 ? (
@@ -313,7 +308,7 @@ async function HomeReady({
         <AssetList rows={assets} localUnit={holdings.localUnit} trade={holdings.gdxTrade} />
       </section>
       <QuickActions />
-      <Suspense fallback={<p className="mt-6 text-sm text-muted-foreground">Loading activity…</p>}>
+      <Suspense fallback={null}>
         <RecentActivity who={who} portfolio={portfolio} quote={quote} />
       </Suspense>
       </div>

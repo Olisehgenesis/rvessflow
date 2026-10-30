@@ -45,7 +45,7 @@ async function ExploreBody() {
               <p className="font-medium">{draft.name}</p>
               {draft.description ? <p className="mt-1 text-muted-foreground">{draft.description}</p> : null}
               <p className="mt-1 text-xs text-muted-foreground">
-                {draft.contribution} USD · {draft.cycles} cycles of {draft.cycleLabel} · {draft.count} {draft.count === 1 ? "member" : "members"}
+                {draft.contribution} {draft.token === "gdx" ? "G$" : "USD"} · {draft.cycles} cycles of {draft.cycleLabel} · {draft.count} {draft.count === 1 ? "member" : "members"}
               </p>
               <div className="mt-2">
                 <ApplyLink id={draft.id} />

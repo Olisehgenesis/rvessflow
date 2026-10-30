@@ -2,21 +2,16 @@ import Link from "next/link";
 import { ChainMark } from "@/components/token-icon";
 import { Page } from "@/components/ui-bits";
 import { groupChainFacts, recommendedGroupNet } from "@/lib/group-network";
-import { groupPlainOn } from "@/lib/group-site";
-import { groupUpgradeLine } from "@/lib/group-upgrade";
 
-export default async function GroupChainsPage() {
-  const [celo, base] = await Promise.all([groupPlainOn("celo"), groupPlainOn("base")]);
-  const status = { celo, base };
+export default function GroupChainsPage() {
   return (
     <Page title="Base and Celo" back="/groups/new">
       <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
-        One address holds tokens on both chains. A saving, stream, lock, top-up, or group lives on the chain you pick when you create it. Pay in that chain&apos;s dollar token. You cannot move a running position across.
+        One address holds tokens on both chains. A saving, stream, lock, top-up, or group lives on the chain you pick when you create it. Pay in that chain&apos;s dollar token, or Good Dollar on Celo. You cannot move a running position across.
       </p>
       <ul className="space-y-4">
         {(["celo", "base"] as const).map((net) => {
           const fact = groupChainFacts[net];
-          const wait = groupUpgradeLine(status[net]);
           return (
             <li key={net} className="rounded-3xl border border-border bg-card p-5">
               <div className="flex items-start justify-between gap-3">
@@ -33,7 +28,7 @@ export default async function GroupChainsPage() {
                 </div>
                 <div>
                   <dt className="font-medium">Each turn</dt>
-                  <dd className="mt-1 leading-relaxed text-muted-foreground">{wait ?? fact.turn}</dd>
+                  <dd className="mt-1 leading-relaxed text-muted-foreground">{fact.turn}</dd>
                 </div>
                 <div>
                   <dt className="font-medium">The pot</dt>

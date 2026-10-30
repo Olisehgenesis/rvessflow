@@ -4,7 +4,8 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { getAddress, isAddress, type Address } from "viem";
-import { cyclePlan, spanLabel } from "@/lib/cycle";
+import { cyclePlan, readCycles, spanLabel } from "@/lib/cycle";
+import { asGroupToken, draftAmount, groupTerms, type GroupTokenKind } from "@/lib/group-token";
 import { appGroupNet, groupNetLabel, isGroupNet, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
 import { plainGroupWaits } from "@/lib/group-upgrade";
 import { rows, sql, transaction } from "@/lib/motherduck";
@@ -32,6 +33,7 @@ export type DraftCard = {
   cycles: number;
   cycleLabel: string;
   network: string;
+  token: GroupTokenKind;
   count: number;
   role: "organizer" | "member" | "open" | "applied";
 };
@@ -56,6 +58,7 @@ export type DraftView = {
   cycleLabel: string;
   network: GroupNet;
   networkLabel: string;
+  token: GroupTokenKind;
   plain: boolean;
   summary: string;
   open: boolean;
@@ -92,6 +95,7 @@ type Draft = {
   open: boolean;
   plain: boolean;
   network: GroupNet;
+  token: GroupTokenKind;
   applications: { address: Address; name: string }[];
 };
 
@@ -161,8 +165,8 @@ async function readBucket(bucket: Bucket): Promise<Store> {
   const phones = await rows<{ address: string; phone: string; position: unknown }>(
     sql`SELECT address, phone, position FROM ${table(bucket, "phones")} ORDER BY position`,
   );
-  const drafts = await rows<{ id: string; creator: string; contribution: string; cycles: unknown; cycle: string; days: string; is_open: boolean; plain: boolean; name: string; description: string; code: string; network: string }>(
-    sql`SELECT id, creator, contribution, cycles, cycle, days, is_open, plain, name, description, code, network FROM ${table(bucket, "drafts")}`,
+  const drafts = await rows<{ id: string; creator: string; contribution: string; cycles: unknown; cycle: string; days: string; is_open: boolean; plain: boolean; name: string; description: string; code: string; network: string; token: string }>(
+    sql`SELECT id, creator, contribution, cycles, cycle, days, is_open, plain, name, description, code, network, token FROM ${table(bucket, "drafts")}`,
   );
   const labels = await rows<{ ref: string; name: string; description: string; code: string }>(
     sql`SELECT ref, name, description, code FROM ${sql.raw(`${bucket}.group_labels`)}`,
@@ -211,6 +215,7 @@ async function readBucket(bucket: Bucket): Promise<Store> {
           open: Boolean(draft.is_open),
           plain: Boolean(draft.plain),
           network: asGroupNet(draft.network),
+          token: asGroupToken(draft.token),
           members: members.flatMap((item) => {
             if (item.draft_id !== draft.id) return [];
             const address = asAddress(item.address);
@@ -259,7 +264,7 @@ async function writeBucket(bucket: Bucket, store: Store) {
     }
     for (const draft of store.drafts) {
       await query(
-        sql`INSERT INTO ${table(bucket, "drafts")} (id, creator, contribution, cycles, cycle, days, is_open, plain, name, description, code, network) VALUES (${draft.id}, ${draft.creator}, ${draft.contribution}, ${draft.cycles}, ${draft.cycle}, ${draft.days}, ${draft.open}, ${Boolean(draft.plain)}, ${draft.name}, ${draft.description}, ${draft.code}, ${draft.network})`,
+        sql`INSERT INTO ${table(bucket, "drafts")} (id, creator, contribution, cycles, cycle, days, is_open, plain, name, description, code, network, token) VALUES (${draft.id}, ${draft.creator}, ${draft.contribution}, ${draft.cycles}, ${draft.cycle}, ${draft.days}, ${draft.open}, ${Boolean(draft.plain)}, ${draft.name}, ${draft.description}, ${draft.code}, ${draft.network}, ${draft.token})`,
       );
       for (let index = 0; index < draft.members.length; index += 1) {
         await query(
@@ -352,6 +357,7 @@ function loadFileWorld(): World {
       open: Boolean(draft.open),
       plain: Boolean(draft.plain),
       network: asGroupNet(draft.network),
+      token: asGroupToken(draft.token),
       cycles: num(draft.cycles),
     });
   }
@@ -536,8 +542,9 @@ function view(data: World, draft: Draft, who: Viewer): DraftView {
     cycleLabel: plan ? spanLabel(plan.cycle) : "a custom cycle",
     network: draft.network,
     networkLabel: groupNetLabel(draft.network),
+    token: draft.token,
     plain: draft.plain,
-    summary: `${plan ? `${draft.contribution} USD each cycle, ${draft.cycles} cycles of ${spanLabel(plan.cycle)}.` : `${draft.contribution} USD each cycle.`} ${draft.plain ? "Each contribution is paid to the person whose turn it is." : "The pot streams to the person whose turn it is."}`,
+    summary: `${plan ? `${draftAmount(draft.contribution, draft.token)} each cycle, ${draft.cycles} cycles of ${spanLabel(plan.cycle)}.` : `${draftAmount(draft.contribution, draft.token)} each cycle.`} ${draft.plain ? "Each contribution is paid to the person whose turn it is." : "The pot streams to the person whose turn it is."}`,
     open: draft.open,
     mine,
     member: draft.members.some((item) => same(item, who.address)),
@@ -725,6 +732,7 @@ export async function visibleDrafts(address: Address): Promise<DraftCard[]> {
         cycles: draft.cycles,
         cycleLabel: plan ? spanLabel(plan.cycle) : "a custom cycle",
         network: groupNetLabel(draft.network),
+        token: draft.token,
         count: draft.members.length,
         role,
       },
@@ -823,15 +831,16 @@ function cleanDescription(value: string) {
   return description;
 }
 
-export async function openDraft(input: { name: string; description: string; contribution: string; cycles: number; cycle: string; days: string; plain: boolean; network?: string }) {
+export async function openDraft(input: { name: string; description: string; contribution: string; cycles: number; cycle: string; days: string; plain: boolean; network?: string; token?: string }) {
   const contribution = input.contribution.trim();
   if (!/^\d+(\.\d{1,18})?$/.test(contribution) || Number(contribution) <= 0) {
     throw new Error("Enter a contribution greater than zero.");
   }
-  if (![4, 8, 12].includes(input.cycles)) throw new Error("Choose 4, 8, or 12 cycles.");
+  const cycles = readCycles(input.cycles);
   if (!cyclePlan(input.cycle, Number(input.days))) {
     throw new Error("That cycle length is outside what the contract allows. Use 1 to 366 days.");
   }
+  const terms = groupTerms(input.network ?? "", input.token ?? "usd");
   const who = await viewer();
   const data = await world();
   const bucket = bucketFor(who.address);
@@ -844,39 +853,42 @@ export async function openDraft(input: { name: string; description: string; cont
     description: cleanDescription(input.description),
     code: makeCode(knownCodes(data)),
     contribution,
-    cycles: input.cycles,
+    cycles,
     cycle: input.cycle,
     days: String(Number.isInteger(Number(input.days)) ? Number(input.days) : 14),
     members: [who.address],
     open: true,
     plain: input.plain,
-    network: input.network && isGroupNet(input.network) ? input.network : recommendedGroupNet,
+    network: terms.network,
+    token: terms.token,
     applications: [],
   });
   await writeBucket(bucket, store);
   return id;
 }
 
-export async function updateDraft(id: string, input: { name: string; description: string; contribution: string; cycles: number; cycle: string; days: string; plain: boolean; network?: string }) {
+export async function updateDraft(id: string, input: { name: string; description: string; contribution: string; cycles: number; cycle: string; days: string; plain: boolean; network?: string; token?: string }) {
   const contribution = input.contribution.trim();
   if (!/^\d+(\.\d{1,18})?$/.test(contribution) || Number(contribution) <= 0) {
     throw new Error("Enter a contribution greater than zero.");
   }
-  if (![4, 8, 12].includes(input.cycles)) throw new Error("Choose 4, 8, or 12 cycles.");
+  const cycles = readCycles(input.cycles);
   if (!cyclePlan(input.cycle, Number(input.days))) {
     throw new Error("That cycle length is outside what the contract allows. Use 1 to 366 days.");
   }
+  const terms = groupTerms(input.network ?? "", input.token ?? "usd");
   const who = await viewer();
   const data = await world();
   const { bucket, draft } = owned(data, id, who);
   draft.name = cleanName(input.name);
   draft.description = cleanDescription(input.description);
   draft.contribution = contribution;
-  draft.cycles = input.cycles;
+  draft.cycles = cycles;
   draft.cycle = input.cycle;
   draft.days = String(Number.isInteger(Number(input.days)) ? Number(input.days) : 14);
   draft.plain = input.plain;
-  if (input.network) draft.network = asGroupNet(input.network);
+  draft.network = terms.network;
+  draft.token = terms.token;
   if (!draft.code) draft.code = makeCode(knownCodes(data));
   await writeBucket(bucket, data[bucket]);
 }
@@ -1068,6 +1080,7 @@ export async function groupCreateIntent(draftId: string) {
     phones,
     plain: draft.plain,
     network: draft.network,
+    token: draft.token,
     ref: "",
   };
 }
@@ -1103,6 +1116,7 @@ export async function launchDraft(id: string) {
     windowSeconds: plan.window,
     graceSeconds: plan.grace,
     plain: draft.plain,
+    token: draft.token,
   });
   const fresh = await world();
   const current = locate(fresh, id);

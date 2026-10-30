@@ -2,6 +2,17 @@ export const HOUR = 60 * 60;
 export const DAY = 24 * HOUR;
 export const MIN_CYCLE = HOUR;
 export const MAX_CYCLE = 366 * DAY;
+export const MIN_GROUP_CYCLES = 1;
+export const MAX_GROUP_CYCLES = 520;
+export const CYCLE_PRESETS = [2, 4, 8, 12, 26, 52] as const;
+
+export function readCycles(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(String(value ?? "").trim());
+  if (!Number.isInteger(n) || n < MIN_GROUP_CYCLES || n > MAX_GROUP_CYCLES) {
+    throw new Error(`Pick between ${MIN_GROUP_CYCLES} and ${MAX_GROUP_CYCLES} turns.`);
+  }
+  return n;
+}
 
 export const cycleChoices = ["hour", "week", "month", "year", "custom"] as const;
 export type CycleChoice = (typeof cycleChoices)[number];

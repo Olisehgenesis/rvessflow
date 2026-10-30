@@ -10,6 +10,7 @@ import { assetByAddress } from "@/lib/assets";
 import { tokenUsdWei, type FlowPrices } from "@/lib/flow-value";
 import { networkLabel } from "@/lib/network";
 import { percent, show } from "@/lib/display";
+import { labeledGroup } from "@/lib/group-token";
 import { chainQuote, type Quote } from "@/lib/quote";
 import type { FlowRow, LockRow } from "@/lib/protocol";
 
@@ -266,7 +267,7 @@ export function GroupLink({
   members,
   detail,
   title,
-  quote,
+  token,
 }: {
   id: string;
   status: string;
@@ -274,7 +275,7 @@ export function GroupLink({
   members: number;
   detail: string;
   title?: string;
-  quote: Quote;
+  token: string;
 }) {
   return (
     <Link href={`/groups/${id}`} className="flex gap-3 rounded-2xl border border-border bg-card p-4 lg:transition-colors lg:duration-150 lg:hover:border-[#C9D7A4] lg:focus-visible:outline-2 lg:focus-visible:outline-offset-2 lg:focus-visible:outline-[#141414]">
@@ -285,7 +286,7 @@ export function GroupLink({
             <p className="font-medium">{title || `Group ${id}`}</p>
             <p className="text-xs text-muted-foreground">{members} members</p>
           </div>
-          <p className="font-display text-sm font-semibold tabular-nums">{show(contribution, quote)}</p>
+          <p className="font-display text-sm font-semibold tabular-nums">{labeledGroup(contribution, token)}</p>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">{status}</p>
         <p className="text-xs text-muted-foreground">{detail}</p>

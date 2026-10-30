@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import Loading from "../../../loading";
 import { DraftDesk } from "@/components/circle";
 import { GroupLead, GroupNav } from "@/components/group-bits";
-import { GroupUpgradeNote } from "@/components/group-upgrade";
 import { Fact, Facts, Page } from "@/components/ui-bits";
 import { readDraft } from "@/lib/circle";
 
@@ -22,12 +21,9 @@ async function DraftBody({ params }: { params: Promise<{ id: string }> }) {
   const base = `/groups/draft/${draft.id}`;
   return (
     <Page title={draft.name} back="/groups">
-      <div className="mb-4">
-        <GroupUpgradeNote />
-      </div>
       <GroupLead src="/marks/group.png" title="Getting ready" body={draft.description || "Add the people, then start the group on-chain."} />
       <Facts>
-        <Fact label="Contribution" value={`${draft.contribution} USD`} />
+        <Fact label="Contribution" value={`${draft.contribution} ${draft.token === "gdx" ? "G$" : "USD"}`} />
         <Fact label="Cycle" value={draft.cycleLabel} />
         <Fact label="Cycles" value={String(draft.cycles)} />
         <Fact label="Chain" value={draft.networkLabel} />

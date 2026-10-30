@@ -7,8 +7,7 @@ import { GroupLead } from "@/components/group-bits";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
 import { groupLabel } from "@/lib/circle";
-import { labeled } from "@/lib/display";
-import { loadQuote } from "@/lib/rates";
+import { labeledGroup } from "@/lib/group-token";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
@@ -23,7 +22,7 @@ export default function SettingsPage({ params }: { params: Promise<{ id: string 
 async function SettingsBody({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const who = await viewer();
-  const [data, quote, label] = await Promise.all([loadPortfolio(who), loadQuote(), groupLabel(id).catch(() => null)]);
+  const [data, label] = await Promise.all([loadPortfolio(who), groupLabel(id).catch(() => null)]);
   const group = data.groups.find((item) => item.id === id);
   if (!group) notFound();
   const mine = data.me.address.toLowerCase() === group.creator.toLowerCase();
@@ -39,7 +38,7 @@ async function SettingsBody({ params }: { params: Promise<{ id: string }> }) {
         </div>
         <div className="flex justify-between gap-4 py-3">
           <dt className="text-muted-foreground">Contribution</dt>
-          <dd className="font-medium">{labeled(group.contribution, quote)}</dd>
+          <dd className="font-medium">{labeledGroup(group.contribution, group.token)}</dd>
         </div>
         <div className="flex justify-between gap-4 py-3">
           <dt className="text-muted-foreground">Cycle</dt>

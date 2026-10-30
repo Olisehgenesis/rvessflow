@@ -1,41 +1,43 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorNote } from "@/components/ui-bits";
+import { ChainTiles, CycleCount, DurationChips, PayoutTiles, TokenChips, field } from "@/components/group-terms";
 import { createDraft, type ActionState } from "@/lib/actions";
 import { cyclePlan, spanLabel, type CycleChoice } from "@/lib/cycle";
-import { ChainMark } from "@/components/token-icon";
-import { groupChainFacts, groupNetLabel, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
+import { draftAmount, type GroupTokenKind } from "@/lib/group-token";
+import { groupNetLabel, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
 
-const field = "h-12 rounded-2xl border-border bg-white px-4 text-base shadow-none";
-
-export function CreateGroup({
-  live,
-  hints,
-}: {
-  live: Record<GroupNet, boolean>;
-  hints: Record<GroupNet, string>;
-}) {
+export function CreateGroup({ live }: { live: Record<GroupNet, boolean> }) {
   const [state, action, pending] = useActionState(createDraft, null as ActionState);
   const [step, setStep] = useState<"edit" | "review">("edit");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [contribution, setContribution] = useState("");
-  const [cycles, setCycles] = useState("4");
+  const [cycles, setCycles] = useState("2");
   const [choice, setChoice] = useState<CycleChoice>("week");
   const [days, setDays] = useState("14");
   const [network, setNetwork] = useState<GroupNet>(recommendedGroupNet);
+  const [token, setToken] = useState<GroupTokenKind>("usd");
   const [payout, setPayout] = useState(live[recommendedGroupNet] ? "plain" : "stream");
   function pickNetwork(next: GroupNet) {
     setNetwork(next);
-    setPayout(live[next] ? "plain" : "stream");
+    if (next !== "celo") setToken("usd");
+    setPayout(live[next] ? payout : "stream");
+  }
+  function pickToken(next: GroupTokenKind) {
+    setToken(next);
+    if (next === "gdx") {
+      setNetwork("celo");
+      if (!live.celo) setPayout("stream");
+    }
   }
   const plan = cyclePlan(choice, Number(days));
-  const total = Number(contribution) > 0 ? (Number(contribution) * Number(cycles)).toLocaleString("en-US", { maximumFractionDigits: 2 }) : "";
+  const unit = draftAmount(contribution || "0", token);
+  const total = Number(contribution) > 0 ? (Number(contribution) * Number(cycles || 0)).toLocaleString("en-US", { maximumFractionDigits: 2 }) : "";
 
   if (step === "review") {
     return (
@@ -48,17 +50,16 @@ export function CreateGroup({
         <input type="hidden" name="days" value={days} />
         <input type="hidden" name="payout" value={payout} />
         <input type="hidden" name="network" value={network} />
-        <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
-          <p className="text-lg font-semibold">{name || "Untitled group"}</p>
-          {description ? <p className="text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
-          <dl className="space-y-2 text-sm">
-            <Row label="Contribution" value={`${contribution || "0"} USD`} />
-            <Row label="Each cycle" value={plan ? spanLabel(plan.cycle) : "Choose a cycle length"} />
-            <Row label="Total cycles" value={cycles} />
-            <Row label="You pay, across all cycles" value={total ? `${total} USD` : "—"} />
-            <Row label="Chain" value={groupNetLabel(network)} />
-            <Row label="Each turn" value={payout === "plain" ? "Paid as a transfer" : "Streams"} />
-          </dl>
+        <input type="hidden" name="token" value={token} />
+        <div className="grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2">
+          <p className="text-lg font-semibold sm:col-span-2">{name || "Untitled group"}</p>
+          {description ? <p className="text-sm leading-relaxed text-muted-foreground sm:col-span-2">{description}</p> : null}
+          <Row label="Each turn" value={unit} />
+          <Row label="Money" value={token === "gdx" ? "G$ on Celo" : `USD on ${groupNetLabel(network)}`} />
+          <Row label="How often" value={plan ? spanLabel(plan.cycle) : "Choose a cycle length"} />
+          <Row label="Turns" value={cycles} />
+          <Row label="You pay, all turns" value={total ? `${total} ${token === "gdx" ? "G$" : "USD"}` : "—"} />
+          <Row label="Paid as" value={payout === "plain" ? "Transfer each turn" : "Stream"} />
         </div>
         <p className="text-sm text-muted-foreground">You add people on the next screen. The group is written on-chain only when you start it.</p>
         <ErrorNote error={state?.error} />
@@ -74,86 +75,56 @@ export function CreateGroup({
 
   return (
     <form
-      className="space-y-4"
+      className="space-y-5"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!name.trim() || !plan || !(Number(contribution) > 0)) return;
+        if (!name.trim() || !plan || !(Number(contribution) > 0) || !Number(cycles)) return;
         setStep("review");
       }}
     >
-      <label className="block space-y-1.5">
-        <Label htmlFor="name">Group name</Label>
-        <Input id="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Friends savings" className={field} />
-      </label>
-      <label className="block space-y-1.5">
-        <Label htmlFor="description">Description</Label>
-        <Input id="description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What this group is for" className={field} />
-      </label>
-      <label className="block space-y-1.5">
-        <Label htmlFor="contribution">Contribution amount</Label>
-        <Input id="contribution" value={contribution} onChange={(event) => setContribution(event.target.value)} placeholder="100" inputMode="decimal" className={field} />
-      </label>
-      <label className="block space-y-1.5">
-        <Label htmlFor="cycle">Cycle duration</Label>
-        <select id="cycle" className={`${field} w-full`} value={choice} onChange={(event) => setChoice(event.target.value as CycleChoice)}>
-          <option value="hour">Hour</option>
-          <option value="week">Week</option>
-          <option value="month">Month, 30 days</option>
-          <option value="year">Year, 365 days</option>
-          <option value="custom">Custom days</option>
-        </select>
-      </label>
-      {choice === "custom" ? (
+      <div className="grid gap-4 sm:grid-cols-2">
         <label className="block space-y-1.5">
-          <Label htmlFor="days">Days</Label>
-          <Input id="days" inputMode="numeric" value={days} onChange={(event) => setDays(event.target.value)} className={field} />
+          <Label htmlFor="name">Group name</Label>
+          <Input id="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ours" className={field} />
         </label>
-      ) : null}
-      <label className="block space-y-1.5">
-        <Label htmlFor="cycles">Total cycles</Label>
-        <select id="cycles" className={`${field} w-full`} value={cycles} onChange={(event) => setCycles(event.target.value)}>
-          <option value="4">4 cycles</option>
-          <option value="8">8 cycles</option>
-          <option value="12">12 cycles</option>
-        </select>
-      </label>
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Chain</legend>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Same address on both. The group stays on the chain you pick.{" "}
-          <Link href="/groups/chains" className="font-medium text-foreground underline">
-            Base vs Celo
-          </Link>
-        </p>
-        {(["celo", "base"] as const).map((net) => {
-          const fact = groupChainFacts[net];
-          const on = network === net;
-          return (
-            <label
-              key={net}
-              className={`flex cursor-pointer items-start gap-3 rounded-2xl bg-card px-3 py-3 ${on ? "border-2 border-foreground" : "border border-border"}`}
-            >
-              <input type="radio" name="network-choice" className="mt-1 size-4" checked={on} onChange={() => pickNetwork(net)} />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
-                  <ChainMark chain={net} className="size-5" />
-                  <span className="text-sm font-semibold">{fact.title}</span>
-                  {fact.recommend ? <span className="rounded-full bg-[#E7F4C4] px-2 py-0.5 text-[11px] font-medium">Recommended</span> : null}
-                </span>
-                <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{fact.fee}</span>
-              </span>
-            </label>
-          );
-        })}
-      </fieldset>
-      <label className="block space-y-1.5">
-        <Label htmlFor="payout">How each turn is paid</Label>
-        <select id="payout" className={`${field} w-full`} value={payout} onChange={(event) => setPayout(event.target.value)}>
-          <option value="plain">Paid each turn</option>
-          <option value="stream">Streaming pot</option>
-        </select>
-        <span className="block text-xs leading-relaxed text-muted-foreground">{hints[network]}</span>
-      </label>
+        <label className="block space-y-1.5">
+          <Label htmlFor="description">What it is for</Label>
+          <Input id="description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Weekly turn" className={field} />
+        </label>
+        <label className="block space-y-1.5">
+          <Label htmlFor="contribution">Each person pays</Label>
+          <Input id="contribution" value={contribution} onChange={(event) => setContribution(event.target.value)} placeholder="20" inputMode="decimal" className={field} />
+        </label>
+        <div className="space-y-1.5">
+          <Label>Money</Label>
+          <TokenChips network={network} token={token} onToken={pickToken} />
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {token === "gdx" ? "Good Dollar on Celo. Amounts are in G$." : network === "celo" ? "Dollar token on Celo (cUSDx)." : "Dollar token on Base (USDCx)."}
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label>How often</Label>
+          <DurationChips choice={choice} onChoice={setChoice} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="cycles">How many turns</Label>
+          <CycleCount value={cycles} onChange={setCycles} />
+        </div>
+        {choice === "custom" ? (
+          <label className="block space-y-1.5 sm:col-span-2">
+            <Label htmlFor="days">Days each turn</Label>
+            <Input id="days" inputMode="numeric" value={days} onChange={(event) => setDays(event.target.value)} className={field} />
+          </label>
+        ) : null}
+        <div className="space-y-1.5">
+          <Label>Chain</Label>
+          <ChainTiles network={network} onNetwork={pickNetwork} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>How it pays</Label>
+          <PayoutTiles payout={payout} onPayout={setPayout} live={live[network]} />
+        </div>
+      </div>
       <Button type="submit" className="h-12 w-full rounded-full text-base">
         Continue
       </Button>
@@ -163,9 +134,9 @@ export function CreateGroup({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right font-medium">{value}</dd>
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 font-medium">{value}</dd>
     </div>
   );
 }

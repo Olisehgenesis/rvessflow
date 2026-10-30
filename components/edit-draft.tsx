@@ -1,83 +1,99 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorNote } from "@/components/ui-bits";
+import { ChainTiles, CycleCount, DurationChips, PayoutTiles, TokenChips, field } from "@/components/group-terms";
 import { saveDraft, saveGroupName } from "@/lib/actions";
-import { groupChainFacts, type GroupNet } from "@/lib/group-network";
-
-const field = "h-12 rounded-2xl border-border bg-white px-4 text-base shadow-none";
+import type { CycleChoice } from "@/lib/cycle";
+import type { GroupTokenKind } from "@/lib/group-token";
+import type { GroupNet } from "@/lib/group-network";
 
 export function EditDraftForm({
   draft,
-  payoutHint,
+  live,
 }: {
-  draft: { id: string; name: string; description: string; contribution: string; cycle: string; days: string; cycles: number; plain: boolean; network: GroupNet };
-  payoutHint: string;
+  draft: {
+    id: string;
+    name: string;
+    description: string;
+    contribution: string;
+    cycle: string;
+    days: string;
+    cycles: number;
+    plain: boolean;
+    network: GroupNet;
+    token: GroupTokenKind;
+  };
+  live: boolean;
 }) {
   const [state, action, pending] = useActionState(saveDraft, null);
+  const [choice, setChoice] = useState<CycleChoice>((draft.cycle as CycleChoice) || "week");
+  const [cycles, setCycles] = useState(String(draft.cycles));
+  const [network, setNetwork] = useState<GroupNet>(draft.network);
+  const [token, setToken] = useState<GroupTokenKind>(draft.token);
+  const [payout, setPayout] = useState(draft.plain ? "plain" : "stream");
+  function pickNetwork(next: GroupNet) {
+    setNetwork(next);
+    if (next !== "celo") setToken("usd");
+    if (!live) setPayout("stream");
+  }
+  function pickToken(next: GroupTokenKind) {
+    setToken(next);
+    if (next === "gdx") setNetwork("celo");
+  }
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-5">
       <input type="hidden" name="id" value={draft.id} />
-      <label className="block space-y-1.5">
-        <Label htmlFor="name">Group name</Label>
-        <Input id="name" name="name" defaultValue={draft.name} className={field} />
-      </label>
-      <label className="block space-y-1.5">
-        <Label htmlFor="description">Description</Label>
-        <Input id="description" name="description" defaultValue={draft.description} className={field} />
-      </label>
-      <label className="block space-y-1.5">
-        <Label htmlFor="contribution">Contribution amount</Label>
-        <Input id="contribution" name="contribution" defaultValue={draft.contribution} inputMode="decimal" className={field} />
-      </label>
-      <label className="block space-y-1.5">
-        <Label htmlFor="cycle">Cycle duration</Label>
-        <select id="cycle" name="cycle" defaultValue={draft.cycle} className={`${field} w-full`}>
-          <option value="hour">Hour</option>
-          <option value="week">Week</option>
-          <option value="month">Month, 30 days</option>
-          <option value="year">Year, 365 days</option>
-          <option value="custom">Custom days</option>
-        </select>
-      </label>
-      <label className="block space-y-1.5">
-        <Label htmlFor="days">Days, if custom</Label>
-        <Input id="days" name="days" defaultValue={draft.days} inputMode="numeric" className={field} />
-      </label>
-      <label className="block space-y-1.5">
-        <Label htmlFor="cycles">Total cycles</Label>
-        <select id="cycles" name="cycles" defaultValue={String(draft.cycles)} className={`${field} w-full`}>
-          <option value="4">4 cycles</option>
-          <option value="8">8 cycles</option>
-          <option value="12">12 cycles</option>
-        </select>
-      </label>
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Chain</legend>
-        {(["celo", "base"] as const).map((net) => {
-          const fact = groupChainFacts[net];
-          return (
-            <label key={net} className="flex items-start gap-3 rounded-2xl border border-border bg-card px-3 py-3">
-              <input type="radio" name="network" value={net} defaultChecked={draft.network === net} className="mt-1 size-4" />
-              <span>
-                <span className="text-sm font-semibold">{fact.title}</span>
-                {fact.recommend ? <span className="ml-2 rounded-full bg-[#E7F4C4] px-2 py-0.5 text-[11px] font-medium">Recommended</span> : null}
-              </span>
-            </label>
-          );
-        })}
-      </fieldset>
-      <label className="block space-y-1.5">
-        <Label htmlFor="payout">How each turn is paid</Label>
-        <select id="payout" name="payout" defaultValue={draft.plain ? "plain" : "stream"} className={`${field} w-full`}>
-          <option value="plain">Paid each turn</option>
-          <option value="stream">Streaming pot</option>
-        </select>
-        <span className="block text-xs leading-relaxed text-muted-foreground">{payoutHint}</span>
-      </label>
+      <input type="hidden" name="cycle" value={choice} />
+      <input type="hidden" name="cycles" value={cycles} />
+      <input type="hidden" name="network" value={network} />
+      <input type="hidden" name="token" value={token} />
+      <input type="hidden" name="payout" value={payout} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block space-y-1.5">
+          <Label htmlFor="name">Group name</Label>
+          <Input id="name" name="name" defaultValue={draft.name} className={field} />
+        </label>
+        <label className="block space-y-1.5">
+          <Label htmlFor="description">What it is for</Label>
+          <Input id="description" name="description" defaultValue={draft.description} className={field} />
+        </label>
+        <label className="block space-y-1.5">
+          <Label htmlFor="contribution">Each person pays</Label>
+          <Input id="contribution" name="contribution" defaultValue={draft.contribution} inputMode="decimal" className={field} />
+        </label>
+        <div className="space-y-1.5">
+          <Label>Money</Label>
+          <TokenChips network={network} token={token} onToken={pickToken} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>How often</Label>
+          <DurationChips choice={choice} onChoice={setChoice} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="cycles">How many turns</Label>
+          <CycleCount value={cycles} onChange={setCycles} />
+        </div>
+        {choice === "custom" ? (
+          <label className="block space-y-1.5 sm:col-span-2">
+            <Label htmlFor="days">Days each turn</Label>
+            <Input id="days" name="days" defaultValue={draft.days} inputMode="numeric" className={field} />
+          </label>
+        ) : (
+          <input type="hidden" name="days" value={draft.days} />
+        )}
+        <div className="space-y-1.5">
+          <Label>Chain</Label>
+          <ChainTiles network={network} onNetwork={pickNetwork} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>How it pays</Label>
+          <PayoutTiles payout={payout} onPayout={setPayout} live={live} />
+        </div>
+      </div>
       <ErrorNote error={state?.error} />
       <Button type="submit" disabled={pending} className="h-12 w-full rounded-full text-base">
         {pending ? "Saving…" : "Save changes"}

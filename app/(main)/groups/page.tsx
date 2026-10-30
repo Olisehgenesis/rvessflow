@@ -2,12 +2,10 @@ import { Suspense } from "react";
 import Link from "next/link";
 import Loading from "../loading";
 import { EmptyGroups } from "@/components/group-bits";
-import { GroupUpgradeNote } from "@/components/group-upgrade";
 import { GroupLink } from "@/components/product";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
 import { allLabels, draftsIfReady } from "@/lib/circle";
-import { loadQuote } from "@/lib/rates";
 import { loadPortfolio, networkName } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
@@ -23,7 +21,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
   const { tab } = await searchParams;
   const joined = tab === "joined";
   const who = await viewer();
-  const [data, quote, directory, labels] = await Promise.all([loadPortfolio(who), loadQuote(), draftsIfReady(who.address), allLabels().catch(() => [])]);
+  const [data, directory, labels] = await Promise.all([loadPortfolio(who), draftsIfReady(who.address), allLabels().catch(() => [])]);
   const nameFor = (id: string, fallback: string) => labels.find((item) => item.ref === id)?.name || fallback;
   const drafts = directory.drafts.filter((draft) => (joined ? draft.role === "member" || draft.role === "applied" : draft.role === "organizer"));
   const groups = data.groups.filter((group) => (joined ? group.creator.toLowerCase() !== data.me.address.toLowerCase() : group.creator.toLowerCase() === data.me.address.toLowerCase()));
@@ -46,9 +44,6 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
           Joined
         </Tab>
       </div>
-      <div className="mb-4">
-        <GroupUpgradeNote />
-      </div>
       {directory.down ? <p className="mb-4 text-sm text-muted-foreground">The member directory is unavailable, so drafts cannot load. Groups already on {networkName} still show here.</p> : null}
       {empty ? (
         <EmptyGroups joined={joined} />
@@ -65,7 +60,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
                       <span className="min-w-0">
                         <span className="block font-medium">{draft.name}</span>
                         <span className="mt-0.5 block text-sm leading-snug text-muted-foreground">
-                          {draft.network} · {draft.contribution} USD · {draft.cycles} cycles of {draft.cycleLabel}
+                          {draft.network} · {draft.contribution} {draft.token === "gdx" ? "G$" : "USD"} · {draft.cycles} cycles of {draft.cycleLabel}
                           {draft.role === "applied" ? " · Applied" : ""}
                         </span>
                       </span>
@@ -86,7 +81,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
                     members={group.members.length}
                     title={nameFor(group.id, `Group ${group.id}`)}
                     detail={`${group.network} · ${group.cycles} cycles, ${spanLabel(group.cycleSeconds)} each.`}
-                    quote={quote}
+                    token={group.token}
                   />
                 </li>
               ))}
