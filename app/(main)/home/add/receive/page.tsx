@@ -27,7 +27,7 @@ async function ReceiveBody() {
   return (
     <main className="px-4 pb-8">
       <FlowHeader title="Receive" back="/home/add" />
-      <p className="text-sm text-muted-foreground">This address is the same on Base and on Celo. Tokens land in the wallet. Tap a mark to see its name. G$ is on Celo.</p>
+      <p className="text-sm text-muted-foreground">This address is the same on Base and on Celo. Tokens land in the wallet. Streaming does not change this page. G$ is on Celo.</p>
       <ReceiveTokens />
       <section className="mt-5 rounded-3xl border border-border bg-card p-5">
         <Image src={qr} alt="QR code for this address" width={224} height={224} unoptimized className="mx-auto size-56" />

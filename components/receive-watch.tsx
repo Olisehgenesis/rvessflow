@@ -46,7 +46,7 @@ export function ReceiveWatch() {
   if (arrived) {
     return (
       <p className="rounded-2xl bg-[#d9ff38] px-4 py-3 text-sm leading-relaxed text-[#0b0f14]">
-        A balance just changed.{" "}
+        A token just arrived.{" "}
         <Link href="/home" className="font-medium underline underline-offset-2">
           Open Home
         </Link>{" "}
@@ -55,5 +55,5 @@ export function ReceiveWatch() {
     );
   }
 
-  return <p className="text-sm text-muted-foreground">This page looks for new tokens every 5 seconds while it is open.</p>;
+  return <p className="text-sm text-muted-foreground">This page looks for new tokens every 5 seconds. Streams do not count.</p>;
 }

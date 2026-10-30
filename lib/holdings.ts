@@ -139,25 +139,19 @@ async function listedBalances(owner: Address): Promise<{ token: FinderToken; amo
   return batches.flat();
 }
 
-/** Compact wallet fingerprint for Receive. Tokens plus native on Base, Celo, and this app chain. */
+/** Compact wallet fingerprint for Receive. Wallet tokens only — Superfluid streaming must not trip this. */
 export async function walletStamp(owner: Address): Promise<string> {
-  const [listed, appNative, baseNative, celoNative, baseSuper, celoSuper] = await Promise.all([
+  const [listed, appNative, baseNative, celoNative] = await Promise.all([
     listedBalances(owner),
     publicClient.getBalance({ address: owner }).catch(() => 0n),
     chain.id === 8453 ? Promise.resolve(null) : baseReader.getBalance({ address: owner }).catch(() => 0n),
     chain.id === 42220 ? Promise.resolve(null) : celoReader.getBalance({ address: owner }).catch(() => 0n),
-    readTokenBalances(8453, owner, [{ address: baseUsdcx }, { address: baseEthx }]),
-    readTokenBalances(42220, owner, [{ address: celoCusdx }, { address: celoCelox }]),
   ]);
   return [
     `app:${appNative}`,
     baseNative == null ? "" : `base:${baseNative}`,
     celoNative == null ? "" : `celo:${celoNative}`,
     listed.map((row) => `${row.token.key}:${row.amount}`).join(","),
-    `busdcx:${readAmount(baseSuper, 0)}`,
-    `bethx:${readAmount(baseSuper, 1)}`,
-    `cusdx:${readAmount(celoSuper, 0)}`,
-    `celox:${readAmount(celoSuper, 1)}`,
   ]
     .filter(Boolean)
     .join("|");
