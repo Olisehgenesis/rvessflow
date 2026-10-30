@@ -64,7 +64,7 @@ function walletConnectProvider(): Promise<WalletConnection> {
       showQrModal: true,
       metadata: {
         name: "Rvess",
-        description: "Your money, in motion.",
+        description: "Money moving, on your terms.",
         url: window.location.origin,
         icons: [`${window.location.origin}/icon-512.png`],
       },

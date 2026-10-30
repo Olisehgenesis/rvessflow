@@ -1,13 +1,5 @@
-"use client";
-
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { FlowingText } from "@/components/flowing";
 import { IconMark } from "@/components/icons";
 import { ProductGlyph } from "@/components/landing-icons";
-import { rememberPlace } from "@/lib/actions";
-import { show, streamDigits } from "@/lib/display";
-import { currencyForCountry } from "@/lib/place";
-import type { Quote } from "@/lib/quote";
 
 const quick = [
   { name: "save" as const, label: "Save", well: "bg-[#E5F6D4]", ink: "text-[#3C9A34]" },
@@ -16,107 +8,7 @@ const quick = [
   { name: "groups" as const, label: "Groups", well: "bg-[#E4F0FF]", ink: "text-[#3B82F6]" },
 ];
 
-const STREAM_PER_DAY = 45;
-const SAVE_PER_DAY = 8;
-
-function usdToWei(usd: number): string {
-  const micro = BigInt(Math.round(usd * 1e8));
-  return (micro * 10n ** 10n).toString();
-}
-
-function useLocalQuote(quote: Quote, placed: boolean) {
-  const [current, setCurrent] = useState(quote);
-  const [basis, setBasis] = useState(quote);
-  if (quote.code !== basis.code || quote.perToken !== basis.perToken || quote.unit !== basis.unit) {
-    setBasis(quote);
-    setCurrent(quote);
-  }
-
-  useEffect(() => {
-    if (placed) return;
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const response = await fetch("https://get.geojs.io/v1/ip/country.json", { signal: controller.signal });
-        if (!response.ok) return;
-        const body = (await response.json()) as { country?: string };
-        const code = currencyForCountry(body.country);
-        if (!code || code === quote.code) return;
-        const priced = await fetch(`/api/quote?code=${code}`, { signal: controller.signal });
-        if (!priced.ok) return;
-        const next = (await priced.json()) as Quote;
-        if (!next.code || !(next.perToken > 0)) return;
-        setCurrent(next);
-        void rememberPlace(body.country ?? "");
-      } catch {
-        // Keep the currency from the server when this browser's country cannot be read.
-      }
-    })();
-    return () => controller.abort();
-  }, [placed, quote.code]);
-
-  return current;
-}
-
-function useStill() {
-  const [reduce, setReduce] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => setReduce(query.matches);
-    apply();
-    query.addEventListener("change", apply);
-    return () => query.removeEventListener("change", apply);
-  }, []);
-  return reduce;
-}
-
-function LiveMoney({
-  usd,
-  perDay,
-  ceilingUsd,
-  quote,
-  readAt,
-  still,
-  hold = false,
-  className,
-}: {
-  usd: number;
-  perDay: number;
-  ceilingUsd?: number;
-  quote: Quote;
-  readAt: number | null;
-  still: boolean;
-  hold?: boolean;
-  className?: string;
-}) {
-  if (hold) return <span className={className}>—</span>;
-  const perSecond = perDay / 86400;
-  const step = perSecond * quote.perToken;
-  const fine = !still && step < 1;
-  const digits = fine ? streamDigits(BigInt(usdToWei(perSecond)), quote) : undefined;
-  return (
-    <span className={className}>
-      {readAt === null || still ? (
-        show(usdToWei(usd), quote, digits)
-      ) : (
-        <FlowingText
-          readAt={readAt}
-          base={usdToWei(usd)}
-          perSecond={usdToWei(perSecond)}
-          ceiling={ceilingUsd === undefined ? undefined : usdToWei(ceilingUsd)}
-          fine={fine}
-          quote={quote}
-        />
-      )}
-    </span>
-  );
-}
-
-function Device({ quote, readAt, still, hold }: { quote: Quote; readAt: number | null; still: boolean; hold: boolean }) {
-  const perSecond = STREAM_PER_DAY / 86400;
-  const step = perSecond * quote.perToken;
-  const rateDigits = step >= 1 ? quote.digits : streamDigits(BigInt(usdToWei(perSecond)), quote);
-  const balanceSize = step < 1 ? "text-[1.22rem]" : "text-[1.42rem]";
+function Device() {
   return (
     <div className="relative rounded-[2.6rem] bg-[#161616] p-[10px] shadow-[0_30px_50px_-28px_rgba(17,17,17,0.7)]">
       <span className="absolute top-24 -left-[3px] h-7 w-[3px] rounded-l-sm bg-[#3a3a3a]" />
@@ -155,18 +47,15 @@ function Device({ quote, readAt, still, hold }: { quote: Quote; readAt: number |
               <ProductGlyph name="lock" className="size-3.5" />
             </span>
           </div>
-          <p className="mt-3.5 text-[11px] text-[#8B919A]">Total balance{hold ? "" : ` · ${quote.unit}`}</p>
-          <p className={`mt-0.5 leading-none font-semibold tracking-[-0.045em] tabular-nums ${balanceSize}`}>
-            <LiveMoney usd={2480} perDay={STREAM_PER_DAY} quote={quote} readAt={readAt} still={still} hold={hold} />
+          <p className="mt-3.5 h-4 text-[11px] text-[#8B919A]">Total balance</p>
+          <p className="mt-0.5 h-7 overflow-hidden text-[1.42rem] leading-none font-semibold tracking-[-0.045em] whitespace-nowrap tabular-nums">
+            $2,480.00
           </p>
-          <p className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-[#3C9A34]">
+          <p className="mt-1.5 flex h-4 items-center gap-1 text-[11px] font-medium text-[#3C9A34]">
             <svg viewBox="0 0 12 12" className="size-2.5" fill="none" aria-hidden="true">
               <path d="M6 9.5V2.5M6 2.5 3.2 5.2M6 2.5l2.8 2.7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             12% this month
-          </p>
-          <p className="mt-0.5 text-[10px] font-medium text-[#3C9A34] tabular-nums">
-            {hold ? "—" : `+${show(usdToWei(perSecond), quote, rateDigits)} ${quote.unit} each second`}
           </p>
           <ul className="mt-4 grid grid-cols-4 gap-1">
             {quick.map((item) => (
@@ -185,9 +74,8 @@ function Device({ quote, readAt, still, hold }: { quote: Quote; readAt: number |
                 <ProductGlyph name="save" className="size-3.5" />
               </span>
               <p className="mt-2 text-[11px] leading-tight font-semibold">Travel Goal</p>
-              <p className="mt-0.5 text-[10px] leading-tight text-[#8B919A] tabular-nums">
-                <LiveMoney usd={820} perDay={SAVE_PER_DAY} ceilingUsd={1000} quote={quote} readAt={readAt} still={still} hold={hold} />
-                <span> / {hold ? "—" : show(usdToWei(1000), quote)}</span>
+              <p className="mt-0.5 h-4 overflow-hidden text-[10px] leading-4 text-[#8B919A] whitespace-nowrap tabular-nums">
+                $820 / $1,000
               </p>
             </li>
             <li className="rounded-[1.05rem] bg-[#F5F4F1] px-2.5 py-2.5">
@@ -195,9 +83,8 @@ function Device({ quote, readAt, still, hold }: { quote: Quote; readAt: number |
                 <ProductGlyph name="stream" className="size-3.5" />
               </span>
               <p className="mt-2 text-[11px] leading-tight font-semibold">Stream Plan</p>
-              <p className="mt-0.5 text-[10px] leading-tight text-[#8B919A] tabular-nums">
-                <LiveMoney usd={12.4} perDay={STREAM_PER_DAY} ceilingUsd={STREAM_PER_DAY} quote={quote} readAt={readAt} still={still} hold={hold} />
-                <span> / {hold ? "—" : `${show(usdToWei(STREAM_PER_DAY), quote)} today`}</span>
+              <p className="mt-0.5 h-4 overflow-hidden text-[10px] leading-4 text-[#8B919A] whitespace-nowrap tabular-nums">
+                $12.40 / $45
               </p>
             </li>
             <li className="rounded-[1.05rem] bg-[#F5F4F1] px-2.5 py-2.5">
@@ -205,7 +92,9 @@ function Device({ quote, readAt, still, hold }: { quote: Quote; readAt: number |
                 <ProductGlyph name="lock" className="size-3.5" />
               </span>
               <p className="mt-2 text-[11px] leading-tight font-semibold">Lock Vault</p>
-              <p className="mt-0.5 text-[10px] leading-tight text-[#8B919A] tabular-nums">{hold ? "—" : `${show(usdToWei(1000), quote)} · 3 months`}</p>
+              <p className="mt-0.5 h-4 overflow-hidden text-[10px] leading-4 text-[#8B919A] whitespace-nowrap tabular-nums">
+                $1,000 · 3 months
+              </p>
             </li>
             <li className="rounded-[1.05rem] bg-[#F5F4F1] px-2.5 py-2.5">
               <span className="grid size-6 place-items-center rounded-full bg-[#E4F0FF] text-[#3B82F6]">
@@ -222,21 +111,11 @@ function Device({ quote, readAt, still, hold }: { quote: Quote; readAt: number |
   );
 }
 
-let stageClock = 0;
-
-function stageReadAt() {
-  if (!stageClock) stageClock = Math.floor(Date.now() / 1000);
-  return stageClock;
-}
-
-export function PhoneStage({ quote, placed, hold = false }: { quote: Quote; placed: boolean; hold?: boolean }) {
-  const current = useLocalQuote(quote, placed);
-  const still = useStill();
-  const readAt = useSyncExternalStore(() => () => undefined, stageReadAt, () => 0);
+export function PhoneStage() {
   return (
-    <div className="relative mx-auto h-[430px] w-full max-w-[440px] sm:h-[500px] lg:h-[620px] lg:max-w-[560px]" aria-hidden="true">
+    <div className="relative mx-auto h-[430px] w-full max-w-[440px] overflow-hidden sm:h-[500px] lg:h-[620px] lg:max-w-[560px]" aria-hidden="true">
       <div className="absolute top-0 left-1/2 w-[520px] origin-top -translate-x-1/2 scale-[0.74] sm:scale-[0.86] lg:scale-100">
-        <div className="relative h-[600px]">
+        <div className="relative h-[600px] overflow-hidden">
           <div className="absolute top-[18%] left-[2%] h-48 w-48 rounded-full bg-[#E3D6FB] blur-2xl" />
           <div className="absolute top-[42%] left-[8%] h-36 w-40 rounded-full bg-[#D5C4F8]/90 blur-xl" />
           <div className="absolute right-[2%] bottom-[16%] h-36 w-40 rounded-full bg-[#E6DBFC] blur-2xl" />
@@ -258,7 +137,7 @@ export function PhoneStage({ quote, placed, hold = false }: { quote: Quote; plac
           </svg>
 
           <div className="absolute top-[18px] left-1/2 w-[278px] -translate-x-1/2">
-            <Device quote={current} readAt={readAt || null} still={still} hold={hold} />
+            <Device />
           </div>
 
           <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible" viewBox="0 0 520 600" fill="none">

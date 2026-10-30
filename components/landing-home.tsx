@@ -8,7 +8,6 @@ import { InstallButton } from "@/components/install-app";
 import { LoginGate } from "@/components/login-gate";
 import { ProductGlyph, type MarkName } from "@/components/landing-icons";
 import { PhoneStage } from "@/components/landing-phone";
-import type { Quote } from "@/lib/quote";
 
 const features: { name: MarkName; title: string; body: string; well: string; ink: string }[] = [
   {
@@ -101,7 +100,7 @@ function LimeButton({
   );
 }
 
-export function LandingHome({ quote, placed, hold = false }: { quote: Quote; placed: boolean; hold?: boolean }) {
+export function LandingHome() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [intent, setIntent] = useState<"start" | "login">("start");
@@ -190,13 +189,16 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
       <main id="main">
         <section className="mx-auto grid max-w-6xl items-center gap-6 px-5 pt-8 pb-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:gap-4 lg:px-8 lg:pt-10 lg:pb-2">
           <div className="max-w-xl">
-            <h1 className="text-[3.15rem] leading-[0.94] font-semibold tracking-[-0.045em] sm:text-[4.25rem] lg:text-[5.15rem]">
-              Your money,
+            <h1 className="text-[2.85rem] leading-[0.94] font-semibold tracking-[-0.045em] sm:text-[4.05rem] lg:text-[4.85rem]">
+              Money moving,
               <br />
-              in motion.
+              on your terms.
             </h1>
             <p className="mt-5 max-w-[28rem] text-[15px] leading-relaxed text-[#5C6572] sm:text-base">
-              Save for your goals, stream payments, lock your funds, and grow together. One account.
+              A new way to save, pay and grow.
+            </p>
+            <p className="mt-2 max-w-[28rem] text-[15px] leading-relaxed text-[#5C6572] sm:text-base">
+              Your money. Your goals. Your people. All working together in one place.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
               <LimeButton onClick={() => openAuth("start")} className="h-12 w-full px-5 text-[15px] sm:w-auto sm:px-6">
@@ -206,7 +208,7 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
               <InstallButton className="sm:hidden" />
             </div>
           </div>
-          <PhoneStage quote={quote} placed={placed} hold={hold} />
+          <PhoneStage />
         </section>
 
         <section id="features" className="scroll-mt-20 mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-14">
@@ -245,14 +247,13 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
 
         <section id="how-it-works" className="scroll-mt-20 mx-auto hidden max-w-6xl items-start gap-10 px-8 py-6 lg:grid lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] lg:py-10">
           <div className="max-w-md pt-2">
-            <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8A9099]">BUILT FOR REAL LIFE</p>
-            <h2 className="mt-3 text-[2.7rem] leading-[1.02] font-semibold tracking-[-0.04em]">
-              Simple tools
+            <h2 className="text-[2.4rem] leading-[1.02] font-semibold tracking-[-0.04em]">
+              Save, pay,
               <br />
-              for bigger dreams.
+              and grow.
             </h2>
             <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-[#5C6572]">
-              Rvess combines the power of streaming payments, savings vaults, and group rotations into one seamless experience.
+              Your money. Your goals. Your people. All working together in one place.
             </p>
             <LimeButton onClick={() => openAuth("start")} className="mt-7 h-12 px-5 text-[15px]">
               Get started
@@ -282,9 +283,9 @@ export function LandingHome({ quote, placed, hold = false }: { quote: Quote; pla
 
         <section id="about" className="scroll-mt-20 mx-auto max-w-6xl px-5 pt-2 pb-10 lg:px-8 lg:pt-8 lg:pb-16">
           <div className="rounded-[1.6rem] bg-[#F3F2EE] px-6 py-8 text-center lg:hidden">
-            <h2 className="text-xl font-semibold tracking-[-0.03em]">Simple. Secure. Yours.</h2>
+            <h2 className="text-xl font-semibold tracking-[-0.03em]">On your terms.</h2>
             <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-[#5C6572]">
-              Built for everyday people, not just crypto experts.
+              Your money. Your goals. Your people. All working together in one place.
             </p>
           </div>
           <div className="hidden items-center rounded-[1.4rem] border border-[#EFECE6] bg-white px-8 py-6 shadow-[0_1px_0_rgba(20,20,20,0.03)] lg:flex">
