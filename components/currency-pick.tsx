@@ -3,7 +3,7 @@
 import { setCurrency } from "@/lib/actions";
 import { CURRENCIES } from "@/lib/quote";
 
-export function CurrencyPick({ code }: { code: string }) {
+export function CurrencyPick({ code, className }: { code: string; className?: string }) {
   return (
     <form action={setCurrency} key={code}>
       <label className="sr-only" htmlFor="currency">
@@ -14,7 +14,7 @@ export function CurrencyPick({ code }: { code: string }) {
         name="currency"
         defaultValue={code}
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
-        className="h-9 max-w-full rounded-full border border-border bg-white px-3 text-sm text-foreground"
+        className={className ?? "h-9 max-w-full rounded-full border border-border bg-white px-3 text-sm text-foreground"}
       >
         {CURRENCIES.map((item) => (
           <option key={item.code} value={item.code}>

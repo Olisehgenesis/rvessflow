@@ -1,4 +1,4 @@
-import { getAddress, parseAbi, type Address } from "viem";
+import { getAddress, parseAbi, parseEther, type Address } from "viem";
 import LZString from "lz-string";
 
 /** GoodDollar IdentityV2, UBIScheme, and faucet on Celo production. */
@@ -31,6 +31,13 @@ export const faucetAbi = parseAbi([
   "function getToppingAmount() view returns (uint256)",
   "function minTopping() view returns (uint8)",
 ]);
+
+/** Ask GoodDollar for CELO when this verified wallet holds less than this. */
+export const CELO_TOP_WEI = parseEther("0.3");
+
+export function belowCeloTopFloor(balance: bigint) {
+  return balance < CELO_TOP_WEI;
+}
 
 /** True when native CELO is below the faucet's topping floor (GoodDollar minTopping). */
 export function belowFaucetNeed(balance: bigint, toppingAmount: bigint, minTopping: number) {

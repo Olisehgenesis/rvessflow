@@ -124,7 +124,7 @@ export function faceCheckHref(input: { address: Address; method: "passkey" | "wa
       account,
       nonce: Math.floor(Date.now() / 1000).toString(),
       signature,
-      callback: `${window.location.origin}/settings?from=fv`,
+      callback: `${window.location.origin}/settings/verify?from=fv`,
       popup: false,
     });
   });

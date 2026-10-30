@@ -10,6 +10,7 @@ import { estimationSkipped, passkeyPaysWith, usdcCanPayFee, userOpCost } from "@
 import { celoFeeTx, celoFeeCurrencies, celoGasSkimCall, pickCeloFee, pickCeloFeeCovering, tokenAmountForCeloGas, withSkimGas } from "@/lib/celo-fee";
 import { batchId, batchOutcome, batchUnsupported, walletSendCallsParam } from "@/lib/wallet-batch";
 import { isCreateVaultOnly, vaultAlreadyExists } from "@/lib/vault-create";
+import { CELO_TOP_WEI } from "@/lib/good-fv";
 
 const network = appNetwork();
 const chain = appChain();
@@ -136,7 +137,16 @@ async function sendWallet(calls: PreparedCall[], from: Address, where: ReturnTyp
   if (!found || found.toLowerCase() !== from.toLowerCase()) {
     throw new Error("Reconnect the wallet for this account.");
   }
-  const celoBalance = where.id === 42220 ? await where.reader.getBalance({ address: from }) : 0n;
+  let celoBalance = where.id === 42220 ? await where.reader.getBalance({ address: from }) : 0n;
+  if (where.id === 42220 && celoBalance < CELO_TOP_WEI) {
+    try {
+      const { topVerifiedCelo } = await import("@/lib/actions");
+      await topVerifiedCelo(from);
+      celoBalance = await where.reader.getBalance({ address: from });
+    } catch {
+      /* Faucet is optional. */
+    }
+  }
   const fee = where.id === 42220 && celoBalance === 0n ? await pickCeloFee(where.reader, from) : null;
   const feeFields = celoFeeTx(fee?.feeCurrency);
   if (calls.length > 1 && !fee) {
@@ -228,7 +238,7 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
       : publicClient.readContract({ address: circleUsdc, abi: erc20Abi, functionName: "balanceOf", args: [account.address] }),
   ]);
   if (where.id === 42220) {
-    if (ethBalance === 0n || ethBalance < 10n ** 17n) {
+    if (ethBalance < CELO_TOP_WEI) {
       try {
         const { topCeloIfNeeded } = await import("@/lib/actions");
         await topCeloIfNeeded();

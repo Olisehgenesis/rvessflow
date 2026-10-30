@@ -19,7 +19,7 @@ describe("GoodDollar face check", () => {
       account: account.toLowerCase() as typeof account,
       nonce: "1",
       signature: "0xab",
-      callback: "https://rvess.xyz/settings?from=fv",
+      callback: "https://rvess.xyz/settings/verify?from=fv",
       popup: false,
     });
     assert.equal(href.startsWith("https://goodid.gooddollar.org/?lz="), true);
@@ -33,7 +33,7 @@ describe("GoodDollar face check", () => {
       nonce: string;
     };
     assert.equal(params.account, account);
-    assert.equal(params.rdu, "https://rvess.xyz/settings?from=fv");
+    assert.equal(params.rdu, "https://rvess.xyz/settings/verify?from=fv");
     assert.equal(params.cbu, undefined);
     assert.equal(params.chain, 42220);
     assert.equal(params.fvsig, "0xab");

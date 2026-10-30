@@ -1,5 +1,48 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { parseUnits } from "viem";
+import { FlowingText } from "@/components/flowing";
 import { IconMark } from "@/components/icons";
 import { ProductGlyph } from "@/components/landing-icons";
+import { chainQuote } from "@/lib/quote";
+
+const quote = chainQuote();
+const travelRate = "0.0012";
+const streamRate = "0.0035";
+const totalRate = "0.0047";
+
+function DemoMoney({
+  dollars,
+  perSecond,
+  ceiling,
+  places = 4,
+}: {
+  dollars: string;
+  perSecond: string;
+  ceiling?: string;
+  places?: number;
+}) {
+  const [readAt, setReadAt] = useState(0);
+  useEffect(() => {
+    setReadAt(Date.now() / 1000);
+  }, []);
+  const base = parseUnits(dollars, 18).toString();
+  const rate = parseUnits(perSecond, 18).toString();
+  const cap = ceiling ? parseUnits(ceiling, 18).toString() : undefined;
+  return (
+    <span className="tabular-nums">
+      {readAt ? (
+        <>
+          $
+          <FlowingText readAt={readAt} base={base} perSecond={rate} ceiling={cap} places={places} plain quote={quote} />
+        </>
+      ) : (
+        `$${Number(dollars).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      )}
+    </span>
+  );
+}
 
 const quick = [
   { name: "save" as const, label: "Save", well: "bg-[#E5F6D4]", ink: "text-[#3C9A34]" },
@@ -49,7 +92,7 @@ function Device() {
           </div>
           <p className="mt-3.5 h-4 text-[11px] text-[#8B919A]">Total balance</p>
           <p className="mt-0.5 h-7 overflow-hidden text-[1.42rem] leading-none font-semibold tracking-[-0.045em] whitespace-nowrap tabular-nums">
-            $2,480.00
+            <DemoMoney dollars="2480" perSecond={totalRate} />
           </p>
           <p className="mt-1.5 flex h-4 items-center gap-1 text-[11px] font-medium text-[#3C9A34]">
             <svg viewBox="0 0 12 12" className="size-2.5" fill="none" aria-hidden="true">
@@ -74,8 +117,8 @@ function Device() {
                 <ProductGlyph name="save" className="size-3.5" />
               </span>
               <p className="mt-2 text-[11px] leading-tight font-semibold">Travel Goal</p>
-              <p className="mt-0.5 h-4 overflow-hidden text-[10px] leading-4 text-[#8B919A] whitespace-nowrap tabular-nums">
-                $820 / $1,000
+              <p className="mt-0.5 text-[10px] leading-4 text-[#8B919A] tabular-nums">
+                <DemoMoney dollars="820" perSecond={travelRate} ceiling="1000" places={2} /> / $1,000
               </p>
             </li>
             <li className="rounded-[1.05rem] bg-[#F5F4F1] px-2.5 py-2.5">
@@ -83,8 +126,8 @@ function Device() {
                 <ProductGlyph name="stream" className="size-3.5" />
               </span>
               <p className="mt-2 text-[11px] leading-tight font-semibold">Stream Plan</p>
-              <p className="mt-0.5 h-4 overflow-hidden text-[10px] leading-4 text-[#8B919A] whitespace-nowrap tabular-nums">
-                $12.40 / $45
+              <p className="mt-0.5 text-[10px] leading-4 text-[#8B919A] tabular-nums">
+                <DemoMoney dollars="12.40" perSecond={streamRate} ceiling="45" places={2} /> / $45
               </p>
             </li>
             <li className="rounded-[1.05rem] bg-[#F5F4F1] px-2.5 py-2.5">

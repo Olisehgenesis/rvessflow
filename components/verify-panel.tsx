@@ -5,17 +5,17 @@ import { useRouter } from "next/navigation";
 import { Dialog } from "radix-ui";
 import { useSignedAction } from "@/components/sign-action";
 import { VerifiedTick } from "@/components/verify-badge";
-import { claimUbi, linkWallet } from "@/lib/actions";
+import { askCeloFaucet, claimUbi, linkWallet } from "@/lib/actions";
 import { attachThisAccount, faceCheckHref, prepareFaceCheck } from "@/lib/good-fv-sign";
 import { GOOD_IDENTITY_DOCS, WALLET_LINK_NOTICE } from "@/lib/good-fv";
 import { money, shortAddress } from "@/lib/display";
 import type { Address } from "viem";
 
 const reasons = [
-  { src: "/marks/paid.png", title: "A tick on your name", body: "Same idea as the check next to a name on X. Here it is clay, and it means a live unique person." },
-  { src: "/marks/crypto.png", title: "Celo when the balance is low", body: "If you are verified and CELO drops below GoodDollar's floor, the app calls their faucet. You stay here." },
-  { src: "/marks/receive.png", title: "Daily free G$", body: "GoodDollar pays a Universal Basic Income once a day to each verified person." },
-  { src: "/marks/friend.png", title: "Or link a wallet you already verified", body: "The original verified wallet signs once. Both share one face and one daily claim." },
+  { title: "A tick on your name", body: "A live unique person, shown next to this display name." },
+  { title: "Celo when the balance is low", body: "If this verified wallet has less than 0.3 CELO, opening Profile or tapping Ask for CELO calls their faucet." },
+  { title: "Daily G$", body: "GoodDollar pays a Universal Basic Income once a day to each verified person." },
+  { title: "Link a verified wallet", body: "The original verified wallet signs once. Both share one face and one daily claim." },
 ];
 
 export function VerifyPanel({
@@ -41,6 +41,7 @@ export function VerifyPanel({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [ok, setOk] = useState(false);
+  const [tone, setTone] = useState<"ok" | "info" | "error">("error");
   const [linkOpen, setLinkOpen] = useState(false);
   const [fvHref, setFvHref] = useState("");
   const [passkeyReady, setPasskeyReady] = useState(method !== "passkey");
@@ -65,7 +66,7 @@ export function VerifyPanel({
     const reason = params.get("reason")?.trim();
     setOk(passed);
     setNote(passed ? "Face check finished. Refreshing this account…" : reason || "Come back here after the face check tab.");
-    window.history.replaceState(null, "", "/settings#verify");
+    window.history.replaceState(null, "", "/settings/verify");
     if (passed) router.refresh();
   }, [router]);
 
@@ -92,6 +93,22 @@ export function VerifyPanel({
       .finally(() => setBusy(false));
   }
 
+  async function askFaucet() {
+    setNote("");
+    setOk(false);
+    setBusy(true);
+    try {
+      const result = await askCeloFaucet();
+      setOk(result.ok);
+      setTone(result.tone);
+      setNote(result.detail);
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "GoodDollar did not send CELO.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function attach() {
     setNote("");
     setBusy(true);
@@ -107,35 +124,24 @@ export function VerifyPanel({
   }
 
   return (
-    <div className="mt-5">
-      <div className="flex items-start gap-3">
-        <VerifiedTick className="size-14 shrink-0" />
+    <div>
+      <div className="flex items-start gap-3 rounded-2xl bg-[#F7F8F4] p-4">
+        <span className={`mt-0.5 grid size-10 shrink-0 place-items-center rounded-full ${verified ? "bg-[#E7F4C4]" : "bg-white ring-1 ring-[#E6EADF]"}`}>
+          {verified ? <VerifiedTick className="size-6" /> : <span className="size-2.5 rounded-full bg-[#C5CBD3]" />}
+        </span>
         <div className="min-w-0">
-          <p className="text-base font-semibold">{verified ? (linked ? "Linked" : "Verified") : "Verify"}</p>
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+          <p className="text-sm font-semibold text-[#141414]">{verified ? (linked ? "Linked to a verified wallet" : "Verified with GoodDollar") : "Not verified yet"}</p>
+          <p className="mt-1 text-sm leading-relaxed text-[#5C6572]">
             {verified
               ? linked
                 ? `This account uses the tick from ${shortAddress(root)}. One daily G$ claim is shared.`
                 : until
                   ? `GoodDollar knows this account is a unique person. The tick lasts until ${until}.`
                   : "GoodDollar knows this account is a unique person."
-              : "Why verify? Daily G$, a Celo top-up when this account is short, and a tick on this name. Already verified on another wallet? Link it. This page stores no key."}
+              : "Daily G$, a Celo top-up when this account is short, and a tick on this name. Already verified on another wallet? Link it. This page stores no key."}
           </p>
         </div>
       </div>
-      {!verified ? (
-        <ul className="mt-4 space-y-3">
-          {reasons.map((row) => (
-            <li key={row.title} className="flex items-start gap-3">
-              <img src={row.src} alt="" className="size-11 shrink-0 object-contain" />
-              <span className="min-w-0 pt-1">
-                <span className="block text-sm font-medium">{row.title}</span>
-                <span className="mt-0.5 block text-sm leading-relaxed text-muted-foreground">{row.body}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
       {verified ? (
         <>
           <form action={run} className="mt-4">
@@ -146,13 +152,26 @@ export function VerifyPanel({
             ) : (
               <p className="mb-3 text-sm text-muted-foreground">Today&apos;s G$ is already claimed. Come back tomorrow.</p>
             )}
-            <button
-              type="submit"
-              disabled={pending || !due}
-              className="inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#141414] px-5 text-sm font-semibold text-white disabled:opacity-40"
-            >
-              {pending ? "Claiming…" : due ? "Claim today's G$" : "Claimed today"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="submit"
+                disabled={pending || !due}
+                className="inline-flex h-12 min-w-40 items-center justify-center rounded-full bg-[#141414] px-5 text-sm font-semibold text-white disabled:opacity-40"
+              >
+                {pending ? "Claiming…" : due ? "Claim today's G$" : "Claimed today"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void askFaucet()}
+                disabled={busy}
+                className="inline-flex h-12 min-w-40 items-center justify-center rounded-full border border-[#E6EADF] bg-white px-5 text-sm font-semibold"
+              >
+                {busy ? "Asking GoodDollar…" : "Ask for CELO"}
+              </button>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Ask for CELO calls GoodDollar&apos;s faucet with this wallet. It only sends CELO when this account is verified and Celo CELO is below 0.3. It is not the daily G$.
+            </p>
           </form>
           {!linked ? (
             <form action={runLink} className="mt-5">
@@ -199,10 +218,18 @@ export function VerifyPanel({
               New face check unlocks this phone&apos;s passkey, then opens GoodDollar in a new tab so the camera can run. Already have the tick on Valora or another wallet? Use I already verified.
             </p>
           ) : null}
+          <ul className="mt-4 divide-y divide-[#E6EADF]">
+            {reasons.map((row) => (
+              <li key={row.title} className="py-3">
+                <p className="text-sm font-medium text-[#141414]">{row.title}</p>
+                <p className="mt-0.5 text-sm leading-relaxed text-[#5C6572]">{row.body}</p>
+              </li>
+            ))}
+          </ul>
         </>
       )}
       {note || state?.error || linkState?.error ? (
-        <p className={`mt-3 text-sm ${ok && note ? "text-foreground" : "text-destructive"}`}>{note || state?.error || linkState?.error}</p>
+        <p className={`mt-3 text-sm ${note && (ok || tone === "info") ? "text-[#5C6572]" : "text-destructive"}`}>{note || state?.error || linkState?.error}</p>
       ) : null}
 
       {fvHref ? (

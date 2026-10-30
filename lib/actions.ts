@@ -1097,6 +1097,13 @@ export async function topVerifiedCelo(address: string) {
   return topCeloFaucet(getAddress(address));
 }
 
+export async function askCeloFaucet() {
+  await requireTerms();
+  const who = await viewer();
+  const { requestCeloFaucet } = await import("@/lib/good-faucet");
+  return requestCeloFaucet(who.address);
+}
+
 export async function linkWallet(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     await requireTerms();
