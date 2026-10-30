@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { balanceColumns, hasTokenAmount, holdingCaption, liveHomeColumns, showGettingStarted, sortHoldingsByBalance, usdcEquivalent } from "@/lib/home-math";
+import { balanceColumns, hasTokenAmount, holdingCaption, homeBalancePlaces, liveHomeColumns, showGettingStarted, sortHoldingsByBalance, usdcEquivalent } from "@/lib/home-math";
 
 describe("home balance columns", () => {
   it("splits a total into available, streaming, and locked that add back up", () => {
@@ -110,6 +110,11 @@ describe("getting started", () => {
     assert.equal(showGettingStarted({ goals: 0, locks: 2, groups: 0, amounts: [] }), false);
     assert.equal(showGettingStarted({ goals: 0, locks: 0, groups: 1, amounts: ["0.00"] }), false);
     assert.equal(hasTokenAmount("0.000307"), true);
+  });
+
+  it("uses three decimal places when idle and four when streaming", () => {
+    assert.equal(homeBalancePlaces(false), 3);
+    assert.equal(homeBalancePlaces(true), 4);
   });
 
   it("puts the largest asset first", () => {

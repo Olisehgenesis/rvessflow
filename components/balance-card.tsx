@@ -142,7 +142,7 @@ export function HomeBalance({
         locked: BigInt(lockedUsd8),
         total: BigInt(availableUsd8) + BigInt(streamingUsd8) + BigInt(lockedUsd8),
       };
-  const places = homeBalancePlaces;
+  const places = homeBalancePlaces(ticking || live.streaming > 0n);
   const shownTotal = formatUsdPlaces(live.total, places);
   const shownAvailable = formatUsdPlaces(live.available, places);
   const shownStreaming = formatUsdPlaces(live.streaming, places);

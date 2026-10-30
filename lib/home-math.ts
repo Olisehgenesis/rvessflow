@@ -1,7 +1,9 @@
 import { formatUsd8 } from "@/lib/pay-math";
 
-/** Home headline amounts: six places so a live stream ticks every second. */
-export const homeBalancePlaces = 6;
+/** Home headline: three places when idle, four when a stream is live. */
+export function homeBalancePlaces(streaming: boolean): number {
+  return streaming ? 4 : 3;
+}
 
 function weiToUsd8(wei: bigint, usdcUsd8: bigint): bigint {
   if (wei <= 0n || usdcUsd8 <= 0n) return 0n;
