@@ -9,5 +9,11 @@ export function proxy(request: NextRequest) {
     url.protocol = "https:";
     return NextResponse.redirect(url, 308);
   }
+  const marked = request.nextUrl.pathname.match(/^\/(goals|vaults|groups)\/(celo|base):(\d+)$/i);
+  if (marked) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/${marked[1]}/${marked[2].toLowerCase()}-${marked[3]}`;
+    return NextResponse.redirect(url);
+  }
   return NextResponse.next();
 }
