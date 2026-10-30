@@ -1,7 +1,8 @@
 import { GOOD_DOLLAR } from "@/lib/stables";
 import { celoMarket } from "@/lib/celo-market";
+import { GDX_RESERVE } from "@/lib/gdx-reserve";
 
-/** Deepest Uniswap v3 G$ pool on Celo (G$/USDm), from DexScreener Oct 2026. */
+/** Thin Uniswap v3 G$/USDm pool. Fallback only; the Reserve is the market. */
 export const GDX_UNISWAP_USDM = "0x9491d57c5687AB75726423B55AC2d87D1cDa2c3F";
 
 export function uniswapSwapHref(input: string, output: string) {
@@ -14,30 +15,19 @@ export function uniswapSwapHref(input: string, output: string) {
 
 export const gdxSwaps = [
   {
-    id: "buy-usdm",
-    title: "Buy G$ with USDm",
-    body: "Uniswap on Celo. This is the deepest G$ pool we use.",
-    href: uniswapSwapHref(celoMarket.usdm, GOOD_DOLLAR),
+    id: "buy-usdc",
+    title: "Need USDC or CELO first",
+    body: "The Reserve takes USDm. Uniswap can turn CELO or USDC into G$ if you do not hold USDm.",
+    href: uniswapSwapHref(celoMarket.usdc, GOOD_DOLLAR),
   },
   {
     id: "buy-celo",
     title: "Buy G$ with CELO",
-    body: "Uniswap on Celo. Liquidity is thinner than USDm.",
+    body: "Uniswap on Celo. Liquidity is much thinner than the Reserve.",
     href: uniswapSwapHref("NATIVE", GOOD_DOLLAR),
-  },
-  {
-    id: "sell-usdm",
-    title: "Sell G$ for USDm",
-    body: "Back into Mento dollars on the same Uniswap pool.",
-    href: uniswapSwapHref(GOOD_DOLLAR, celoMarket.usdm),
-  },
-  {
-    id: "sell-celo",
-    title: "Sell G$ for CELO",
-    body: "Uniswap on Celo.",
-    href: uniswapSwapHref(GOOD_DOLLAR, "NATIVE"),
   },
 ] as const;
 
 export const gdxPoolHref = `https://app.uniswap.org/explore/pools/celo/${GDX_UNISWAP_USDM}`;
 export const gdxScreenHref = `https://dexscreener.com/celo/${GDX_UNISWAP_USDM}`;
+export const gdxReserveHref = `https://celoscan.io/address/${GDX_RESERVE}`;

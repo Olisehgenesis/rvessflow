@@ -44,6 +44,8 @@ export type HoldingsView = {
   choices: PayChoice[];
   /** Celo G$ as its own line. Not mixed into USD. */
   goodDollar: HoldingRow;
+  /** Celo Mento USDm in the wallet, for the G$ Reserve swap. */
+  gdxUsdm: string;
 };
 
 function valueOf(amount: bigint, scale: number, price8: bigint): bigint {
@@ -459,6 +461,7 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
       listed.find((row) => row.token.key === "celo-gooddollar")?.amount ?? 0n,
     ),
     goodDollar,
+    gdxUsdm: formatAmount(listed.find((row) => row.token.key === "celo-usdm")?.amount ?? 0n, 18, 4),
   };
 }
 

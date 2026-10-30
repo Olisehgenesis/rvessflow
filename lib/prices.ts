@@ -79,6 +79,17 @@ async function gdxFallback(): Promise<bigint> {
   }
 }
 
+async function gdxFromReserve(): Promise<bigint> {
+  try {
+    const { readGdxUsd8 } = await import("@/lib/gdx-reserve");
+    const usd8 = await readGdxUsd8();
+    if (usd8 > 0n) return usd8;
+  } catch {
+    // CoinGecko is the backup when Forno or Ankr cannot read the Reserve.
+  }
+  return gdxFallback();
+}
+
 export async function loadPrices(): Promise<Prices> {
   const at = await requestNowMs();
   if (cache && at - cache.at < ttlMs) return cache.prices;
@@ -90,7 +101,7 @@ export async function loadPrices(): Promise<Prices> {
     } catch {
       ethUsd8 = 0n;
     }
-    const prices: Prices = { ethUsd8, usdcUsd8: 100_000_000n, usdtUsd8: 100_000_000n, gdxUsd8: await gdxFallback(), updatedAt: now };
+    const prices: Prices = { ethUsd8, usdcUsd8: 100_000_000n, usdtUsd8: 100_000_000n, gdxUsd8: await gdxFromReserve(), updatedAt: now };
     cache = { at, prices };
     return prices;
   }
@@ -105,7 +116,7 @@ export async function loadPrices(): Promise<Prices> {
       ethUsd8: fresh(eth.updatedAt) ? eth.usd8 : await ethFallback(),
       usdcUsd8: fresh(usdc.updatedAt) ? usdc.usd8 : 100_000_000n,
       usdtUsd8: fresh(usdt.updatedAt) ? usdt.usd8 : 100_000_000n,
-      gdxUsd8: await gdxFallback(),
+      gdxUsd8: await gdxFromReserve(),
       updatedAt: Math.min(eth.updatedAt, usdc.updatedAt, usdt.updatedAt),
     };
     cache = { at, prices };

@@ -2,6 +2,7 @@ import type { Intent, PreparedCall } from "@/lib/intent";
 import { celoGasTreasury } from "@/lib/celo-fee";
 import { celoMarket } from "@/lib/celo-market";
 import { baseMarket } from "@/lib/base-market";
+import { GDX_BROKER } from "@/lib/gdx-reserve";
 
 export type StepStatus = "wait" | "run" | "done" | "fail";
 
@@ -30,6 +31,7 @@ const labels: Record<string, { id: string; title: string; detail: string }> = {
   "0xd7e05f44": { id: "open", title: "Open the stream", detail: "Money starts moving every second." },
   "0x4e71d92d": { id: "claim", title: "Claim today's G$", detail: "GoodDollar pays this once a day." },
   "0xd21685f4": { id: "link", title: "Attach this account", detail: "The verified wallet shares its tick." },
+  "0xddbbe850": { id: "gdx", title: "Swap on the Reserve", detail: "The GoodDollar Reserve prices G$ against USDm." },
 };
 
 function selector(data: string): string {
@@ -49,6 +51,9 @@ export function labelCall(call: PreparedCall): Omit<SignStep, "status"> {
       return { id: "fee", title: "Celo network fee", detail: "A small USDT, USDC, or USDm transfer pays sponsored gas." };
     }
     return { id: "send", title: "Send tokens", detail: "A transfer in this batch." };
+  }
+  if (call.to.toLowerCase() === GDX_BROKER.toLowerCase()) {
+    return { id: "gdx", title: "Swap on the Reserve", detail: "The GoodDollar Reserve prices G$ against USDm." };
   }
   if (routers.has(call.to.toLowerCase())) {
     return { id: "swap", title: "Swap into dollars", detail: "Uniswap turns USDT or CELO into USDm." };
@@ -88,6 +93,7 @@ export function headline(intent: Intent): { title: string; body: string } {
   if (intent.kind === "deposit") return { title: "Adding money", body: "" };
   if (intent.kind === "claim") return { title: "Claiming G$", body: "" };
   if (intent.kind === "link") return { title: "Linking a wallet", body: "" };
+  if (intent.kind === "gdxSwap") return { title: intent.side === "buy" ? "Buying G$" : "Selling G$", body: "" };
   return { title: "Creating", body: "" };
 }
 
@@ -97,6 +103,7 @@ export function humanArt(intent: Intent): string {
   if (intent.kind === "stream") return intent.flowKind === "expense" ? "/marks/expense.png" : "/marks/flow.png";
   if (intent.kind === "claim") return "/marks/receive.png";
   if (intent.kind === "link") return "/marks/friend.png";
+  if (intent.kind === "gdxSwap") return intent.side === "buy" ? "/marks/receive.png" : "/marks/expense.png";
   return "/marks/saving.png";
 }
 

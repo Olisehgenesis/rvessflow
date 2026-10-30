@@ -6,6 +6,7 @@ import { fundingCalls, superForUsd, superForWithdraw, withdrawCalls } from "@/li
 import type { Intent, Plan, PreparedCall } from "@/lib/intent";
 import { isSuperPay, readPay, type PayAsset } from "@/lib/pay-math";
 import { sendLabel, sendRoute, sendToken, walletBalance } from "@/lib/send";
+import { GDX_BROKER, GDX_EXCHANGE_ID, GDX_EXCHANGE_PROVIDER, gdxBrokerAbi, gdxCeloClient, quoteGdxSwap, readGdxSide } from "@/lib/gdx-reserve";
 import { isSendAsset, parseSendAmount, spendableEth } from "@/lib/send-math";
 import { appGroupNet, groupKey, netFromLabel, parseGroupKey, type GroupNet } from "@/lib/group-network";
 import { groupSite } from "@/lib/group-site";
@@ -722,6 +723,35 @@ async function planPayout(owner: Address, intent: Extract<Intent, { kind: "payou
   };
 }
 
+async function planGdxSwap(owner: Address, intent: Extract<Intent, { kind: "gdxSwap" }>): Promise<Plan> {
+  const side = readGdxSide(intent.side);
+  const inAsset = side === "buy" ? "celo-usdm" : "celo-gdx";
+  const outAsset = side === "buy" ? "celo-gdx" : "celo-usdm";
+  const amount = parseSendAmount(inAsset, intent.amount);
+  const [inBal, outBal] = await Promise.all([walletBalance(owner, inAsset), walletBalance(owner, outAsset)]);
+  if (intent.seen) {
+    if (outBal > BigInt(intent.seen)) return done(intent, { href: "/home/assets" });
+  }
+  if (intent.submitted) return pending(intent);
+  if (amount > inBal) {
+    throw new Error(`The wallet does not have that much ${sendLabel(inAsset)} on Celo.`);
+  }
+  const quoted = await quoteGdxSwap(side, amount);
+  const calls: PreparedCall[] = [];
+  await approveIfNeeded(calls, owner, quoted.tokenIn, GDX_BROKER, amount, gdxCeloClient());
+  calls.push(
+    encode(GDX_BROKER, gdxBrokerAbi, "swapIn", [
+      GDX_EXCHANGE_PROVIDER,
+      GDX_EXCHANGE_ID,
+      quoted.tokenIn,
+      quoted.tokenOut,
+      amount,
+      quoted.minOut,
+    ]),
+  );
+  return { calls, intent: { ...intent, seen: outBal.toString(), submitted: true }, done: false, chainId: 42220 };
+}
+
 async function planClaim(owner: Address, intent: Extract<Intent, { kind: "claim" }>): Promise<Plan> {
   const identity = await loadIdentity(owner);
   if (!identity.verified) throw new Error("Verify this account first. GoodDollar pays UBI to a unique person.");
@@ -816,5 +846,7 @@ export async function planIntent(owner: Address, intent: Intent): Promise<Plan> 
       return planClaim(owner, intent);
     case "link":
       return planLink(owner, intent);
+    case "gdxSwap":
+      return planGdxSwap(owner, intent);
   }
 }

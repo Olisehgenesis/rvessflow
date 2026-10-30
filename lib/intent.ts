@@ -112,6 +112,7 @@ export type Intent = (
   | { kind: "phone"; id: string; phone: string }
   | { kind: "claim" }
   | { kind: "link"; target: string }
+  | { kind: "gdxSwap"; side: "buy" | "sell"; amount: string }
 ) &
   Progress;
 

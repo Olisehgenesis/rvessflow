@@ -23,10 +23,10 @@ async function AssetsBody() {
   const holdings = await loadHoldings(who.address, data, quote);
   return (
     <Page title="Your assets" back="/home">
-      <p className="mb-4 text-sm text-muted-foreground">USD, ETH, and CELO each open onto the tokens behind them. G$ is its own Celo line, with a Uniswap swap below.</p>
+      <p className="mb-4 text-sm text-muted-foreground">USD, ETH, and CELO each open onto the tokens behind them. G$ is its own Celo line. Buy and sell it through the GoodDollar Reserve below.</p>
       <AssetList rows={[...holdings.rows, holdings.goodDollar]} localUnit={holdings.localUnit} />
       <div className="mt-6">
-        <GdxSwap />
+        <GdxSwap usdm={holdings.gdxUsdm} gdx={holdings.goodDollar.amount} />
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Link href="/home/add/receive" className="flex h-11 items-center justify-center rounded-full border border-border bg-card text-sm font-medium">
