@@ -42,6 +42,8 @@ export type HoldingsView = {
   locked: string;
   idleUsd: string;
   choices: PayChoice[];
+  /** Celo G$ as its own line. Not mixed into USD. */
+  goodDollar: HoldingRow;
 };
 
 function valueOf(amount: bigint, scale: number, price8: bigint): bigint {
@@ -405,17 +407,26 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
     ...(chain.id === 42220 ? [] : ["usdcx"]),
     "celo-usdc", "celo-usdt", "celo-usdm", "celo-usdm-mountain", "celo-cusdx",
     ...(chain.id === 42220 ? ["usdcx"] : []),
-    "celo-gooddollar",
   ];
   const usdParts = take(pieces, usdKeys).filter((piece) => piece.group === "usd");
   const ethParts = take(pieces, ["base-eth", "base-ethx", "ethx"]).filter((piece) => piece.group === "eth");
   const celoParts = take(pieces, ["celo", "celo-celox", "ethx"]).filter((piece) => piece.group === "celo");
+  const gdxPiece = pieces.get("celo-gooddollar") ?? {
+    key: "celo-gooddollar",
+    label: "G$",
+    network: "Celo",
+    group: "usd" as const,
+    amount: 0n,
+    decimals: 18,
+    value: 0n,
+  };
+  const goodDollar = partOf(gdxPiece, quote, prices.usdcUsd8);
   const rows = [
     groupRow("usd", "USD", usdParts, quote, prices.usdcUsd8),
     groupRow("eth", "ETH", ethParts, quote, prices.usdcUsd8),
     groupRow("celo", "CELO", celoParts, quote, prices.usdcUsd8),
   ];
-  const total = [...usdParts, ...ethParts, ...celoParts].reduce((sum, piece) => sum + piece.value, 0n);
+  const total = [...usdParts, ...ethParts, ...celoParts, gdxPiece].reduce((sum, piece) => sum + piece.value, 0n);
   const streamingUsd8 = valueOf(BigInt(portfolio.streaming), 18, prices.usdcUsd8);
   const lockedUsd8 = valueOf(BigInt(portfolio.locked), 18, prices.usdcUsd8) + valueOf(ethxLocked, 18, prices.ethUsd8);
   const columns = balanceColumns(total, streamingUsd8, lockedUsd8);
@@ -447,6 +458,7 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
       undefined,
       listed.find((row) => row.token.key === "celo-gooddollar")?.amount ?? 0n,
     ),
+    goodDollar,
   };
 }
 
@@ -466,13 +478,14 @@ function payChoices(
   const celo = Boolean(network?.startsWith("Celo"));
   const tag = (pay: PayAsset) => (net ? `${net}-${pay}` : pay);
   choices.push(superChoice(superAmount, prices.usdcUsd8, celo ? "cUSDx" : stableLabel, network, tag("usdcx")));
-  if ((celo || chain.id === 42220) && prices.gdxUsd8 > 0n) {
+  if (celo || chain.id === 42220) {
+    const gdxUsd8 = prices.gdxUsd8 > 0n ? prices.gdxUsd8 : 0n;
     choices.push({
       pay: "gdx",
       label: "G$",
       balance: formatAmount(gdx, 18, 4),
-      usd: money(valueOf(gdx, 18, prices.gdxUsd8)),
-      maxUsd: maxUsdInput(valueOf(gdx, 18, prices.gdxUsd8)),
+      usd: money(valueOf(gdx, 18, gdxUsd8)),
+      maxUsd: maxUsdInput(valueOf(gdx, 18, gdxUsd8)),
       network: network ?? "Celo",
       id: tag("gdx"),
     });

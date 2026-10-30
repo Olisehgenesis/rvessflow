@@ -41,7 +41,7 @@ async function ReceiveBody() {
             <ChainMark chain="celo" className="size-5" />
             Celo
           </dt>
-          <dd className="text-muted-foreground">USDC, USDT, USDm, USDM, CELO, cUSDx, CELOx</dd>
+          <dd className="text-muted-foreground">USDC, USDT, USDm, USDM, CELO, cUSDx, CELOx, G$</dd>
         </div>
       </dl>
       <section className="mt-5 rounded-3xl border border-border bg-card p-5">

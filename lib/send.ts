@@ -150,7 +150,7 @@ export async function loadSendChoices(owner: Address): Promise<SendChoice[]> {
       if (feeToken && celoFee) spendable = balance > celoFee.min ? balance - celoFee.min : 0n;
       else if (route.chainId === 42220 && celoFee && route.fee === "native") spendable = balance;
       else if (route.fee === "native") spendable = spendableEth(balance);
-      const digits = route.fee === "native" || asset === "ethx" || asset === "base-ethx" || asset === "celo-celox" ? 6 : 2;
+      const digits = route.fee === "native" || asset === "ethx" || asset === "base-ethx" || asset === "celo-celox" || asset === "celo-gdx" ? 6 : 2;
       return {
         asset,
         label: route.label,

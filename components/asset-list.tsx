@@ -82,5 +82,6 @@ function assetHref(row: HoldingRow) {
   if (row.label === "USDC") return "/home/add/crypto?pay=usdc";
   if (row.label === "USDT") return "/home/add/crypto?pay=usdt";
   if (row.label === "ETH" || row.label === "CELO") return "/home/add/crypto?pay=eth";
+  if (row.label === "G$" || row.key === "celo-gooddollar") return "/home/assets#swap";
   return "/home/add/receive";
 }

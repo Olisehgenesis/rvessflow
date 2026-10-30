@@ -11,7 +11,7 @@ const sources: Record<string, string> = {
   USDT: "/tokens/usdt.png",
   CELO: "/tokens/celo.svg",
   CELOx: "/tokens/celo.svg",
-  "G$": "/tokens/celo.svg",
+  "G$": "/tokens/gdx.svg",
 };
 
 const chainMark: Record<"base" | "celo", { src: string; round: string }> = {

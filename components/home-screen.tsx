@@ -89,7 +89,7 @@ async function HomeReady({
   const outWeiPerSec = liveOwn.filter((flow) => flow.recipient.toLowerCase() !== me).reduce((sum, flow) => sum + BigInt(flow.rate), 0n);
   const inCapWei = liveIn.reduce((sum, item) => sum + BigInt(item.flow.remaining), 0n) + liveSelf.reduce((sum, flow) => sum + BigInt(flow.remaining), 0n);
   const streamRemainingWei = BigInt(portfolio.streaming);
-  const amounts = holdings.rows.map((row) => row.amount);
+  const amounts = [...holdings.rows, holdings.goodDollar].map((row) => row.amount);
   const funded = amounts.some(hasTokenAmount);
   const starting = showGettingStarted({
     goals: portfolio.flows.length,
@@ -97,7 +97,7 @@ async function HomeReady({
     groups: portfolio.groups.length,
     amounts,
   });
-  const assets = holdings.rows;
+  const assets = hasTokenAmount(holdings.goodDollar.amount) ? [...holdings.rows, holdings.goodDollar] : holdings.rows;
   const openFlows = portfolio.flows.filter((flow) => !flow.settled);
   function balanceCard(layout?: "desk") {
     return (

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import Loading from "../../loading";
 import { AssetList } from "@/components/asset-list";
+import { GdxSwap } from "@/components/gdx-swap";
 import { Page } from "@/components/ui-bits";
 import { loadHoldings } from "@/lib/holdings";
 import { loadPortfolio } from "@/lib/protocol";
@@ -22,8 +23,11 @@ async function AssetsBody() {
   const holdings = await loadHoldings(who.address, data, quote);
   return (
     <Page title="Your assets" back="/home">
-      <p className="mb-4 text-sm text-muted-foreground">USD, ETH, and CELO each open onto the tokens behind them, on Base and on Celo. Pick a currency in More and a real rate shows under each amount.</p>
-      <AssetList rows={holdings.rows} localUnit={holdings.localUnit} />
+      <p className="mb-4 text-sm text-muted-foreground">USD, ETH, and CELO each open onto the tokens behind them. G$ is its own Celo line, with a Uniswap swap below.</p>
+      <AssetList rows={[...holdings.rows, holdings.goodDollar]} localUnit={holdings.localUnit} />
+      <div className="mt-6">
+        <GdxSwap />
+      </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Link href="/home/add/receive" className="flex h-11 items-center justify-center rounded-full border border-border bg-card text-sm font-medium">
           Receive
