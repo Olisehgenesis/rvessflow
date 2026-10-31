@@ -77,6 +77,11 @@ async function applySchema() {
         `CREATE TABLE IF NOT EXISTS ${raw(bucket, "milestones")} (id VARCHAR PRIMARY KEY, owner VARCHAR NOT NULL, subject_kind VARCHAR NOT NULL, subject_ref VARCHAR NOT NULL, position INTEGER NOT NULL, label VARCHAR NOT NULL, amount VARCHAR NOT NULL DEFAULT '', rate_per_day VARCHAR NOT NULL DEFAULT '', days INTEGER NOT NULL DEFAULT 0, reached BOOLEAN NOT NULL DEFAULT false)`,
       ),
     );
+    await rows(
+      sql.raw(
+        `CREATE TABLE IF NOT EXISTS ${bucket}.onboarding (address VARCHAR PRIMARY KEY, status VARCHAR NOT NULL, step INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1, source VARCHAR NOT NULL DEFAULT 'auto', updated_at VARCHAR NOT NULL)`,
+      ),
+    );
   }
 }
 

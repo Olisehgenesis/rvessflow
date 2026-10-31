@@ -2,7 +2,7 @@
 
 These contracts were reviewed against a Solidity security checklist. That is not an external audit. Do not put real funds in them.
 
-The RvessFlow Protocol holds savings and pays them out as Superfluid streams. A flow or subflow is a constant-flow agreement (CFA) stream. A group pot is a general-distribution agreement (GDA) pool. The accepted tokens are Super Tokens on the allowlist, normally USDCx and ETHx. On Base Sepolia the stable token is fUSDCx.
+The RvessFlow Protocol holds savings and pays them out as Superfluid streams. A flow or subflow is a constant-flow agreement (CFA) stream. A group pot is a general-distribution agreement (GDA) pool. The accepted tokens are Super Tokens on the allowlist. Live lists are in the tables under each chain. The allowlist has no enumerator: `isAllowed`, `kindOf`, and `underlyingOf` are the source of truth. Kind `0` is Wrapper, `1` is Native, `2` is Pure. Underlying ERC-20s (USDC, USDT, USDm) are not allowlisted themselves.
 
 The protocol owner is one address. That address should be a Safe, so several people sign upgrades and treasury actions, and the contracts still see a single owner. The owner can add support managers, set the token list, set the lock penalty and the yield rate, fund yield, and upgrade the contracts. The owner cannot withdraw a user's flow balance, lock principal, penalty pool, unused yield budget, group collateral, or a group pot, and cannot rewrite who paid whom.
 
@@ -128,7 +128,16 @@ Deployed 25 October 2026. These contracts have not had an external audit. Any tw
 | Group implementation | `0x3920469b30958FE92d32F19Bc552DC315EE9FFFc` |
 | Group | `0x13008059FAd0348Fb8848A0737F9E826C82199fa` |
 
-On this deployment `contractVersion` is 3 on the allowlist, 2 on the factory, 3 on the lock vault, and 4 on the group. No keeper was set.
+On this deployment `contractVersion` is 3 on the allowlist, 2 on the factory, 3 on the lock vault, and 4 on the group. The allowlist is not paused. No keeper was set.
+
+Allowed Super Tokens (read 31 October 2026 from `0x34e748f13c294ED3b8Cdd1dd65C45b58981dBe8b`):
+
+| Token | Super Token | Kind | Underlying | Underlying decimals |
+| --- | --- | --- | --- | --- |
+| USDCx | `0xD04383398dD2426297da660F9CCA3d439AF9ce1b` | Wrapper | Circle USDC `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | 6 |
+| ETHx | `0x46fd5cfB4c12D87acD3a13e92BAa53240C661D93` | Native | none | 18 |
+
+G$ is **not** allowed on Base. Groups here run in USDCx. The group proxy still has a scheduled UUPS at `0x0d8810f360F32d7b9fA466C775E0b324132592BB` (`upgradeReadyAt` 1793254361); two Safe owners still need to finish `upgradeToAndCall`.
 
 The constructors also created these contracts. The live beacons are the ones owned by the factory proxy. The yield payer used by the lock vault is the second one.
 
@@ -145,7 +154,14 @@ Source for every address above, including the OpenZeppelin proxies and beacons, 
 
 ### Base Sepolia
 
-Chain id 84532. Explorer: [sepolia.basescan.org](https://sepolia.basescan.org). Deployed 26 October 2026. The app reads this set when `RVESS_NETWORK=sepolia`, including `npm run dev -- sepolia` and `npm run build -- sepolia`. Production still reads Base mainnet. The owner is a 2-of-3 Safe. Jamie, Alex, and Taylor are the signers. Any two of them can act. One is not enough. fUSDCx and ETHx are allowlisted. No keeper was set. `contractVersion` is 3 on the allowlist, 2 on the factory, 3 on the lock vault, and 4 on the group. Gas was paid by `0xB1819b7287B8e709A526D942f5c3e1ae7389054D`.
+Chain id 84532. Explorer: [sepolia.basescan.org](https://sepolia.basescan.org). Deployed 26 October 2026. The app reads this set when `RVESS_NETWORK=sepolia`, including `npm run dev -- sepolia` and `npm run build -- sepolia`. Production still reads Base mainnet. The owner is a 2-of-3 Safe. Jamie, Alex, and Taylor are the signers. Any two of them can act. One is not enough. Allowed Super Tokens (read 31 October 2026 from `0xed115A3Ac77036fD7f4ec4B597d655B486d7AB6D`):
+
+| Token | Super Token | Kind | Underlying | Underlying decimals |
+| --- | --- | --- | --- | --- |
+| fUSDCx | `0x1650581F573eAd727B92073B5Ef8B4f5B94D1648` | Wrapper | fUSDC `0x6B0dacea6a72E759243c99Eaed840DEe9564C194` | 18 |
+| ETHx | `0x143ea239159155B408e71CDbE836e8CFD6766732` | Native | none | 18 |
+
+No keeper was set. `contractVersion` is 3 on the allowlist, 2 on the factory, 3 on the lock vault, and 4 on the group. Gas was paid by `0xB1819b7287B8e709A526D942f5c3e1ae7389054D`.
 
 | | Address |
 | --- | --- |
@@ -231,7 +247,17 @@ Source of those constants: `src/SuperfluidAddresses.sol`.
 
 ### Celo mainnet
 
-Chain id 42220. Explorer: [celoscan.io](https://celoscan.io). The live protocol was signed 29 October 2026. The owner is the same 2-of-3 Safe as Base. cUSDx, CELOx, and G$ are allowlisted. Upgrade delay on this code is six hours. These contracts have not had an external audit.
+Chain id 42220. Explorer: [celoscan.io](https://celoscan.io). The live protocol was signed 29 October 2026. The owner is the same 2-of-3 Safe as Base. Upgrade delay on this code is six hours. These contracts have not had an external audit.
+
+Allowed Super Tokens (read 31 October 2026 from `0xfc48D9CaeBb63Ac94D1170E921E126d9722B6C4E`; allowlist `contractVersion` 4, not paused):
+
+| Token | Super Token | Kind | Underlying | Underlying decimals |
+| --- | --- | --- | --- | --- |
+| cUSDx | `0x3AcB9A08697b6Db4cD977e8Ab42b6f24722e6D6e` | Wrapper | Mento USDm `0x765DE816845861e75A25fCA122bb6898B8B1282a` | 18 |
+| CELOx | `0x671425Ae1f272Bc6F79beC3ed5C4b00e9c628240` | Native | none | 18 |
+| G$ | `0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A` | Pure | none | — |
+
+Circle USDC, USDT, USDm, and Base USDCx are **not** allowed on this Celo list. Groups here run in cUSDx or G$.
 
 The 28 October 2026 proxies stay on chain and are unused by the app: allowlist `0x3627815B99D045A40a189000FBf7dAE729cEF9eB`, factory `0xeC9f5717593f66BA703e9bdB871B24014642F3cB`, locks `0x1a48b3d9f38ea0B905F4731c5D3bdA081078b5ef`, groups `0xe98361A2D733783b20371ed6b03e93c7be7A3285`.
 

@@ -61,6 +61,7 @@ function DesktopSideView({ pathname }: { pathname: string }) {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  data-tour={item.href === "/home" ? "nav-home" : item.href === "/goals" ? "nav-save" : item.href === "/goals/flow" ? "nav-stream" : item.href === "/vaults" ? "nav-lock" : item.href === "/groups" ? "nav-groups" : undefined}
                   aria-current={active ? "page" : undefined}
                   className={`flex min-h-11 items-center gap-3 rounded-2xl px-3 text-sm transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414] ${active ? "bg-[#E7F4C4] font-semibold text-[#141414]" : "text-[#3A3F47] hover:bg-white"}`}
                 >
@@ -74,6 +75,7 @@ function DesktopSideView({ pathname }: { pathname: string }) {
       </nav>
       <Link
         href="/settings"
+        data-tour="nav-account"
         aria-current={pathname.startsWith("/settings") ? "page" : undefined}
         className={`mt-auto flex min-h-11 items-center gap-3 rounded-2xl border-t border-transparent px-3 text-sm transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414] ${pathname.startsWith("/settings") ? "bg-[#E7F4C4] font-semibold text-[#141414]" : "text-[#3A3F47] hover:bg-white"}`}
       >
@@ -121,6 +123,7 @@ function NavTab({
     <li>
       <Link
         href={item.href}
+        data-tour={item.href === "/home" ? "nav-home" : item.href === "/goals" ? "nav-save" : item.href === "/groups" ? "nav-groups" : item.href === "/settings" ? "nav-account" : undefined}
         className={`flex min-h-12 flex-col items-center justify-end gap-1 pb-1 text-[11px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${active ? "font-semibold text-foreground" : "text-muted-foreground"}`}
       >
         <span className={`grid h-8 place-items-center rounded-full px-3 ${active ? "bg-[#D4F06B]" : ""}`}>

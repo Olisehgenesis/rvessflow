@@ -18,6 +18,8 @@ import { loadQuote } from "@/lib/rates";
 import { viewer } from "@/lib/session";
 import { allLabels, draftsIfReady } from "@/lib/circle";
 import { HomeGroups } from "@/components/home-groups";
+import { TourHost } from "@/components/tour-overlay";
+import { resolveTour } from "@/lib/onboarding";
 import type { Quote } from "@/lib/quote";
 import type { Address } from "viem";
 
@@ -168,8 +170,10 @@ async function HomeReady({
       />
     );
   }
+  const tour = await resolveTour({ hasStarted: !starting });
   return (
     <>
+      <TourHost eligible={tour.eligible} step={tour.step} />
       <div className="hidden lg:block">
         <div className="flex items-start justify-between gap-4">
           <div>

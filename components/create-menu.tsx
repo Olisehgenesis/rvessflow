@@ -29,6 +29,7 @@ function CreateMenuBody() {
         aria-label="Create"
         aria-expanded={open}
         onClick={() => setOpen(true)}
+        data-tour="nav-create"
         className="relative -mt-7 grid size-14 place-items-center rounded-full bg-[#D4F06B] text-[#141B2D] shadow-[0_10px_24px_rgba(20,27,45,0.16)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141B2D]"
       >
         <IconPlus className="size-7" />

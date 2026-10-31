@@ -7,7 +7,7 @@
     "build": "node scripts/run.mjs build",
     "start": "node scripts/run.mjs start",
     "lint": "dotenvx run --convention=nextjs --ignore=MISSING_ENV_FILE -- eslint app components lib test",
-    "test": "dotenvx run --convention=nextjs --ignore=MISSING_ENV_FILE -- node --experimental-strip-types --import ./test/register.mjs --test test/pay.test.ts test/deposit.test.ts test/onramp.test.ts test/home.test.ts test/send.test.ts test/wallet-batch.test.ts test/celo-fee.test.ts test/celo-sponsor.test.ts test/vault-create.test.ts test/network.test.ts test/next-label.test.ts test/sign-steps.test.ts test/good-fv.test.ts test/gdx-swap.test.ts test/flow-value.test.ts test/group-terms.test.ts test/group-plan.test.ts test/protocol-stats.test.ts"
+    "test": "dotenvx run --convention=nextjs --ignore=MISSING_ENV_FILE -- node --experimental-strip-types --import ./test/register.mjs --test test/pay.test.ts test/deposit.test.ts test/onramp.test.ts test/home.test.ts test/send.test.ts test/wallet-batch.test.ts test/celo-fee.test.ts test/celo-sponsor.test.ts test/vault-create.test.ts test/network.test.ts test/next-label.test.ts test/sign-steps.test.ts test/good-fv.test.ts test/gdx-swap.test.ts test/flow-value.test.ts test/group-terms.test.ts test/group-plan.test.ts test/protocol-stats.test.ts test/onboarding.test.ts"
   },
   "dependencies": {
     "@base-org/account": "^2.5.13",

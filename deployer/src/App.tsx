@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getContractAddress, isAddress, type Address } from "viem";
+import { getContractAddress, isAddress, zeroAddress, type Address } from "viem";
 import { chains, type ChainId, type ProtocolChain } from "./chains";
 import { ownerContract, parseOwners } from "./owners";
 import { buildDeployment, deployerBytecode, type Deployment } from "./plan";
@@ -108,12 +108,17 @@ async function readAnchor(
   };
 }
 
-const deployChains = [chains[42220], chains[11142220]] as const;
+const deployChains = [chains[42220], chains[8453], chains[11142220]] as const;
+const baseOwners = [
+  "0x9b6A52A88a1Ee029Bd14170fFb8fB15839Bd18cB",
+  "0xf7dbD2867f55832E4A05E16Cd69cB57A70923cDD",
+  "0x53eaF4CD171842d8144e45211308e5D90B4b0088",
+] as const;
 
 export function App() {
-  const [chainId, setChainId] = useState<ChainId>(42220);
+  const [chainId, setChainId] = useState<ChainId>(8453);
   const chain = chains[chainId];
-  const [wallets, setWallets] = useState(["", "", ""]);
+  const [wallets, setWallets] = useState([...baseOwners]);
   const [keeper, setKeeper] = useState("");
   const [mainnetOk, setMainnetOk] = useState(false);
   const [wallet, setWallet] = useState<ConnectedWallet | null>(null);
@@ -192,6 +197,7 @@ export function App() {
   function chooseChain(next: ChainId) {
     if (next === chainId) return;
     setChainId(next);
+    if (next === 8453) setWallets([...baseOwners]);
     setAnchor(null);
     setDone(false);
     setMainnetOk(false);
@@ -301,7 +307,7 @@ export function App() {
     <main className="page">
       <h1>Sign the deployment</h1>
       <p className="lede">
-        Any two of these three wallets can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. You connect one of them and sign. The first signature creates a small contract. The protocol takes a few more signatures, because a wallet cannot fit every contract into one transaction. The addresses stay the same. People using Rvess do not sign here. This page stores no key. Pick Celo or Celo Sepolia. Neither choice changes the contracts already on Base.
+        Any two of these three wallets can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. You connect one of them and sign. Pick Base to upgrade the live group contract so a new group can pay each turn. That does not move Celo. Pick Celo only to sign a new Celo protocol. This page stores no key.
       </p>
 
       <div className="choices" role="group" aria-label="Network">
@@ -458,10 +464,10 @@ export function App() {
         </dl>
       )}
       {done && (
-        <>
-          <AllowGoodDollar chain={chain} allowlist={shownAddresses?.allowlist} wallet={wallet} wallets={installed} onConnect={onConnect} />
-          <UpgradeGroups chain={chain} wallet={wallet} wallets={installed} onConnect={onConnect} />
-        </>
+        <AllowGoodDollar chain={chain} allowlist={shownAddresses?.allowlist ?? chain.allowlist} wallet={wallet} wallets={installed} onConnect={onConnect} />
+      )}
+      {chain.groups !== zeroAddress && (
+        <UpgradeGroups chain={chain} wallet={wallet} wallets={installed} onConnect={onConnect} />
       )}
     </main>
   );

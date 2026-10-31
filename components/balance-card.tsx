@@ -172,14 +172,14 @@ export function HomeBalance({
         { label: "Locked", prefix: "$", value: shownLocked, usd: "" },
       ];
   const actions = (
-    <div className={`mt-4 grid gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
+    <div data-tour="home-add" className={`mt-4 grid gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
       <TopUpSheet network={network} className={lime} />
       {showWithdraw ? <WithdrawSheet savings={savings} unit={unit} conceal={conceal} /> : null}
     </div>
   );
   if (desk) {
     return (
-      <section className="relative overflow-hidden rounded-[1.75rem] border border-[#D7E7B0] bg-[#E7F4C4] p-6 text-[#141414] xl:p-7">
+      <section data-tour="home-balance" className="relative overflow-hidden rounded-[1.75rem] border border-[#D7E7B0] bg-[#E7F4C4] p-6 text-[#141414] xl:p-7">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center">
@@ -212,7 +212,7 @@ export function HomeBalance({
             </div>
           ))}
         </dl>
-        <div className={`mt-6 grid max-w-sm gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
+        <div data-tour="home-add" className={`mt-6 grid max-w-sm gap-2 ${showWithdraw ? "grid-cols-2" : "grid-cols-1"}`}>
           <TopUpSheet network={network} className={lime} />
           {showWithdraw ? <WithdrawSheet savings={savings} unit={unit} conceal={conceal} /> : null}
         </div>
@@ -220,7 +220,7 @@ export function HomeBalance({
     );
   }
   return (
-    <section className="mt-5 rounded-3xl border border-[#D7E7B0] bg-[#E7F4C4] p-4 text-[#141414]">
+    <section data-tour="home-balance" className="mt-5 rounded-3xl border border-[#D7E7B0] bg-[#E7F4C4] p-4 text-[#141414]">
       <div className="flex items-center justify-between">
         <p className="text-sm">Total balance</p>
         <div className="flex items-center">

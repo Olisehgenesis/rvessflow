@@ -67,6 +67,7 @@ import {
   setDraftOpen,
 } from "@/lib/circle";
 import { filledName } from "@/lib/next-label";
+import { finishTour, restartTourRecord, saveTourStep, skipTour } from "@/lib/onboarding";
 import { acceptedTerms, accountIndex, clearSession, currencyChoice, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet, viewer, type Viewer } from "@/lib/session";
 
 export type ActionState = { error?: string; sign?: SignPayload; saved?: boolean } | null;
@@ -1228,6 +1229,42 @@ export async function watchWallet(): Promise<{ stamp?: string; error?: string }>
 
 export async function noteWalletChange() {
   revalidatePath("/", "layout");
+}
+
+export async function saveOnboardingStep(step: number) {
+  try {
+    await saveTourStep(step);
+  } catch {
+    // Tour progress stays on the device if the directory is down.
+  }
+}
+
+export async function skipOnboarding() {
+  try {
+    await skipTour();
+  } catch {
+    // Skip still closes the overlay even if the row did not save.
+  }
+  refresh();
+}
+
+export async function finishOnboarding() {
+  try {
+    await finishTour();
+  } catch {
+    // Finish still closes the overlay even if the row did not save.
+  }
+  refresh();
+}
+
+export async function restartOnboarding() {
+  try {
+    await restartTourRecord();
+  } catch (error) {
+    return spoken(error);
+  }
+  refresh();
+  redirect("/home");
 }
 
 export async function previewReceive(input: { usd: string; receive: string }): Promise<{ lines: { label: string; value: string }[]; error?: string }> {
