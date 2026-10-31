@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "radix-ui";
-import { IconBack, IconClose } from "@/components/icons";
+import { FonbnkCashOut } from "@/components/fonbnk-cashout";
+import { IconClose } from "@/components/icons";
 import type { FonbnkSide, ProviderStatus } from "@/lib/onramp";
 
 const primary = "flex h-12 w-full items-center justify-center rounded-full bg-primary text-base font-medium text-primary-foreground disabled:opacity-50";
@@ -59,12 +60,16 @@ export function MobileMoneyForm({
   side = "buy",
   country,
   unit,
+  email = "",
+  phone = "",
 }: {
   status: ProviderStatus;
   address: string;
   side?: FonbnkSide;
   country: string;
   unit: string;
+  email?: string;
+  phone?: string;
 }) {
   const router = useRouter();
   const [flow, setFlow] = useState<FonbnkSide>(side);
@@ -92,9 +97,14 @@ export function MobileMoneyForm({
       });
       const payload = (await response.json()) as { url?: string; error?: string };
       if (!response.ok || !payload.url) throw new Error(payload.error || "Fonbnk did not open.");
+      const opened = window.open(payload.url, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        window.location.assign(payload.url);
+        return;
+      }
       setUrl(payload.url);
       setAsk(false);
-      setCheckout(true);
+      setCheckout(false);
     } catch (caught) {
       setUrl("");
       setCheckout(false);
@@ -124,7 +134,7 @@ export function MobileMoneyForm({
       <Dialog.Root open={ask && !checkout} onOpenChange={setAsk}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-[60] bg-[#141414]/40 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
-          <Dialog.Content className="fixed right-0 bottom-0 left-0 z-[61] rounded-t-[1.75rem] bg-white px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-24px_80px_-28px_rgba(20,20,20,0.45)] outline-none sm:top-1/2 sm:right-auto sm:bottom-auto sm:left-1/2 sm:w-[min(100%-1.5rem,24.5rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[1.6rem] sm:pb-5">
+          <Dialog.Content className="fixed right-0 bottom-0 left-0 z-[61] max-h-[92vh] overflow-y-auto rounded-t-[1.75rem] bg-white px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-24px_80px_-28px_rgba(20,20,20,0.45)] outline-none sm:top-1/2 sm:right-auto sm:bottom-auto sm:left-1/2 sm:w-[min(100%-1.5rem,24.5rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[1.6rem] sm:pb-5">
             <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border sm:hidden" />
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -159,76 +169,59 @@ export function MobileMoneyForm({
                 </button>
               ))}
             </div>
-            <label className="mt-5 block">
-              <span className="sr-only">Amount in {unit}</span>
-              <span className="flex items-end gap-2 border-b border-[#E6EADF] pb-2">
-                <input
-                  value={amount}
-                  onChange={(event) => {
-                    setAmount(event.target.value.replace(/[^\d]/g, ""));
-                    setError("");
-                  }}
-                  inputMode="numeric"
-                  autoFocus
-                  placeholder="0"
-                  className="min-w-0 flex-1 bg-transparent text-[2.65rem] leading-none font-semibold tracking-[-0.05em] tabular-nums outline-none placeholder:text-[#C9CDC3]"
-                />
-                <span className="mb-1 text-sm font-semibold text-[#5C6572]">{unit}</span>
-              </span>
-            </label>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {amountChips(unit).map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => {
-                    setAmount(chip);
-                    setError("");
-                  }}
-                  className={`h-9 rounded-full px-3.5 text-sm font-medium ${amount === chip ? "bg-[#D4F06B] text-[#141414]" : "bg-[#F3F1EA] text-[#3A3F47]"}`}
-                >
-                  {formatLocal(chip)}
-                </button>
-              ))}
-            </div>
-            {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
-            {!status.configured ? (
-              <div className="mt-3">
-                <Missing status={status} />
+            {flow === "sell" ? (
+              <div className="mt-5">
+                <FonbnkCashOut unit={unit} place={place} email={email} phone={phone} />
               </div>
-            ) : null}
-            <button type="button" onClick={() => void openCheckout()} disabled={!status.configured || pending || !amount} className={`${primary} mt-5 bg-[#D4F06B] text-[#141414]`}>
-              {pending ? "Opening…" : flow === "buy" ? "Buy" : "Cash out"}
-            </button>
+            ) : (
+              <>
+                <label className="mt-5 block">
+                  <span className="sr-only">Amount in {unit}</span>
+                  <span className="flex items-end gap-2 border-b border-[#E6EADF] pb-2">
+                    <input
+                      value={amount}
+                      onChange={(event) => {
+                        setAmount(event.target.value.replace(/[^\d]/g, ""));
+                        setError("");
+                      }}
+                      inputMode="numeric"
+                      autoFocus
+                      placeholder="0"
+                      className="min-w-0 flex-1 bg-transparent text-[2.65rem] leading-none font-semibold tracking-[-0.05em] tabular-nums outline-none placeholder:text-[#C9CDC3]"
+                    />
+                    <span className="mb-1 text-sm font-semibold text-[#5C6572]">{unit}</span>
+                  </span>
+                </label>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {amountChips(unit).map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => {
+                        setAmount(chip);
+                        setError("");
+                      }}
+                      className={`h-9 rounded-full px-3.5 text-sm font-medium ${amount === chip ? "bg-[#D4F06B] text-[#141414]" : "bg-[#F3F1EA] text-[#3A3F47]"}`}
+                    >
+                      {formatLocal(chip)}
+                    </button>
+                  ))}
+                </div>
+                {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+                {!status.configured ? (
+                  <div className="mt-3">
+                    <Missing status={status} />
+                  </div>
+                ) : null}
+                <button type="button" onClick={() => void openCheckout()} disabled={!status.configured || pending || !amount} className={`${primary} mt-5 bg-[#D4F06B] text-[#141414]`}>
+                  {pending ? "Opening…" : "Buy"}
+                </button>
+              </>
+            )}
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-      {checkout && url ? (
-        <div className="fixed inset-0 z-[70] flex flex-col bg-white">
-          <header className="flex h-14 shrink-0 items-center gap-1 border-b border-[#E6EADF] bg-[#F7F6F3] px-2 pt-[env(safe-area-inset-top)]">
-            <button
-              type="button"
-              onClick={() => {
-                setCheckout(false);
-                setAsk(true);
-              }}
-              aria-label="Back"
-              className="grid size-11 place-items-center rounded-full"
-            >
-              <IconBack className="size-5" />
-            </button>
-            <p className="min-w-0 flex-1 truncate text-base font-semibold">{flow === "buy" ? "Buy" : "Cash out"}</p>
-          </header>
-          <iframe
-            key={url}
-            title={flow === "buy" ? "Fonbnk onramp" : "Fonbnk offramp"}
-            src={url}
-            className="min-h-0 w-full flex-1 border-0 bg-white"
-            allow="camera; microphone; payment; clipboard-write; geolocation"
-            referrerPolicy="strict-origin-when-cross-origin"
-          />
-        </div>
-      ) : null}
+      {!ask && url ? <p className="mt-6 text-sm text-muted-foreground">Fonbnk opened in a new tab. Google Sign-In needs that window, not an iframe.</p> : null}
     </>
   );
 }

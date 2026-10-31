@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
 import { describe, it } from "node:test";
 import { coinbaseJwt } from "@/lib/coinbase-jwt";
+import { fonbnkFiatCode, fonbnkSign } from "@/lib/fonbnk-api";
 import { countryForCurrency } from "@/lib/place";
 import {
   coinbaseOnrampUrl,
@@ -105,6 +106,11 @@ describe("funding providers", () => {
     assert.equal(countryForCurrency("ugx"), "UG");
     assert.equal(countryForCurrency("kes"), "KE");
     assert.equal(countryForCurrency("usd"), null);
+    assert.equal(fonbnkFiatCode("UG"), "UGX");
+    assert.equal(fonbnkFiatCode("KE"), "KES");
+    const stamped = fonbnkSign("dGVzdA==", "1700000000000", "/api/v2/quote");
+    assert.equal(typeof stamped, "string");
+    assert.notEqual(stamped, "");
   });
 
   it("reports missing keys and builds official Transak and Coinbase requests", () => {
