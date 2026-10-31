@@ -3,6 +3,7 @@
 import { CYCLE_PRESETS, MAX_GROUP_CYCLES, type CycleChoice } from "@/lib/cycle";
 import type { GroupTokenKind } from "@/lib/group-token";
 import { ChainMark } from "@/components/token-icon";
+import { groupMark } from "@/components/groups-ui";
 import { groupChainFacts, type GroupNet } from "@/lib/group-network";
 
 export const field = "h-12 rounded-2xl border-border bg-white px-4 text-base shadow-none";
@@ -12,7 +13,7 @@ export function Chip({ on, children, onClick }: { on: boolean; children: React.R
     <button
       type="button"
       onClick={onClick}
-      className={`h-10 rounded-full px-3.5 text-sm font-medium ${on ? "bg-[#17210C] text-white" : "border border-border bg-white text-foreground"}`}
+      className={`h-10 rounded-full px-3.5 text-sm font-medium ${on ? "bg-[#E7F4C4] text-[#141414]" : "border border-[#E6EADF] bg-white text-[#3A3F47]"}`}
     >
       {children}
     </button>
@@ -52,10 +53,10 @@ export function DurationChips({
   onChoice: (next: CycleChoice) => void;
 }) {
   const options: { id: CycleChoice; label: string }[] = [
-    { id: "hour", label: "Hour" },
-    { id: "week", label: "Week" },
-    { id: "month", label: "Month" },
-    { id: "year", label: "Year" },
+    { id: "hour", label: "Hourly" },
+    { id: "week", label: "Weekly" },
+    { id: "month", label: "Monthly" },
+    { id: "year", label: "Yearly" },
     { id: "custom", label: "Custom" },
   ];
   return (
@@ -137,6 +138,7 @@ export function PayoutTiles({
         onClick={() => onPayout("plain")}
         className={`rounded-2xl px-3 py-3 text-left ${payout === "plain" ? "border-2 border-foreground bg-white" : "border border-border bg-card"} ${live ? "" : "opacity-40"}`}
       >
+        <img src={groupMark.save} alt="" className="mb-2 size-8 object-contain" />
         <span className="block text-sm font-semibold">Paid each turn</span>
         <span className="mt-1 block text-xs text-muted-foreground">Sends the contribution to whose turn it is.</span>
       </button>
@@ -145,6 +147,7 @@ export function PayoutTiles({
         onClick={() => onPayout("stream")}
         className={`rounded-2xl px-3 py-3 text-left ${payout === "stream" ? "border-2 border-foreground bg-white" : "border border-border bg-card"}`}
       >
+        <img src={groupMark.stream} alt="" className="mb-2 size-8 object-contain" />
         <span className="block text-sm font-semibold">Streaming pot</span>
         <span className="mt-1 block text-xs text-muted-foreground">Pays that person every second.</span>
       </button>

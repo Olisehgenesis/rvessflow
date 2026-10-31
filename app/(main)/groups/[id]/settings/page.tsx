@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import Loading from "../../../loading";
 import { GroupButton } from "@/components/forms";
-import { GroupLead } from "@/components/group-bits";
+import { GroupLead, GroupNav } from "@/components/group-bits";
 import { Page } from "@/components/ui-bits";
+import { liveGroupTabs } from "@/lib/group-ui";
 import { spanLabel } from "@/lib/cycle";
 import { groupLabel } from "@/lib/circle";
 import { labeledGroup } from "@/lib/group-token";
@@ -30,6 +31,7 @@ async function SettingsBody({ params }: { params: Promise<{ id: string }> }) {
   const base = `/groups/${group.id}`;
   return (
     <Page title="Group settings" back={base}>
+      <GroupNav current={`${base}/settings`} links={liveGroupTabs(group.id)} />
       <GroupLead src="/marks/rules.png" title="This group" body="One organizer. The amount and the cycle stay as they were written on-chain." />
       <dl className="divide-y divide-border border-y border-border text-sm">
         <div className="flex justify-between gap-4 py-3">

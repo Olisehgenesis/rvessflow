@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import Loading from "../../../../loading";
-import { GroupLead } from "@/components/group-bits";
+import { GroupLead, GroupNav } from "@/components/group-bits";
 import { Page } from "@/components/ui-bits";
 import { readDraft } from "@/lib/circle";
+import { draftGroupTabs } from "@/lib/group-ui";
 
 export default function DraftSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   return (
@@ -21,6 +22,7 @@ async function SettingsBody({ params }: { params: Promise<{ id: string }> }) {
   const base = `/groups/draft/${draft.id}`;
   return (
     <Page title="Group settings" back={base}>
+      <GroupNav current={`${base}/settings`} links={draftGroupTabs(draft.id)} />
       <GroupLead src="/marks/rules.png" title="Before it starts" body="The organizer can still change the name, the amount, and the cycle." />
       <dl className="divide-y divide-border border-y border-border text-sm">
         <Fact label="Group name" value={draft.name} />

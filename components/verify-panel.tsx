@@ -13,7 +13,7 @@ import type { Address } from "viem";
 
 const reasons = [
   { title: "A tick on your name", body: "A live unique person, shown next to this display name." },
-  { title: "Celo when the balance is low", body: "If this verified wallet has less than 0.3 CELO, opening Profile or tapping Ask for CELO calls their faucet." },
+  { title: "Celo when the balance is low", body: "Ask for CELO hits GoodDollar's faucet. That faucet cannot pay a passkey (2300-gas transfer). A regular Celo wallet can receive it. App actions still use sponsored gas." },
   { title: "Daily G$", body: "GoodDollar pays a Universal Basic Income once a day to each verified person." },
   { title: "Link a verified wallet", body: "The original verified wallet signs once. Both share one face and one daily claim." },
 ];
@@ -102,6 +102,7 @@ export function VerifyPanel({
       setOk(result.ok);
       setTone(result.tone);
       setNote(result.detail);
+      router.refresh();
     } catch (error) {
       setNote(error instanceof Error ? error.message : "GoodDollar did not send CELO.");
     } finally {
@@ -130,7 +131,7 @@ export function VerifyPanel({
           {verified ? <VerifiedTick className="size-6" /> : <span className="size-2.5 rounded-full bg-[#C5CBD3]" />}
         </span>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-[#141414]">{verified ? (linked ? "Linked to a verified wallet" : "Verified with GoodDollar") : "Not verified yet"}</p>
+          <p className="text-sm font-semibold text-[#141414]">{verified ? "GoodDollar verified" : "Not verified yet"}</p>
           <p className="mt-1 text-sm leading-relaxed text-[#5C6572]">
             {verified
               ? linked
@@ -170,7 +171,7 @@ export function VerifyPanel({
               </button>
             </div>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Ask for CELO calls GoodDollar&apos;s faucet with this wallet. It only sends CELO when this account is verified and Celo CELO is below 0.3. It is not the daily G$.
+              Ask for CELO calls GoodDollar&apos;s faucet. A passkey cannot receive that send (their contract uses a 2300-gas transfer). It is not the daily G$.
             </p>
           </form>
           {!linked ? (

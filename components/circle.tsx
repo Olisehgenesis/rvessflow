@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import { Dialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { GroupRotationPlan } from "@/components/group-bits";
+import { GroupSection, MemberCard } from "@/components/groups-ui";
 import { useSignedAction } from "@/components/sign-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -124,28 +125,30 @@ function RowMove({ id, from, first, last, action }: { id: string; from: number; 
 
 export function DraftDesk({ draft }: { draft: DraftView }) {
   return (
-    <div className="space-y-6">
-      <p className="text-sm leading-relaxed text-muted-foreground">{draft.summary} Turn 1 receives the first cycle.</p>
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Members</h2>
-        <ul className="divide-y divide-border border-y border-border">
+    <div className="space-y-4">
+      <DraftPeople draft={draft} />
+      {draft.mine ? <StartGroup draft={draft} /> : null}
+    </div>
+  );
+}
+
+export function DraftPeople({ draft }: { draft: DraftView }) {
+  return (
+    <div className="space-y-4">
+      <GroupSection title="Current members">
+        <p className="mb-3 text-sm leading-relaxed text-[#5C6572]">{draft.summary} Turn 1 receives the first cycle.</p>
+        <ul className="space-y-2">
           {draft.members.map((member, index) => (
-            <li key={member.address} className="py-3 text-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium">
-                    Turn {index + 1}
-                    <span className="font-normal text-muted-foreground"> · </span>
-                    {member.you ? `${member.name} (you)` : member.name}
-                    {member.organizer ? " · organizer" : ""}
-                  </p>
-                  {draft.mine ? (
-                    <p className="mt-1 text-xs text-muted-foreground">{member.phone ? member.phone : "No phone linked"}</p>
-                  ) : null}
-                </div>
-              </div>
+            <li key={member.address}>
+              <MemberCard
+                name={member.name}
+                address={member.address}
+                you={member.you}
+                role={member.organizer ? "Organizer" : `Turn ${index + 1}`}
+                status={member.phone ? member.phone : "Ready"}
+              />
               {draft.mine ? (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2 pl-1">
                   <RowMove id={draft.id} from={index} first={index === 0} last={index === draft.members.length - 1} action={moveMember} />
                   {member.organizer ? null : <RemovePerson id={draft.id} address={member.address} />}
                 </div>
@@ -153,15 +156,23 @@ export function DraftDesk({ draft }: { draft: DraftView }) {
             </li>
           ))}
         </ul>
-        {draft.mine ? <AddPerson id={draft.id} /> : null}
-      </section>
+        {draft.mine ? (
+          <div className="mt-4 space-y-4">
+            <p className="text-sm font-medium text-[#141414]">Invite by</p>
+            <AddPerson id={draft.id} />
+          </div>
+        ) : null}
+      </GroupSection>
       {draft.mine ? <Applications draft={draft} /> : null}
       {draft.mine ? <ApplicationsSwitch id={draft.id} open={draft.open} /> : null}
       {!draft.mine && !draft.member && draft.open && !draft.applied ? <Apply id={draft.id} /> : null}
-      {draft.applied && !draft.member ? <p className="text-sm text-muted-foreground">You applied. The organizer adds you, then sets the order.</p> : null}
-      {draft.mine ? <StartGroup draft={draft} /> : null}
+      {draft.applied && !draft.member ? <p className="text-sm text-[#5C6572]">You applied. The organizer adds you, then sets the order.</p> : null}
     </div>
   );
+}
+
+export function DraftStart({ draft }: { draft: DraftView }) {
+  return <StartGroup draft={draft} />;
 }
 
 function AddPerson({ id }: { id: string }) {
@@ -171,8 +182,8 @@ function AddPerson({ id }: { id: string }) {
       <input type="hidden" name="id" value={id} />
       <label className="block space-y-1.5">
         <Label htmlFor="who">Add a member</Label>
-        <Input id="who" name="who" placeholder="Wallet address, email, phone, or password" autoComplete="off" spellCheck={false} className={field} aria-invalid={Boolean(state?.error)} />
-        <span className="block text-xs leading-relaxed text-muted-foreground">Paste any wallet address, or the email, phone, or password they linked in Settings.</span>
+        <Input id="who" name="who" placeholder="Phone, email, or wallet" autoComplete="off" spellCheck={false} className={field} aria-invalid={Boolean(state?.error)} />
+        <span className="block text-xs leading-relaxed text-muted-foreground">Use the phone, email, or password they saved in Settings, or paste a wallet address. This does not send an SMS.</span>
       </label>
       <ErrorNote error={state?.error} />
       <Submit pending={pending}>Add member</Submit>
@@ -197,8 +208,7 @@ function RemovePerson({ id, address }: { id: string; address: string }) {
 function Applications({ draft }: { draft: DraftView }) {
   if (draft.applications.length === 0) return null;
   return (
-    <section className="space-y-2">
-      <h2 className="text-sm font-semibold">Applications</h2>
+    <GroupSection title="Waiting to join">
       <ul className="divide-y divide-border border-y border-border">
         {draft.applications.map((item) => (
           <li key={item.address} className="flex items-center justify-between gap-3 py-3 text-sm">
@@ -210,7 +220,7 @@ function Applications({ draft }: { draft: DraftView }) {
           </li>
         ))}
       </ul>
-    </section>
+    </GroupSection>
   );
 }
 
@@ -262,9 +272,7 @@ export function ApplyLink({ id }: { id: string }) {
 function StartGroup({ draft }: { draft: DraftView }) {
   const ready = draft.members.length >= 3;
   const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (ready) setOpen(true);
-  }, [ready, draft.members.length]);
+  const [dropOpen, setDropOpen] = useState(false);
   const [state, action, pending] = useSignedAction(startDraft);
   const [dropState, drop, dropping] = useActionState(removeDraft, null);
   const plan = rotationPlan({
@@ -290,14 +298,15 @@ function StartGroup({ draft }: { draft: DraftView }) {
         </p>
       )}
       {ready ? (
-        <Button type="button" onClick={() => setOpen(true)} className="h-12 w-full rounded-full text-base">
-          Start the group
+        <Button type="button" onClick={() => setOpen(true)} className="h-12 w-full rounded-full bg-[#D6F34A] text-base font-semibold text-[#141414] hover:bg-[#D6F34A]">
+          Start group
         </Button>
       ) : (
-        <Button type="button" disabled className="h-12 w-full rounded-full text-base">
-          Start the group
+        <Button type="button" disabled className="h-12 w-full rounded-full text-base" title="Need three members, including you">
+          Start group
         </Button>
       )}
+      {!ready ? <p className="text-xs text-[#5C6572]">Start stays off until this draft has three people, including you.</p> : null}
       <Dialog.Root open={open && ready} onOpenChange={setOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-[#141414]/40 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
@@ -328,13 +337,23 @@ function StartGroup({ draft }: { draft: DraftView }) {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-      <form action={drop} className="space-y-2">
-        <input type="hidden" name="id" value={draft.id} />
-        <ErrorNote error={dropState?.error} />
-        <Button type="submit" disabled={dropping} variant="outline" className="h-12 w-full rounded-full text-base">
-          {dropping ? "Deleting…" : "Delete this draft"}
-        </Button>
-      </form>
+      {dropOpen ? (
+        <form action={drop} className="space-y-2 rounded-[1.4rem] border border-[#E6EADF] bg-white p-4">
+          <input type="hidden" name="id" value={draft.id} />
+          <p className="text-sm text-[#5C6572]">This removes the draft. It is not on-chain yet.</p>
+          <ErrorNote error={dropState?.error} />
+          <Button type="submit" disabled={dropping} variant="outline" className="h-12 w-full rounded-full text-base">
+            {dropping ? "Deleting…" : "Delete draft"}
+          </Button>
+          <Button type="button" variant="ghost" className="h-11 w-full rounded-full" onClick={() => setDropOpen(false)}>
+            Keep draft
+          </Button>
+        </form>
+      ) : (
+        <button type="button" onClick={() => setDropOpen(true)} className="w-full text-center text-sm font-medium text-[#5C6572]">
+          Delete this draft
+        </button>
+      )}
     </div>
   );
 }

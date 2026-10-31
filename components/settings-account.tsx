@@ -3,6 +3,7 @@ import { Camera, ChevronRight, CircleUserRound, Fingerprint, Wallet } from "luci
 import { CopyAddress } from "@/components/copy-address";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { SettingsSection } from "@/components/settings-ui";
+import { ChainMark } from "@/components/token-icon";
 import { AvatarTick, VerifiedName } from "@/components/verify-badge";
 import { shortAddress } from "@/lib/display";
 import { networkName } from "@/lib/protocol";
@@ -39,9 +40,9 @@ export function IdentityHero({ view, compact = false }: { view: SettingsData; co
                 {who.method === "passkey" ? <Fingerprint className="size-3" strokeWidth={2} /> : null}
                 {passkeyLabel(view)}
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-medium text-[#3A3F47]">
-                <span className="size-1.5 rounded-full bg-[#0052FF]" />
-                Base
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1" aria-label="Celo and Base">
+                <ChainMark chain="celo" className="size-4" />
+                <ChainMark chain="base" className="size-4" />
               </span>
             </div>
           </div>
@@ -80,18 +81,13 @@ export function AccountSettings({ view }: { view: SettingsData }) {
           <OverviewTile label="Wallet address" value={shortAddress(data.me.address)}>
             <CopyAddress address={data.me.address} compact />
           </OverviewTile>
-          <OverviewTile
-            label="Network"
-            value="Base"
-            hint={
-              <span className="mt-2 inline-flex items-center gap-2 text-sm text-[#5C6572]">
-                <span className="grid size-3.5 place-items-center rounded-full ring-2 ring-[#0052FF]">
-                  <span className="size-2 rounded-full bg-[#0052FF]" />
-                </span>
-                {networkName === "Base" ? "Connected" : `Savings on ${networkName}`}
-              </span>
-            }
-          />
+          <div className="rounded-2xl bg-[#F7F8F4] px-4 py-3.5">
+            <p className="text-xs font-medium text-[#5C6572]">Network</p>
+            <div className="mt-2 flex items-center gap-2" aria-label="Celo and Base">
+              <ChainMark chain="celo" className="size-7" />
+              <ChainMark chain="base" className="size-7" />
+            </div>
+          </div>
           <OverviewTile label="Balance" value={`${Number(data.eth).toFixed(4)} ${unit}`} href="/home" />
         </div>
       </SettingsSection>

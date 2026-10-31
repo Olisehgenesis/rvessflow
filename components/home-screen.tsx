@@ -16,6 +16,8 @@ import { loadHoldings, type HoldingsView } from "@/lib/holdings";
 import { loadIncoming, loadPortfolio, networkName, type IncomingItem, type Portfolio } from "@/lib/protocol";
 import { loadQuote } from "@/lib/rates";
 import { viewer } from "@/lib/session";
+import { allLabels, draftsIfReady } from "@/lib/circle";
+import { HomeGroups } from "@/components/home-groups";
 import type { Quote } from "@/lib/quote";
 import type { Address } from "viem";
 
@@ -46,7 +48,17 @@ async function HomeFigures() {
   const who = await viewer();
   const loaded = await readHome(who);
   if (!loaded.ok) return <BalanceError message={loaded.message} />;
-  return <HomeReady who={who} portfolio={loaded.portfolio} holdings={loaded.holdings} quote={loaded.quote} incoming={loaded.incoming} />;
+  return (
+    <HomeReady
+      who={who}
+      portfolio={loaded.portfolio}
+      holdings={loaded.holdings}
+      quote={loaded.quote}
+      incoming={loaded.incoming}
+      drafts={loaded.drafts}
+      labels={loaded.labels}
+    />
+  );
 }
 
 async function readHome(who: { address: Address; name: string; index: number }) {
@@ -54,9 +66,15 @@ async function readHome(who: { address: Address; name: string; index: number }) 
     const portfolioPromise = loadPortfolio(who, "home");
     const quotePromise = loadQuote();
     const incomingPromise = loadIncoming(who.address);
-    const [portfolio, quote, incoming] = await Promise.all([portfolioPromise, quotePromise, incomingPromise]);
+    const [portfolio, quote, incoming, directory, labels] = await Promise.all([
+      portfolioPromise,
+      quotePromise,
+      incomingPromise,
+      draftsIfReady(who.address),
+      allLabels().catch(() => []),
+    ]);
     const holdings = await loadHoldings(who.address, portfolio, quote);
-    return { ok: true as const, portfolio, quote, holdings, incoming };
+    return { ok: true as const, portfolio, quote, holdings, incoming, drafts: directory.drafts, labels };
   } catch (error) {
     const message = error instanceof Error ? error.message : `${networkName} did not return a balance.`;
     return { ok: false as const, message };
@@ -69,12 +87,16 @@ async function HomeReady({
   holdings,
   quote,
   incoming,
+  drafts,
+  labels,
 }: {
   who: { address: Address; name: string; index: number };
   portfolio: Portfolio;
   holdings: HoldingsView;
   quote: Quote;
   incoming: IncomingItem[];
+  drafts: import("@/lib/circle").DraftCard[];
+  labels: { ref: string; name: string }[];
 }) {
   const me = who.address.toLowerCase();
   const prices = flowPricesFrom(holdings);
@@ -175,6 +197,7 @@ async function HomeReady({
                 </li>
               ))}
             </ul>
+            <HomeGroups groups={portfolio.groups} drafts={drafts} names={labels} />
             {openFlows.length > 0 ? (
               <section>
                 <div className="mb-2 flex items-end justify-between">
@@ -245,10 +268,10 @@ async function HomeReady({
                 </ul>
               </section>
             ) : null}
-            {portfolio.groups.length > 0 ? (
-              <Link href="/groups" className="flex min-h-14 items-center justify-between rounded-3xl border border-[#E6EADF] bg-white px-4 py-3 text-sm shadow-[0_1px_0_rgba(20,20,20,0.04)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]">
-                <span className="font-semibold">{portfolio.groups.length === 1 ? "1 group" : `${portfolio.groups.length} groups`}</span>
-                <span className="text-[#5C6572]">Open</span>
+            {portfolio.groups.length === 0 && drafts.length === 0 ? (
+              <Link href="/groups/new" className="flex min-h-14 items-center justify-between rounded-3xl border border-[#E6EADF] bg-white px-4 py-3 text-sm shadow-[0_1px_0_rgba(20,20,20,0.04)]">
+                <span className="font-semibold">Create a group</span>
+                <span className="text-[#5C6572]">Save together</span>
               </Link>
             ) : null}
           </div>
@@ -281,6 +304,9 @@ async function HomeReady({
         </section>
       ) : null}
       {starting && incoming.length === 0 ? <GettingStarted /> : null}
+      <div className="mt-6">
+        <HomeGroups groups={portfolio.groups} drafts={drafts} names={labels} />
+      </div>
       {openFlows.length > 0 ? (
         <section className="mt-6">
           <div className="mb-2 flex items-end justify-between">

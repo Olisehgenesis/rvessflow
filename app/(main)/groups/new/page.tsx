@@ -1,13 +1,15 @@
 import { CreateGroup } from "@/components/create-group";
 import { Page } from "@/components/ui-bits";
 import { groupPlainOn } from "@/lib/group-site";
+import { viewer } from "@/lib/session";
 
 export default async function NewGroupPage() {
+  const who = await viewer();
   const [celo, base] = await Promise.all([groupPlainOn("celo"), groupPlainOn("base")]);
   return (
     <Page title="Create group" back="/groups">
-      <p className="mb-4 text-sm leading-relaxed text-muted-foreground">Set the terms, add the people, then start. You will see how much each person posts and when they get paid.</p>
-      <CreateGroup live={{ celo: celo.live, base: base.live }} />
+      <p className="mb-4 text-sm leading-relaxed text-[#5C6572]">Set the terms, save a draft, then add people. You need three members, including you, to start on-chain.</p>
+      <CreateGroup live={{ celo: celo.live, base: base.live }} organizer={who.name} />
     </Page>
   );
 }

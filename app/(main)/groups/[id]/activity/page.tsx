@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import Loading from "../../../loading";
-import { GroupLead } from "@/components/group-bits";
+import { GroupLead, GroupNav } from "@/components/group-bits";
 import { Page } from "@/components/ui-bits";
 import { labeledGroup } from "@/lib/group-token";
+import { liveGroupTabs } from "@/lib/group-ui";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
@@ -23,6 +24,7 @@ async function ActivityBody({ params }: { params: Promise<{ id: string }> }) {
   if (!group) notFound();
   return (
     <Page title="Activity" back={`/groups/${group.id}`}>
+      <GroupNav current={`/groups/${group.id}/activity`} links={liveGroupTabs(group.id)} />
       <GroupLead src="/marks/activity.png" title="What the contract shows" body="Posted contributions, payments, and misses. No times are invented." />
       <ul className="divide-y divide-border border-y border-border text-sm">
         <li className="py-3">

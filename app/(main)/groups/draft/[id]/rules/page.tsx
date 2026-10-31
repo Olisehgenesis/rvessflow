@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import Loading from "../../../../loading";
-import { GroupLead } from "@/components/group-bits";
+import { GroupLead, GroupNav } from "@/components/group-bits";
 import { Page } from "@/components/ui-bits";
 import { readDraft } from "@/lib/circle";
+import { draftGroupTabs } from "@/lib/group-ui";
 
 export default function DraftRulesPage({ params }: { params: Promise<{ id: string }> }) {
   return (
@@ -19,6 +20,7 @@ async function RulesBody({ params }: { params: Promise<{ id: string }> }) {
   if (!draft) notFound();
   return (
     <Page title="Group rules" back={`/groups/draft/${draft.id}`}>
+      <GroupNav current={`/groups/draft/${draft.id}/rules`} links={draftGroupTabs(draft.id)} />
       <GroupLead src="/marks/rules.png" title="How this rotation pays" body="The organizer can still change these terms before the group starts." />
       <ul className="divide-y divide-border border-y border-border text-sm leading-relaxed">
         <li className="py-3">Each cycle, every member pays {draft.contribution} {draft.token === "gdx" ? "G$" : "USD"}. A cycle lasts {draft.cycleLabel}.</li>

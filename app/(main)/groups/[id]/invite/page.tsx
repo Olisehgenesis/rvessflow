@@ -54,7 +54,7 @@ async function InviteBody({ params }: { params: Promise<{ id: string }> }) {
           <ShareLink url={link} />
         </div>
       </section>
-      <Link href={`/groups/${group.id}`} className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
+      <Link href={`/groups/${group.id}`} className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-[#D6F34A] text-sm font-semibold text-[#141414]">
         Done
       </Link>
     </Page>

@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import Loading from "../../../loading";
-import { GroupLead } from "@/components/group-bits";
+import { GroupLead, GroupNav } from "@/components/group-bits";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
 import { weiTimes } from "@/lib/group-plan";
 import { labeledGroup } from "@/lib/group-token";
+import { liveGroupTabs } from "@/lib/group-ui";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
@@ -25,6 +26,7 @@ async function RulesBody({ params }: { params: Promise<{ id: string }> }) {
   if (!group) notFound();
   return (
     <Page title="Group rules" back={`/groups/${group.id}`}>
+      <GroupNav current={`/groups/${group.id}/rules`} links={liveGroupTabs(group.id)} />
       <GroupLead src="/marks/rules.png" title="How this rotation pays" body="These terms are fixed once the group is on-chain." />
       <ul className="divide-y divide-border border-y border-border text-sm leading-relaxed">
         <li className="py-3">Each cycle, every member pays {labeledGroup(group.contribution, group.token)}. A cycle lasts {spanLabel(group.cycleSeconds)}.</li>
