@@ -56,6 +56,14 @@ export function WithdrawSheet({ savings, unit, conceal = false }: { savings: Sav
     <SlideSheet label="Withdraw" className={withdrawButton} title="Withdraw" description="Send a token on Base or Celo, or open a saving.">
       {(close) =>
         <div className="space-y-3">
+          <Link href="/home/add/mobile?side=sell" onClick={close} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3">
+            <img src="/marks/phone.png" alt="" className="size-11 shrink-0 object-contain" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">Cash out to mobile money</span>
+              <span className="block text-xs text-muted-foreground">Fonbnk. USDT or G$ on Celo to a phone or bank.</span>
+            </span>
+            <IconChevron className="size-4 shrink-0 text-muted-foreground" />
+          </Link>
           <Link href="/home/send/address" onClick={close} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-3">
             <img src="/marks/receive.png" alt="" className="size-11 shrink-0 object-contain" />
             <span className="min-w-0 flex-1">
@@ -105,7 +113,7 @@ export function WithdrawSheet({ savings, unit, conceal = false }: { savings: Sav
 export function topUpMethods(_network: string) {
   return [
     { href: "/home/add/receive", title: "Receive", body: "Same address on Base and Celo.", src: "/marks/receive.png" },
-    { href: "/home/add/mobile", title: "Mobile money", body: "MTN MoMo or Airtel Money in Uganda. USDC arrives on Base.", src: "/marks/phone.png" },
+    { href: "/home/add/mobile", title: "Mobile money", body: "Fonbnk. USDT on Celo, or G$ after a swap. Cash out the same way.", src: "/marks/phone.png" },
     { href: "/home/add/card", title: "Card", body: "Transak or Coinbase. USDC arrives on Base.", src: "/marks/card.png" },
   ];
 }

@@ -4,7 +4,18 @@ import { PostHog } from "posthog-node";
 
 let client: PostHog | null | undefined;
 
+function prerenderBlocked() {
+  try {
+    void Date.now();
+    void Math.random();
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 function getPostHogClient() {
+  if (prerenderBlocked()) return null;
   if (client !== undefined) return client;
 
   const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
@@ -22,7 +33,7 @@ function getPostHogClient() {
 
   client = new PostHog(projectToken, {
     host,
-    enableExceptionAutocapture: true,
+    enableExceptionAutocapture: false,
     flushAt: 1,
     flushInterval: 0,
   });
@@ -30,6 +41,7 @@ function getPostHogClient() {
 }
 
 export async function captureServerEvent(distinctId: string, event: string, properties?: Record<string, string | number | boolean>) {
+  if (prerenderBlocked()) return;
   const posthog = getPostHogClient();
   if (!posthog) return;
 
@@ -42,6 +54,7 @@ export async function captureServerEvent(distinctId: string, event: string, prop
 }
 
 export async function captureServerException(error: unknown, properties?: Record<string, string>) {
+  if (prerenderBlocked()) return;
   const posthog = getPostHogClient();
   if (!posthog) return;
 

@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorNote } from "@/components/ui-bits";
 import { ChainTiles, CycleCount, DurationChips, PayoutTiles, TokenChips, field } from "@/components/group-terms";
+import { GroupMoney, TokenIcon } from "@/components/token-icon";
 import { GroupSection, GroupStepper, MemberCard, groupMark } from "@/components/groups-ui";
 import { createDraft, type ActionState } from "@/lib/actions";
 import { cyclePlan, spanLabel, type CycleChoice } from "@/lib/cycle";
-import { draftAmount, type GroupTokenKind } from "@/lib/group-token";
+import { type GroupTokenKind } from "@/lib/group-token";
 import { MIN_GROUP_MEMBERS } from "@/lib/group-ui";
 import { groupNetLabel, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
 
@@ -41,7 +42,6 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
     }
   }
   const plan = cyclePlan(choice, Number(days));
-  const unit = draftAmount(contribution || "0", token);
   const total = Number(contribution) > 0 ? (Number(contribution) * Number(cycles || 0)).toLocaleString("en-US", { maximumFractionDigits: 2 }) : "";
   const detailsReady = Boolean(name.trim() && Number(contribution) > 0);
   const scheduleReady = Boolean(plan && Number(cycles));
@@ -144,10 +144,10 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
               </div>
               {plan && Number(contribution) > 0 ? (
                 <dl className="mt-5 divide-y divide-[#E6EADF] rounded-2xl bg-[#F7F8F4] text-sm">
-                  <Row label="Each member pays" value={unit} />
+                  <Row label="Each member pays" value={<GroupMoney amount={contribution} token={token} network={network} />} />
                   <Row label="How often" value={spanLabel(plan.cycle)} />
                   <Row label="Turns" value={cycles} />
-                  <Row label="You post for all turns" value={total ? `${total} ${token === "gdx" ? "G$" : "USD"}` : "—"} />
+                  <Row label="You post for all turns" value={total ? <GroupMoney amount={total} token={token} network={network} /> : "—"} />
                 </dl>
               ) : null}
             </GroupSection>
@@ -203,11 +203,19 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
               <p className="text-lg font-semibold text-[#141414]">{name || "Untitled group"}</p>
               {description ? <p className="mt-1 text-sm leading-relaxed text-[#5C6572]">{description}</p> : null}
               <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-                <Row label="Contribution" value={unit} />
-                <Row label="Currency" value={token === "gdx" ? "G$ on Celo" : `USD on ${groupNetLabel(network)}`} />
+                <Row label="Contribution" value={<GroupMoney amount={contribution} token={token} network={network} />} />
+                <Row
+                  label="Currency"
+                  value={
+                    <span className="inline-flex items-center gap-1.5">
+                      <TokenIcon symbol={token === "gdx" ? "G$" : network === "celo" ? "cUSDx" : "USDCx"} className="size-4" withChain={false} />
+                      {token === "gdx" ? "G$ on Celo" : `USD on ${groupNetLabel(network)}`}
+                    </span>
+                  }
+                />
                 <Row label="Frequency" value={plan ? spanLabel(plan.cycle) : "Choose a cycle length"} />
                 <Row label="Turns" value={cycles} />
-                <Row label="You pay, all turns" value={total ? `${total} ${token === "gdx" ? "G$" : "USD"}` : "—"} />
+                <Row label="You pay, all turns" value={total ? <GroupMoney amount={total} token={token} network={network} /> : "—"} />
                 <Row label="Payout" value={payout === "plain" ? "Paid each turn" : "Streaming pot"} />
                 <Row label="Blockchain" value={groupNetLabel(network)} />
                 <Row label="Members" value={`You now. Add ${MIN_GROUP_MEMBERS - 1} more after saving.`} />
@@ -245,7 +253,7 @@ function StickyNext({ children }: { children: React.ReactNode }) {
   return <div className="sticky bottom-20 z-10 space-y-2 bg-gradient-to-t from-[#f7f6f3] via-[#f7f6f3] to-transparent pb-2 pt-3 lg:static lg:bg-none lg:p-0">{children}</div>;
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="px-4 py-3 sm:px-0 sm:py-0">
       <dt className="text-xs text-[#5C6572]">{label}</dt>

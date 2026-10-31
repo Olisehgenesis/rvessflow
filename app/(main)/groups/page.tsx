@@ -3,10 +3,10 @@ import Link from "next/link";
 import Loading from "../loading";
 import { EmptyGroups } from "@/components/group-bits";
 import { GroupCard, groupMark } from "@/components/groups-ui";
+import { GroupMoney } from "@/components/token-icon";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
 import { allLabels, draftsIfReady } from "@/lib/circle";
-import { labeledGroup } from "@/lib/group-token";
 import { MIN_GROUP_MEMBERS } from "@/lib/group-ui";
 import { loadPortfolio, networkName } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
@@ -74,7 +74,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
                         href={`/groups/${group.id}`}
                         name={nameFor(group.id, `Group ${group.id}`)}
                         status="Active"
-                        contribution={labeledGroup(group.contribution, group.token)}
+                        contribution={<GroupMoney wei={group.contribution} token={group.token} />}
                         members={`${group.members.length} members`}
                         progress={Math.min(current + 1, group.cycles)}
                         progressMax={group.cycles}
@@ -96,7 +96,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
                       href={`/groups/draft/${draft.id}`}
                       name={draft.name}
                       status="Draft"
-                      contribution={`${draft.contribution} ${draft.token === "gdx" ? "G$" : "USD"}`}
+                      contribution={<GroupMoney amount={draft.contribution} token={draft.token} network={draft.network} />}
                       members={`${draft.count} of ${MIN_GROUP_MEMBERS} members`}
                       progress={draft.count}
                       progressMax={MIN_GROUP_MEMBERS}
@@ -113,7 +113,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
                         href={`/groups/${group.id}`}
                         name={nameFor(group.id, `Group ${group.id}`)}
                         status="Not started"
-                        contribution={labeledGroup(group.contribution, group.token)}
+                        contribution={<GroupMoney wei={group.contribution} token={group.token} />}
                         members={`${group.members.length} members`}
                         progress={posted}
                         progressMax={group.members.length}
@@ -135,7 +135,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
                       href={`/groups/draft/${draft.id}`}
                       name={draft.name}
                       status="Pending"
-                      contribution={`${draft.contribution} ${draft.token === "gdx" ? "G$" : "USD"}`}
+                      contribution={<GroupMoney amount={draft.contribution} token={draft.token} network={draft.network} />}
                       members={`${draft.count} members`}
                       next="You applied. Waiting for the organizer."
                     />
@@ -154,7 +154,7 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
                       href={`/groups/${group.id}`}
                       name={nameFor(group.id, `Group ${group.id}`)}
                       status={group.finalized ? "Finished" : "Cancelled"}
-                      contribution={labeledGroup(group.contribution, group.token)}
+                      contribution={<GroupMoney wei={group.contribution} token={group.token} />}
                       members={`${group.members.length} members`}
                       mark={group.finalized ? groupMark.success : groupMark.people}
                     />

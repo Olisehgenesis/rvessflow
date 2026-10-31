@@ -74,7 +74,7 @@ export function GroupProgress({ value, max }: { value: number; max: number }) {
   );
 }
 
-export function GroupStatGrid({ items }: { items: { label: string; value: string }[] }) {
+export function GroupStatGrid({ items }: { items: { label: string; value: ReactNode }[] }) {
   return (
     <dl className={`grid gap-2 ${items.length > 2 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2"}`}>
       {items.map((item) => (
@@ -162,7 +162,7 @@ export function GroupCard({
   name: string;
   status: string;
   members: string;
-  contribution: string;
+  contribution: ReactNode;
   progress?: number;
   progressMax?: number;
   next?: string;

@@ -69,9 +69,8 @@ export function TourOverlay({ startStep }: { startStep: number }) {
   if (gone || !step || steps.length === 0) return null;
   const last = index >= steps.length - 1;
   const first = index <= 0;
-  const cardTop = hole ? Math.min(window.innerHeight - 220, hole.top + hole.height + 12) : window.innerHeight / 2 - 90;
-  const above = hole ? hole.top + hole.height > window.innerHeight - 240 : false;
-  const placedTop = hole && above ? Math.max(16, hole.top - 188) : Math.max(16, cardTop);
+  const above = hole ? hole.top + hole.height > 420 : false;
+  const placedTop = hole ? (above ? Math.max(16, hole.top - 188) : hole.top + hole.height + 12) : 96;
 
   async function persist(next: number) {
     try {

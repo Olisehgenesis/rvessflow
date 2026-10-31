@@ -5,6 +5,10 @@ import {
   coinbaseOnrampUrl,
   coinbaseStatus,
   coinbaseTokenBody,
+  fonbnkPayOrigin,
+  fonbnkSource,
+  fonbnkStatus,
+  fonbnkWidgetUrl,
   kotaniBaseUrl,
   kotaniOnrampBody,
   kotaniStatus,
@@ -13,6 +17,7 @@ import {
   transakSessionEndpoint,
   transakStatus,
   transakWidgetParams,
+  type FonbnkSide,
   type MobileMoneyStart,
 } from "@/lib/onramp";
 
@@ -28,6 +33,32 @@ function clientIp(request: Request): string | undefined {
   const real = request.headers.get("x-real-ip")?.trim() ?? "";
   if (/^(\d{1,3}\.){3}\d{1,3}$/.test(real) || /^[0-9a-fA-F:]+$/.test(real)) return real;
   return undefined;
+}
+
+function publicOrigin(request: Request): string {
+  const host = request.headers.get("host") || "localhost:3000";
+  const proto = request.headers.get("x-forwarded-proto") || (host.includes("localhost") || host.startsWith("127.") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+export async function startFonbnkWidget(
+  request: Request,
+  input: { side: FonbnkSide; address: string; amount?: string; countryIsoCode?: string },
+): Promise<string> {
+  const status = fonbnkStatus(process.env);
+  if (!status.configured) throw new OnrampConfigError(status.missing);
+  const origin = publicOrigin(request);
+  return fonbnkWidgetUrl({
+    origin: fonbnkPayOrigin(process.env),
+    source: fonbnkSource(process.env),
+    secret: process.env.FONBNK_URL_SECRET?.trim() || undefined,
+    side: input.side,
+    address: input.address,
+    amount: input.amount,
+    countryIsoCode: input.countryIsoCode,
+    orderParams: `rvess-${crypto.randomUUID()}`,
+    callbackUrl: `${origin}/home`,
+  });
 }
 
 export async function startKotaniOnramp(input: MobileMoneyStart): Promise<{ referenceId: string; message: string }> {

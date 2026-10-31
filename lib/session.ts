@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { isAddress, type Address } from "viem";
 import { people } from "@/lib/protocol";
 import { currencyForCountry } from "@/lib/place";
@@ -60,6 +61,10 @@ export async function viewer(): Promise<Viewer> {
   const count = people().length;
   const value = Number(jar.get(WHO)?.value ?? "0");
   const index = Number.isInteger(value) && value >= 0 && value < count ? value : 0;
+  if (count === 0) {
+    // Production has no tester keys. A leftover tester cookie must not crash every signed-in page.
+    redirect("/session-gone");
+  }
   return testerAt(index);
 }
 

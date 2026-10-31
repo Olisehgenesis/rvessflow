@@ -3,6 +3,7 @@ import Link from "next/link";
 import Loading from "../../loading";
 import { ApplyLink } from "@/components/circle";
 import { Page } from "@/components/ui-bits";
+import { GroupMoney } from "@/components/token-icon";
 import { draftsIfReady } from "@/lib/circle";
 import { viewer } from "@/lib/session";
 
@@ -44,8 +45,9 @@ async function ExploreBody() {
             <li key={draft.id} className="py-3 text-sm">
               <p className="font-medium">{draft.name}</p>
               {draft.description ? <p className="mt-1 text-muted-foreground">{draft.description}</p> : null}
-              <p className="mt-1 text-xs text-muted-foreground">
-                {draft.contribution} {draft.token === "gdx" ? "G$" : "USD"} · {draft.cycles} cycles of {draft.cycleLabel} · {draft.count} {draft.count === 1 ? "member" : "members"}
+              <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <GroupMoney amount={draft.contribution} token={draft.token} network={draft.network} />
+                <span>· {draft.cycles} cycles of {draft.cycleLabel} · {draft.count} {draft.count === 1 ? "member" : "members"}</span>
               </p>
               <div className="mt-2">
                 <ApplyLink id={draft.id} />

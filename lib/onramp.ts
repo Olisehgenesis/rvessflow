@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 export type MobileNetwork = "MTN" | "AIRTEL";
 
 type Env = Record<string, string | undefined>;
@@ -149,4 +151,90 @@ export function referrerDomain(env: Env, requestHost: string): string {
   const configured = env.TRANSAK_REFERRER_DOMAIN?.trim();
   if (configured) return configured.replace(/^https?:\/\//, "").replace(/\/$/, "");
   return requestHost.replace(/:\d+$/, "");
+}
+
+/** Merchant source from the Fonbnk dashboard. Orders match this account. */
+export const FONBNK_SOURCE_DEFAULT = "6a1063bce738a4967b21f557";
+
+export type FonbnkSide = "buy" | "sell";
+
+export const fonbnkCountries = [
+  { id: "UG", label: "Uganda" },
+  { id: "KE", label: "Kenya" },
+  { id: "NG", label: "Nigeria" },
+  { id: "GH", label: "Ghana" },
+  { id: "TZ", label: "Tanzania" },
+  { id: "ZA", label: "South Africa" },
+] as const;
+
+export function fonbnkSource(env: Env): string {
+  return env.FONBNK_SOURCE?.trim() || FONBNK_SOURCE_DEFAULT;
+}
+
+export function fonbnkStatus(env: Env): ProviderStatus {
+  const source = fonbnkSource(env);
+  return { id: "fonbnk", label: "Fonbnk", configured: source.length > 0, missing: source ? [] : ["FONBNK_SOURCE"] };
+}
+
+export function fonbnkPayOrigin(env: Env): string {
+  return env.FONBNK_ENV === "sandbox" ? "https://sandbox-pay.fonbnk.com" : "https://pay.fonbnk.com";
+}
+
+export function fonbnkCountry(value: string): string | undefined {
+  const code = value.trim().toUpperCase();
+  if (!code) return undefined;
+  if (!/^[A-Z]{2}$/.test(code)) throw new Error("Pick a country.");
+  return code;
+}
+
+export function fonbnkLocalAmount(value: string): string | undefined {
+  const clean = value.replace(/,/g, "").trim();
+  if (!clean) return undefined;
+  if (!/^\d+$/.test(clean) || clean === "0") throw new Error("Enter a whole amount in local currency, or leave it blank.");
+  return clean;
+}
+
+export function fonbnkHs256(secret: string, payload: Record<string, string | number>, now = Math.floor(Date.now() / 1000)): string {
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify({ ...payload, iat: now, exp: now + 3600 })).toString("base64url");
+  const sig = createHmac("sha256", secret).update(`${header}.${body}`).digest("base64url");
+  return `${header}.${body}.${sig}`;
+}
+
+export function fonbnkWidgetUrl(input: {
+  origin: string;
+  source: string;
+  secret?: string;
+  side: FonbnkSide;
+  address: string;
+  amount?: string;
+  countryIsoCode?: string;
+  orderParams: string;
+  callbackUrl?: string;
+  now?: number;
+}): string {
+  const url = new URL(input.side === "sell" ? `${input.origin}/offramp` : input.origin);
+  url.searchParams.set("source", input.source);
+  url.searchParams.set("network", "CELO");
+  url.searchParams.set("asset", "USDT");
+  url.searchParams.set("paymentChannel", "mobile_money");
+  url.searchParams.set("hideSwitch", "true");
+  url.searchParams.set("orderParams", input.orderParams);
+  if (input.side === "buy") {
+    url.searchParams.set("address", input.address);
+    if (input.secret) url.searchParams.set("freezeWallet", "true");
+  }
+  if (input.amount) {
+    url.searchParams.set("amount", input.amount);
+    url.searchParams.set("currency", "local");
+  }
+  if (input.countryIsoCode) url.searchParams.set("countryIsoCode", input.countryIsoCode);
+  if (input.callbackUrl) {
+    url.searchParams.set("callbackUrl", input.callbackUrl);
+    url.searchParams.set("callbackBtnText", "Back to Rvess");
+  }
+  if (input.secret) {
+    url.searchParams.set("signature", fonbnkHs256(input.secret, { jti: input.orderParams }, input.now));
+  }
+  return url.toString();
 }

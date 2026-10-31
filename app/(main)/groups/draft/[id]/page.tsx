@@ -5,6 +5,7 @@ import Loading from "../../../loading";
 import { DraftStart } from "@/components/circle";
 import { GroupNav } from "@/components/group-bits";
 import { GroupHero, GroupNeed, GroupStatGrid, groupMark } from "@/components/groups-ui";
+import { GroupMoney } from "@/components/token-icon";
 import { Page } from "@/components/ui-bits";
 import { readDraft } from "@/lib/circle";
 import { MIN_GROUP_MEMBERS, draftGroupTabs } from "@/lib/group-ui";
@@ -49,7 +50,7 @@ async function DraftBody({ params }: { params: Promise<{ id: string }> }) {
       />
       <GroupStatGrid
         items={[
-          { label: "Each turn", value: `${draft.contribution} ${draft.token === "gdx" ? "G$" : "USD"}` },
+          { label: "Each turn", value: <GroupMoney amount={draft.contribution} token={draft.token} network={draft.network} /> },
           { label: "Members", value: `${draft.members.length} of ${MIN_GROUP_MEMBERS}` },
           { label: "How often", value: draft.cycleLabel },
           { label: "Chain", value: draft.networkLabel },

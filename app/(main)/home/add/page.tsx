@@ -9,7 +9,7 @@ export default function AddMoneyPage() {
     <Suspense fallback={<Loading />}>
       <main className="px-4 pb-8">
         <FlowHeader title="Top up" back="/home" />
-        <p className="mb-4 text-sm text-muted-foreground">The address is the same on Base and on Celo. Card and mobile money still deliver USDC on Base.</p>
+        <p className="mb-4 text-sm text-muted-foreground">The address is the same on Base and on Celo. Mobile money delivers USDT on Celo. Cards still deliver USDC on Base.</p>
         <TopUpList network={networkName} />
       </main>
     </Suspense>

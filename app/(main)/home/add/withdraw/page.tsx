@@ -29,6 +29,9 @@ async function WithdrawBody() {
     <main className="px-4 pb-8">
       <FlowHeader title="Withdraw" back="/home" />
       <section>
+        <Link href="/home/add/mobile?side=sell" className="mb-6 flex h-12 items-center justify-center rounded-full border border-border bg-card text-sm font-semibold">
+          Cash out with Fonbnk
+        </Link>
         <h2 className="text-sm font-semibold">To another address</h2>
         <p className="mt-1 mb-4 text-sm leading-relaxed text-muted-foreground">
           ETH or USDC on this network. Every other token, including Celo, is on{" "}

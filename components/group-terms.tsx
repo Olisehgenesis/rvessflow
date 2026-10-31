@@ -2,7 +2,7 @@
 
 import { CYCLE_PRESETS, MAX_GROUP_CYCLES, type CycleChoice } from "@/lib/cycle";
 import type { GroupTokenKind } from "@/lib/group-token";
-import { ChainMark } from "@/components/token-icon";
+import { ChainMark, TokenIcon } from "@/components/token-icon";
 import { groupMark } from "@/components/groups-ui";
 import { groupChainFacts, type GroupNet } from "@/lib/group-network";
 
@@ -13,7 +13,7 @@ export function Chip({ on, children, onClick }: { on: boolean; children: React.R
     <button
       type="button"
       onClick={onClick}
-      className={`h-10 rounded-full px-3.5 text-sm font-medium ${on ? "bg-[#E7F4C4] text-[#141414]" : "border border-[#E6EADF] bg-white text-[#3A3F47]"}`}
+      className={`inline-flex h-10 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium ${on ? "bg-[#E7F4C4] text-[#141414]" : "border border-[#E6EADF] bg-white text-[#3A3F47]"}`}
     >
       {children}
     </button>
@@ -82,10 +82,12 @@ export function TokenChips({
   return (
     <div className="flex flex-wrap gap-2">
       <Chip on={token === "usd"} onClick={() => onToken("usd")}>
+        <TokenIcon symbol={network === "celo" ? "cUSDx" : "USDCx"} className="size-5" withChain={false} />
         USD
       </Chip>
       {network === "celo" ? (
         <Chip on={token === "gdx"} onClick={() => onToken("gdx")}>
+          <TokenIcon symbol="G$" className="size-5" withChain={false} />
           G$
         </Chip>
       ) : null}

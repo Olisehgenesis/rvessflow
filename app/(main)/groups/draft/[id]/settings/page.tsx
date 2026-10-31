@@ -5,6 +5,7 @@ import Loading from "../../../../loading";
 import { GroupLead, GroupNav } from "@/components/group-bits";
 import { Page } from "@/components/ui-bits";
 import { readDraft } from "@/lib/circle";
+import { GroupMoney } from "@/components/token-icon";
 import { draftGroupTabs } from "@/lib/group-ui";
 
 export default function DraftSettingsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -27,7 +28,7 @@ async function SettingsBody({ params }: { params: Promise<{ id: string }> }) {
       <dl className="divide-y divide-border border-y border-border text-sm">
         <Fact label="Group name" value={draft.name} />
         <Fact label="Description" value={draft.description || "None"} />
-        <Fact label="Contribution" value={`${draft.contribution} ${draft.token === "gdx" ? "G$" : "USD"}`} />
+        <Fact label="Contribution" value={<GroupMoney amount={draft.contribution} token={draft.token} network={draft.network} />} />
         <Fact label="Cycle" value={draft.cycleLabel} />
         <Fact label="Total cycles" value={String(draft.cycles)} />
         <Fact label="Each turn" value={draft.plain ? "Paid as a transfer" : "Streams"} />
@@ -43,7 +44,7 @@ async function SettingsBody({ params }: { params: Promise<{ id: string }> }) {
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-3">
       <dt className="text-muted-foreground">{label}</dt>

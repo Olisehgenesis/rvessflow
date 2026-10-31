@@ -9,6 +9,7 @@ import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
 import { liveRotationPlan, weiTimes } from "@/lib/group-plan";
 import { groupNetLabel, parseGroupKey } from "@/lib/group-network";
+import { GroupMoney } from "@/components/token-icon";
 import { labeledGroup } from "@/lib/group-token";
 import { liveGroupTabs } from "@/lib/group-ui";
 import { groupLabel } from "@/lib/circle";
@@ -96,7 +97,7 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
           </GroupSection>
           <GroupStatGrid
             items={[
-              { label: "Total contribution", value: labeledGroup(weiTimes(group.contribution, group.members.length), group.token) },
+              { label: "Total contribution", value: <GroupMoney wei={weiTimes(group.contribution, group.members.length)} token={group.token} /> },
               { label: "Members", value: String(group.members.length) },
               { label: "Frequency", value: spanLabel(group.cycleSeconds) },
               { label: "Blockchain", value: chain },
@@ -120,7 +121,7 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
         <div className="space-y-4">
           <GroupSection title="Group rules" action={<Link href={`${base}/rules`} className="text-sm font-medium text-[#141414]">All</Link>}>
             <ul className="space-y-2 text-sm text-[#3A3F47]">
-              <li>Contribution {labeledGroup(group.contribution, group.token)} per turn</li>
+              <li className="flex flex-wrap items-center gap-1.5">Contribution <GroupMoney wei={group.contribution} token={group.token} /> per turn</li>
               <li>{spanLabel(group.cycleSeconds)} each cycle</li>
               <li>{group.cycles} turns</li>
               <li>Turn 1 is first in the payout order</li>

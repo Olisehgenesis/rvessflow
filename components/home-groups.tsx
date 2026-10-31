@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { GroupCard, groupMark } from "@/components/groups-ui";
+import { GroupMoney } from "@/components/token-icon";
 import { spanLabel } from "@/lib/cycle";
-import { labeledGroup } from "@/lib/group-token";
 import { MIN_GROUP_MEMBERS } from "@/lib/group-ui";
 import type { DraftCard } from "@/lib/circle";
 import type { Portfolio } from "@/lib/protocol";
@@ -28,7 +28,7 @@ export function HomeGroups({
             href={`/groups/${group.id}`}
             name={nameFor(group.id, `Group ${group.id}`)}
             status="Active"
-            contribution={labeledGroup(group.contribution, group.token)}
+            contribution={<GroupMoney wei={group.contribution} token={group.token} />}
             members={`${group.members.length} members`}
             progress={Math.min(current + 1, group.cycles)}
             progressMax={group.cycles}
@@ -43,7 +43,7 @@ export function HomeGroups({
           href={`/groups/draft/${draft.id}`}
           name={draft.name}
           status="Draft"
-          contribution={`${draft.contribution} ${draft.token === "gdx" ? "G$" : "USD"}`}
+          contribution={<GroupMoney amount={draft.contribution} token={draft.token} network={draft.network} />}
           members={`${draft.count} of ${MIN_GROUP_MEMBERS} members`}
           progress={draft.count}
           progressMax={MIN_GROUP_MEMBERS}

@@ -6,6 +6,11 @@ import {
   coinbaseOnrampUrl,
   coinbaseStatus,
   coinbaseTokenBody,
+  FONBNK_SOURCE_DEFAULT,
+  fonbnkHs256,
+  fonbnkPayOrigin,
+  fonbnkStatus,
+  fonbnkWidgetUrl,
   kotaniOnrampBody,
   kotaniStatus,
   readUgx,
@@ -34,6 +39,47 @@ describe("funding providers", () => {
     assert.equal(body.fiatAmount, 50000);
     assert.equal(ugandaPhone("+256772123456"), "+256772123456");
     assert.throws(() => readUgx("0"), /UGX/);
+  });
+
+  it("opens Fonbnk buy and sell widgets against Celo USDT", () => {
+    assert.equal(fonbnkStatus({}).configured, true);
+    assert.equal(fonbnkPayOrigin({}), "https://pay.fonbnk.com");
+    assert.equal(fonbnkPayOrigin({ FONBNK_ENV: "sandbox" }), "https://sandbox-pay.fonbnk.com");
+    const buy = new URL(
+      fonbnkWidgetUrl({
+        origin: "https://pay.fonbnk.com",
+        source: FONBNK_SOURCE_DEFAULT,
+        secret: "widget-secret",
+        side: "buy",
+        address: "0x4CC5313fCf12032aF023F099dC4af059Be466d7c",
+        amount: "50000",
+        countryIsoCode: "UG",
+        orderParams: "rvess-test",
+        callbackUrl: "https://www.rvess.xyz/home",
+        now: 1_700_000_000,
+      }),
+    );
+    assert.equal(buy.origin + buy.pathname, "https://pay.fonbnk.com/");
+    assert.equal(buy.searchParams.get("source"), FONBNK_SOURCE_DEFAULT);
+    assert.equal(buy.searchParams.get("network"), "CELO");
+    assert.equal(buy.searchParams.get("asset"), "USDT");
+    assert.equal(buy.searchParams.get("paymentChannel"), "mobile_money");
+    assert.equal(buy.searchParams.get("currency"), "local");
+    assert.equal(buy.searchParams.get("freezeWallet"), "true");
+    assert.equal(buy.searchParams.get("address"), "0x4CC5313fCf12032aF023F099dC4af059Be466d7c");
+    const token = buy.searchParams.get("signature") || "";
+    assert.equal(token, fonbnkHs256("widget-secret", { jti: "rvess-test" }, 1_700_000_000));
+    const sell = new URL(
+      fonbnkWidgetUrl({
+        origin: "https://pay.fonbnk.com",
+        source: FONBNK_SOURCE_DEFAULT,
+        side: "sell",
+        address: "0x4CC5313fCf12032aF023F099dC4af059Be466d7c",
+        orderParams: "rvess-out",
+      }),
+    );
+    assert.match(sell.pathname, /\/offramp$/);
+    assert.equal(sell.searchParams.get("address"), null);
   });
 
   it("reports missing keys and builds official Transak and Coinbase requests", () => {

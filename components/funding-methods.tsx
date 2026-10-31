@@ -1,9 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import type { ProviderStatus } from "@/lib/onramp";
+import { useEffect, useState } from "react";
+import { GdxSwap } from "@/components/gdx-swap";
+import { TokenIcon } from "@/components/token-icon";
+import type { FonbnkSide, ProviderStatus } from "@/lib/onramp";
+import type { GdxTradeBalances } from "@/lib/token-face";
 
 const primary = "flex h-12 w-full items-center justify-center rounded-full bg-primary text-base font-medium text-primary-foreground disabled:opacity-50";
+
+const countries = [
+  { id: "", label: "All" },
+  { id: "UG", label: "Uganda" },
+  { id: "KE", label: "Kenya" },
+  { id: "NG", label: "Nigeria" },
+  { id: "GH", label: "Ghana" },
+  { id: "TZ", label: "Tanzania" },
+  { id: "ZA", label: "South Africa" },
+] as const;
 
 function Missing({ status }: { status: ProviderStatus }) {
   if (status.configured) return <p className="text-sm text-emerald-700">Ready. A live request is sent only when you continue.</p>;
@@ -20,79 +33,174 @@ function Missing({ status }: { status: ProviderStatus }) {
   );
 }
 
-export function MobileMoneyForm({ status, address }: { status: ProviderStatus; address: string }) {
-  const [network, setNetwork] = useState<"MTN" | "AIRTEL">("MTN");
-  const [phone, setPhone] = useState("");
-  const [name, setName] = useState("");
-  const [amount, setAmount] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
+type CashToken = "usdt" | "gdx";
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
+export function MobileMoneyForm({
+  status,
+  address,
+  side = "buy",
+  trade,
+}: {
+  status: ProviderStatus;
+  address: string;
+  side?: FonbnkSide;
+  trade: GdxTradeBalances;
+}) {
+  const [flow, setFlow] = useState<FonbnkSide>(side);
+  const [token, setToken] = useState<CashToken>("usdt");
+  const [country, setCountry] = useState("UG");
+  const [amount, setAmount] = useState("");
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(true);
+
+  async function loadWidget(next: FonbnkSide, iso: string, local: string) {
     if (!status.configured) return;
     setPending(true);
     setError("");
-    setMessage("");
     try {
       const response = await fetch("/api/onramp/mobile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network, phone, name, amount }),
+        body: JSON.stringify({ side: next, country: iso, amount: local }),
       });
-      const payload = (await response.json()) as { message?: string; referenceId?: string; error?: string };
-      if (!response.ok) throw new Error(payload.error || "The request failed.");
-      setMessage(payload.referenceId ? `${payload.message} Reference ${payload.referenceId}.` : payload.message || "Approve the prompt on your phone.");
+      const payload = (await response.json()) as { url?: string; error?: string };
+      if (!response.ok || !payload.url) throw new Error(payload.error || "Fonbnk did not open.");
+      setUrl(payload.url);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The request failed.");
+      setUrl("");
+      setError(caught instanceof Error ? caught.message : "Fonbnk did not open.");
     } finally {
       setPending(false);
     }
   }
 
+  useEffect(() => {
+    void loadWidget(flow, country, amount);
+    // First paint loads the hosted checkout. Later changes use the buttons below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount + flow only
+  }, [flow]);
+
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <Missing status={status} />
+    <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2">
         {(
           [
-            ["MTN", "MTN MoMo"],
-            ["AIRTEL", "Airtel Money"],
+            ["buy", "Buy USDC"],
+            ["sell", "Cash out"],
           ] as const
         ).map(([id, label]) => (
           <button
             key={id}
             type="button"
-            aria-pressed={network === id}
-            onClick={() => setNetwork(id)}
-            className={`h-12 rounded-2xl text-sm font-medium ${network === id ? "border-2 border-foreground bg-card" : "border border-border bg-card"}`}
+            aria-pressed={flow === id}
+            onClick={() => setFlow(id)}
+            className={`h-12 rounded-2xl text-sm font-medium ${flow === id ? "border-2 border-foreground bg-card" : "border border-border bg-card"}`}
           >
             {label}
           </button>
         ))}
       </div>
-      <label className="block text-sm font-medium">
-        Phone number
-        <input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" placeholder="0772 123 456" className="mt-1 h-12 w-full rounded-2xl border border-border bg-card px-4 font-normal outline-none" />
-      </label>
-      <label className="block text-sm font-medium">
-        Name on the account
-        <input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" className="mt-1 h-12 w-full rounded-2xl border border-border bg-card px-4 font-normal outline-none" />
-      </label>
-      <label className="block text-sm font-medium">
-        Amount in UGX
-        <input value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="50000" className="mt-1 h-12 w-full rounded-2xl border border-border bg-card px-4 font-normal outline-none" />
-      </label>
+      <div>
+        <p className="mb-2 text-sm font-medium">{flow === "buy" ? "You receive" : "You cash out"}</p>
+        <div className="grid grid-cols-2 gap-2">
+          {(
+            [
+              { id: "usdt" as const, symbol: "USDT", name: "Tether on Celo" },
+              { id: "gdx" as const, symbol: "G$", name: "Good Dollar" },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={token === item.id}
+              onClick={() => setToken(item.id)}
+              className={`flex items-center gap-2 rounded-2xl px-3 py-3 text-left ${token === item.id ? "border-2 border-foreground bg-white" : "border border-border bg-card"}`}
+            >
+              <TokenIcon symbol={item.symbol} network="Celo" className="size-8" withChain={false} />
+              <span>
+                <span className="block text-sm font-semibold">{item.symbol}</span>
+                <span className="block text-xs text-[#5C6572]">{item.name}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <p className="mb-2 text-sm font-medium">Country</p>
+        <div className="flex flex-wrap gap-2">
+          {countries.map((item) => (
+            <button
+              key={item.id || "all"}
+              type="button"
+              aria-pressed={country === item.id}
+              onClick={() => {
+                setCountry(item.id);
+                void loadWidget(flow, item.id, amount);
+              }}
+              className={`h-10 rounded-full px-3.5 text-sm font-medium ${country === item.id ? "bg-[#E7F4C4] text-[#141414]" : "border border-[#E6EADF] bg-white text-[#3A3F47]"}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <form
+        className="flex gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void loadWidget(flow, country, amount);
+        }}
+      >
+        <label className="block min-w-0 flex-1 text-sm font-medium">
+          Amount in local currency
+          <input value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="Optional" className="mt-1 h-12 w-full rounded-2xl border border-border bg-card px-4 font-normal outline-none" />
+        </label>
+        <button type="submit" className="mt-6 h-12 shrink-0 rounded-full bg-[#141414] px-4 text-sm font-semibold text-white">
+          Update
+        </button>
+      </form>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Kotani Pay collects UGX by {network === "MTN" ? "MTN MoMo" : "Airtel Money"} and sends USDC on Base to {address}. Up to UGX 20,000,000 per request. Approve the prompt on your phone. Nothing moves until Kotani accepts the request.
+        {flow === "buy" && token === "usdt"
+          ? `Fonbnk sends USDT on Celo to ${address}.`
+          : flow === "buy"
+            ? "Fonbnk first sends USDT on Celo. Swap that USDT into G$ below when it lands."
+            : token === "usdt"
+              ? "Fonbnk takes USDT on Celo and pays your phone or bank."
+              : "Sell G$ into USDT first. Then cash that USDT out with Fonbnk."}
       </p>
       {error ? <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
-      {message ? <p className="rounded-2xl bg-card px-4 py-3 text-sm">{message}</p> : null}
-      <button type="submit" disabled={!status.configured || pending} className={primary}>
-        {status.configured ? (pending ? "Contacting Kotani Pay…" : "Request mobile money") : "Not configured"}
-      </button>
-    </form>
+      {flow === "sell" && token === "gdx" ? (
+        <section className="rounded-[1.4rem] border border-[#E6EADF] bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold text-[#141414]">1. Sell G$ for USDT</h2>
+          <GdxSwap key="sell-gdx" trade={trade} initialVia="usdt" initialSide="sell" />
+        </section>
+      ) : null}
+      <div className="overflow-hidden rounded-[1.4rem] border border-[#E6EADF] bg-white">
+        {token === "gdx" ? (
+          <p className="border-b border-[#E6EADF] px-4 py-2 text-xs text-[#5C6572]">
+            {flow === "buy" ? "1. Buy USDT with mobile money" : "2. Cash out USDT"}
+          </p>
+        ) : null}
+        {pending && !url ? <p className="px-4 py-16 text-center text-sm text-[#5C6572]">Loading Fonbnk…</p> : null}
+        {url ? (
+          <iframe
+            key={url}
+            title="Fonbnk"
+            src={url}
+            className="h-[min(44rem,80dvh)] w-full bg-white"
+            allow="camera; microphone; payment; clipboard-write; geolocation"
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        ) : null}
+      </div>
+      {flow === "buy" && token === "gdx" ? (
+        <section className="rounded-[1.4rem] border border-[#E6EADF] bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold text-[#141414]">2. Swap USDT into G$</h2>
+          <GdxSwap key="buy-gdx" trade={trade} initialVia="usdt" initialSide="buy" />
+        </section>
+      ) : null}
+    </div>
   );
 }
 

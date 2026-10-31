@@ -1,3 +1,6 @@
+import { money } from "@/lib/display";
+import { asGroupToken, groupTokenKindFromAddress, groupUnit } from "@/lib/group-token";
+
 const sources: Record<string, string> = {
   USDC: "/tokens/usdc.svg",
   USD: "/tokens/usdc.svg",
@@ -12,6 +15,8 @@ const sources: Record<string, string> = {
   CELO: "/tokens/celo.svg",
   CELOx: "/tokens/celo.svg",
   "G$": "/tokens/gdx.png",
+  GDX: "/tokens/gdx.png",
+  GoodDollar: "/tokens/gdx.png",
 };
 
 const chainMark: Record<"base" | "celo", { src: string; round: string }> = {
@@ -50,7 +55,7 @@ export function TokenIcon({
   const src = sources[symbol];
   const marks = withChain ? chainKeys(network, symbol) : [];
   const face = src ? (
-    <img src={src} alt="" className="size-full rounded-full object-cover" />
+    <img src={src} alt="" className="size-full rounded-full object-contain" />
   ) : (
     <span className="grid size-full place-items-center rounded-full bg-foreground text-sm font-semibold text-background">
       {symbol.slice(0, 1)}
@@ -71,6 +76,46 @@ export function TokenIcon({
             className={`size-3.5 ring-[1.5px] ring-background ${chainMark[key].round}`}
           />
         ))}
+      </span>
+    </span>
+  );
+}
+
+function groupKind(token: string) {
+  if (token.startsWith("0x")) return groupTokenKindFromAddress(token);
+  if (token === "gdx" || token === "G$" || token === "GDX" || token === "GoodDollar") return "gdx" as const;
+  return asGroupToken(token);
+}
+
+function groupSymbol(token: string, network?: string) {
+  const kind = groupKind(token);
+  if (kind === "gdx") return "G$";
+  if (network === "celo" || /\bcelo\b/i.test(network ?? "")) return "cUSDx";
+  if (network === "base" || /\bbase\b/i.test(network ?? "")) return "USDCx";
+  return "USD";
+}
+
+export function GroupMoney({
+  amount,
+  wei,
+  token,
+  network,
+  className = "size-4",
+}: {
+  amount?: string;
+  wei?: string | bigint;
+  token: string;
+  network?: string;
+  className?: string;
+}) {
+  const kind = groupKind(token);
+  const symbol = groupSymbol(token, network);
+  const shown = amount ?? money(wei ?? "0");
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <TokenIcon symbol={symbol} network={kind === "gdx" ? "Celo" : network} className={className} withChain={false} />
+      <span className="tabular-nums">
+        {shown} {groupUnit(kind)}
       </span>
     </span>
   );
