@@ -18,22 +18,19 @@ type Hole = { top: number; left: number; width: number; height: number };
 
 function readHole(target?: string): Hole | null {
   if (!target) return null;
-  const nodes = document.querySelectorAll(`[data-tour="${target}"]`);
-  let node: HTMLElement | null = null;
-  nodes.forEach((item) => {
-    if (node || !(item instanceof HTMLElement)) return;
-    const size = item.getBoundingClientRect();
-    if (size.width >= 8 && size.height >= 8) node = item;
-  });
-  if (!node) return null;
-  const rect = node.getBoundingClientRect();
-  const pad = 8;
-  return {
-    top: Math.max(8, rect.top - pad),
-    left: Math.max(8, rect.left - pad),
-    width: Math.min(window.innerWidth - 16, rect.width + pad * 2),
-    height: rect.height + pad * 2,
-  };
+  for (const item of document.querySelectorAll(`[data-tour="${target}"]`)) {
+    if (!(item instanceof HTMLElement)) continue;
+    const rect = item.getBoundingClientRect();
+    if (rect.width < 8 || rect.height < 8) continue;
+    const pad = 8;
+    return {
+      top: Math.max(8, rect.top - pad),
+      left: Math.max(8, rect.left - pad),
+      width: Math.min(window.innerWidth - 16, rect.width + pad * 2),
+      height: rect.height + pad * 2,
+    };
+  }
+  return null;
 }
 
 export function TourOverlay({ startStep }: { startStep: number }) {

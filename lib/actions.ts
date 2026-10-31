@@ -1260,8 +1260,8 @@ export async function finishOnboarding() {
 export async function restartOnboarding() {
   try {
     await restartTourRecord();
-  } catch (error) {
-    return spoken(error);
+  } catch {
+    // Send them home anyway. The tour stays off if the row did not save.
   }
   refresh();
   redirect("/home");
