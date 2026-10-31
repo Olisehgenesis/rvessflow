@@ -40,3 +40,21 @@ export function currencyForCountry(country: string | null | undefined): string |
   if (!country) return null;
   return COUNTRY_CURRENCY[country.trim().toUpperCase()] ?? null;
 }
+
+const CURRENCY_COUNTRY: Record<string, string> = {
+  ugx: "UG",
+  ngn: "NG",
+  kes: "KE",
+  ghs: "GH",
+  zar: "ZA",
+  egp: "EG",
+  inr: "IN",
+  brl: "BR",
+  mxn: "MX",
+  aed: "AE",
+};
+
+export function countryForCurrency(code: string | null | undefined): string | null {
+  if (!code) return null;
+  return CURRENCY_COUNTRY[code.trim().toLowerCase()] ?? null;
+}

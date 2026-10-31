@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
 import { describe, it } from "node:test";
 import { coinbaseJwt } from "@/lib/coinbase-jwt";
+import { countryForCurrency } from "@/lib/place";
 import {
   coinbaseOnrampUrl,
   coinbaseStatus,
@@ -42,7 +43,9 @@ describe("funding providers", () => {
   });
 
   it("opens Fonbnk buy and sell widgets against Celo USDT", () => {
-    assert.equal(fonbnkStatus({}).configured, true);
+    assert.equal(fonbnkStatus({}).configured, false);
+    assert.deepEqual(fonbnkStatus({}).missing, ["FONBNK_URL_SECRET"]);
+    assert.equal(fonbnkStatus({ FONBNK_URL_SECRET: "widget-secret" }).configured, true);
     assert.equal(fonbnkPayOrigin({}), "https://pay.fonbnk.com");
     assert.equal(fonbnkPayOrigin({ FONBNK_ENV: "sandbox" }), "https://sandbox-pay.fonbnk.com");
     const buy = new URL(
@@ -59,7 +62,7 @@ describe("funding providers", () => {
         now: 1_700_000_000,
       }),
     );
-    assert.equal(buy.origin + buy.pathname, "https://pay.fonbnk.com/");
+    assert.equal(buy.origin + buy.pathname, "https://pay.fonbnk.com/auth");
     assert.equal(buy.searchParams.get("source"), FONBNK_SOURCE_DEFAULT);
     assert.equal(buy.searchParams.get("network"), "CELO");
     assert.equal(buy.searchParams.get("asset"), "USDT");
@@ -68,18 +71,40 @@ describe("funding providers", () => {
     assert.equal(buy.searchParams.get("freezeWallet"), "true");
     assert.equal(buy.searchParams.get("address"), "0x4CC5313fCf12032aF023F099dC4af059Be466d7c");
     const token = buy.searchParams.get("signature") || "";
-    assert.equal(token, fonbnkHs256("widget-secret", { jti: "rvess-test" }, 1_700_000_000));
+    assert.equal(
+      token,
+      fonbnkHs256(
+        "widget-secret",
+        {
+          uid: "rvess-test",
+          network: "CELO",
+          asset: "USDT",
+          paymentChannel: "mobile_money",
+          countryIsoCode: "UG",
+          amount: "50000",
+          currency: "local",
+          address: "0x4CC5313fCf12032aF023F099dC4af059Be466d7c",
+          freezeWallet: "true",
+        },
+        1_700_000_000,
+      ),
+    );
     const sell = new URL(
       fonbnkWidgetUrl({
         origin: "https://pay.fonbnk.com",
         source: FONBNK_SOURCE_DEFAULT,
         side: "sell",
         address: "0x4CC5313fCf12032aF023F099dC4af059Be466d7c",
+        amount: "50000",
+        countryIsoCode: "UG",
         orderParams: "rvess-out",
       }),
     );
-    assert.match(sell.pathname, /\/offramp$/);
+    assert.match(sell.pathname, /\/offramp\/auth$/);
     assert.equal(sell.searchParams.get("address"), null);
+    assert.equal(countryForCurrency("ugx"), "UG");
+    assert.equal(countryForCurrency("kes"), "KE");
+    assert.equal(countryForCurrency("usd"), null);
   });
 
   it("reports missing keys and builds official Transak and Coinbase requests", () => {

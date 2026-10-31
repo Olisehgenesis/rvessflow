@@ -4,17 +4,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
-:root {
-  --font-sf: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, sans-serif;
-  --font-inter: var(--font-sf);
-  --font-manrope: var(--font-sf);
-}
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sf);
-  --font-display: var(--font-sf);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-script: var(--font-caveat), "Segoe Script", cursive;
   --font-heading: var(--font-display);
@@ -59,6 +53,7 @@
 }
 
 :root {
+  --font-manrope: var(--font-inter);
   --lavender: #a78bfa;
   --motion: #d9ff38;
   --background: #f7f6f3;

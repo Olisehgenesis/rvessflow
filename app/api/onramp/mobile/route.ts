@@ -1,20 +1,21 @@
 import { NextResponse } from "next/server";
 import { OnrampConfigError, startFonbnkWidget } from "@/lib/onramp-server";
-import { fonbnkCountry, fonbnkLocalAmount } from "@/lib/onramp";
-import { acceptedTerms, hasEntered, viewer } from "@/lib/session";
+import { fonbnkLocalAmount } from "@/lib/onramp";
+import { acceptedTerms, fonbnkPlace, hasEntered, viewer } from "@/lib/session";
 
 export async function POST(request: Request) {
   if (!(await hasEntered()) || !(await acceptedTerms())) {
     return NextResponse.json({ error: "Sign in before starting a payment." }, { status: 401 });
   }
   const who = await viewer();
-  const body = (await request.json().catch(() => null)) as { side?: string; country?: string; amount?: string } | null;
+  const body = (await request.json().catch(() => null)) as { side?: string; amount?: string } | null;
   try {
+    const place = await fonbnkPlace();
     const url = await startFonbnkWidget(request, {
       side: body?.side === "sell" ? "sell" : "buy",
       address: who.address,
       amount: fonbnkLocalAmount(String(body?.amount ?? "")),
-      countryIsoCode: fonbnkCountry(String(body?.country ?? "")),
+      countryIsoCode: place.country,
     });
     return NextResponse.json({ url });
   } catch (error) {

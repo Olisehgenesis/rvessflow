@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { getAddress, isAddress } from "viem";
 
 export type MobileNetwork = "MTN" | "AIRTEL";
 
@@ -173,7 +174,12 @@ export function fonbnkSource(env: Env): string {
 
 export function fonbnkStatus(env: Env): ProviderStatus {
   const source = fonbnkSource(env);
-  return { id: "fonbnk", label: "Fonbnk", configured: source.length > 0, missing: source ? [] : ["FONBNK_SOURCE"] };
+  const secret = env.FONBNK_URL_SECRET?.trim() ?? "";
+  const missing = [
+    ...(source ? [] : ["FONBNK_SOURCE"]),
+    ...(secret ? [] : ["FONBNK_URL_SECRET"]),
+  ];
+  return { id: "fonbnk", label: "Fonbnk", configured: missing.length === 0, missing };
 }
 
 export function fonbnkPayOrigin(env: Env): string {
@@ -213,28 +219,47 @@ export function fonbnkWidgetUrl(input: {
   callbackUrl?: string;
   now?: number;
 }): string {
-  const url = new URL(input.side === "sell" ? `${input.origin}/offramp` : input.origin);
+  if (!isAddress(input.address)) throw new Error("Sign in with a passkey first.");
+  if (!input.amount || !input.countryIsoCode) throw new Error("Amount and country are required.");
+  const address = getAddress(input.address);
+  const buy = input.side !== "sell";
+  const url = new URL(buy ? `${input.origin}/auth` : `${input.origin}/offramp/auth`);
   url.searchParams.set("source", input.source);
   url.searchParams.set("network", "CELO");
   url.searchParams.set("asset", "USDT");
   url.searchParams.set("paymentChannel", "mobile_money");
+  url.searchParams.set("countryIsoCode", input.countryIsoCode);
+  url.searchParams.set("amount", input.amount);
+  url.searchParams.set("currency", "local");
+  url.searchParams.set("freezeAmount", "true");
   url.searchParams.set("hideSwitch", "true");
   url.searchParams.set("orderParams", input.orderParams);
-  if (input.side === "buy") {
-    url.searchParams.set("address", input.address);
-    if (input.secret) url.searchParams.set("freezeWallet", "true");
+  if (buy) {
+    url.searchParams.set("address", address);
+    url.searchParams.set("freezeWallet", "true");
   }
-  if (input.amount) {
-    url.searchParams.set("amount", input.amount);
-    url.searchParams.set("currency", "local");
-  }
-  if (input.countryIsoCode) url.searchParams.set("countryIsoCode", input.countryIsoCode);
   if (input.callbackUrl) {
     url.searchParams.set("callbackUrl", input.callbackUrl);
     url.searchParams.set("callbackBtnText", "Back to Rvess");
   }
   if (input.secret) {
-    url.searchParams.set("signature", fonbnkHs256(input.secret, { jti: input.orderParams }, input.now));
+    url.searchParams.set(
+      "signature",
+      fonbnkHs256(
+        input.secret,
+        {
+          uid: input.orderParams,
+          network: "CELO",
+          asset: "USDT",
+          paymentChannel: "mobile_money",
+          countryIsoCode: input.countryIsoCode,
+          amount: input.amount,
+          currency: "local",
+          ...(buy ? { address, freezeWallet: "true" } : {}),
+        },
+        input.now,
+      ),
+    );
   }
   return url.toString();
 }

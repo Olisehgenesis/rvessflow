@@ -1,22 +1,42 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GdxSwap } from "@/components/gdx-swap";
-import { TokenIcon } from "@/components/token-icon";
+import { useRouter } from "next/navigation";
+import { Dialog } from "radix-ui";
+import { IconBack, IconClose } from "@/components/icons";
 import type { FonbnkSide, ProviderStatus } from "@/lib/onramp";
-import type { GdxTradeBalances } from "@/lib/token-face";
 
 const primary = "flex h-12 w-full items-center justify-center rounded-full bg-primary text-base font-medium text-primary-foreground disabled:opacity-50";
 
-const countries = [
-  { id: "", label: "All" },
-  { id: "UG", label: "Uganda" },
-  { id: "KE", label: "Kenya" },
-  { id: "NG", label: "Nigeria" },
-  { id: "GH", label: "Ghana" },
-  { id: "TZ", label: "Tanzania" },
-  { id: "ZA", label: "South Africa" },
-] as const;
+const countryName: Record<string, string> = {
+  UG: "Uganda",
+  KE: "Kenya",
+  NG: "Nigeria",
+  GH: "Ghana",
+  TZ: "Tanzania",
+  ZA: "South Africa",
+  EG: "Egypt",
+  IN: "India",
+  BR: "Brazil",
+  MX: "Mexico",
+  AE: "United Arab Emirates",
+};
+
+function amountChips(unit: string): string[] {
+  if (unit === "UGX") return ["20000", "50000", "100000"];
+  if (unit === "KES") return ["500", "2000", "5000"];
+  if (unit === "NGN") return ["5000", "20000", "50000"];
+  if (unit === "GHS") return ["50", "200", "500"];
+  if (unit === "ZAR") return ["100", "250", "500"];
+  if (unit === "EGP") return ["200", "500", "1000"];
+  if (unit === "INR") return ["500", "2000", "5000"];
+  return ["20", "50", "100"];
+}
+
+function formatLocal(value: string) {
+  if (!value) return "0";
+  return Number(value).toLocaleString("en-US");
+}
 
 function Missing({ status }: { status: ProviderStatus }) {
   if (status.configured) return <p className="text-sm text-emerald-700">Ready. A live request is sent only when you continue.</p>;
@@ -33,42 +53,51 @@ function Missing({ status }: { status: ProviderStatus }) {
   );
 }
 
-type CashToken = "usdt" | "gdx";
-
 export function MobileMoneyForm({
   status,
   address,
   side = "buy",
-  trade,
+  country,
+  unit,
 }: {
   status: ProviderStatus;
   address: string;
   side?: FonbnkSide;
-  trade: GdxTradeBalances;
+  country: string;
+  unit: string;
 }) {
+  const router = useRouter();
   const [flow, setFlow] = useState<FonbnkSide>(side);
-  const [token, setToken] = useState<CashToken>("usdt");
-  const [country, setCountry] = useState("UG");
   const [amount, setAmount] = useState("");
   const [url, setUrl] = useState("");
+  const [checkout, setCheckout] = useState(false);
+  const [ask, setAsk] = useState(true);
   const [error, setError] = useState("");
-  const [pending, setPending] = useState(true);
+  const [pending, setPending] = useState(false);
+  const place = countryName[country] || country;
 
-  async function loadWidget(next: FonbnkSide, iso: string, local: string) {
+  async function openCheckout() {
     if (!status.configured) return;
+    if (!amount) {
+      setError(`Enter how much in ${unit}.`);
+      return;
+    }
     setPending(true);
     setError("");
     try {
       const response = await fetch("/api/onramp/mobile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ side: next, country: iso, amount: local }),
+        body: JSON.stringify({ side: flow, amount }),
       });
       const payload = (await response.json()) as { url?: string; error?: string };
       if (!response.ok || !payload.url) throw new Error(payload.error || "Fonbnk did not open.");
       setUrl(payload.url);
+      setAsk(false);
+      setCheckout(true);
     } catch (caught) {
       setUrl("");
+      setCheckout(false);
       setError(caught instanceof Error ? caught.message : "Fonbnk did not open.");
     } finally {
       setPending(false);
@@ -76,131 +105,131 @@ export function MobileMoneyForm({
   }
 
   useEffect(() => {
-    void loadWidget(flow, country, amount);
-    // First paint loads the hosted checkout. Later changes use the buttons below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount + flow only
-  }, [flow]);
+    document.body.style.overflow = ask || checkout ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [ask, checkout]);
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2">
-        {(
-          [
-            ["buy", "Buy USDC"],
-            ["sell", "Cash out"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            aria-pressed={flow === id}
-            onClick={() => setFlow(id)}
-            className={`h-12 rounded-2xl text-sm font-medium ${flow === id ? "border-2 border-foreground bg-card" : "border border-border bg-card"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <div>
-        <p className="mb-2 text-sm font-medium">{flow === "buy" ? "You receive" : "You cash out"}</p>
-        <div className="grid grid-cols-2 gap-2">
-          {(
-            [
-              { id: "usdt" as const, symbol: "USDT", name: "Tether on Celo" },
-              { id: "gdx" as const, symbol: "G$", name: "Good Dollar" },
-            ] as const
-          ).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={token === item.id}
-              onClick={() => setToken(item.id)}
-              className={`flex items-center gap-2 rounded-2xl px-3 py-3 text-left ${token === item.id ? "border-2 border-foreground bg-white" : "border border-border bg-card"}`}
-            >
-              <TokenIcon symbol={item.symbol} network="Celo" className="size-8" withChain={false} />
-              <span>
-                <span className="block text-sm font-semibold">{item.symbol}</span>
-                <span className="block text-xs text-[#5C6572]">{item.name}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <p className="mb-2 text-sm font-medium">Country</p>
-        <div className="flex flex-wrap gap-2">
-          {countries.map((item) => (
-            <button
-              key={item.id || "all"}
-              type="button"
-              aria-pressed={country === item.id}
-              onClick={() => {
-                setCountry(item.id);
-                void loadWidget(flow, item.id, amount);
-              }}
-              className={`h-10 rounded-full px-3.5 text-sm font-medium ${country === item.id ? "bg-[#E7F4C4] text-[#141414]" : "border border-[#E6EADF] bg-white text-[#3A3F47]"}`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <form
-        className="flex gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void loadWidget(flow, country, amount);
-        }}
-      >
-        <label className="block min-w-0 flex-1 text-sm font-medium">
-          Amount in local currency
-          <input value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="Optional" className="mt-1 h-12 w-full rounded-2xl border border-border bg-card px-4 font-normal outline-none" />
-        </label>
-        <button type="submit" className="mt-6 h-12 shrink-0 rounded-full bg-[#141414] px-4 text-sm font-semibold text-white">
-          Update
-        </button>
-      </form>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        {flow === "buy" && token === "usdt"
-          ? `Fonbnk sends USDT on Celo to ${address}.`
-          : flow === "buy"
-            ? "Fonbnk first sends USDT on Celo. Swap that USDT into G$ below when it lands."
-            : token === "usdt"
-              ? "Fonbnk takes USDT on Celo and pays your phone or bank."
-              : "Sell G$ into USDT first. Then cash that USDT out with Fonbnk."}
+    <>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        {place} · {unit}. USDT on Celo to {address.slice(0, 6)}…{address.slice(-4)}.
       </p>
-      {error ? <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
-      {flow === "sell" && token === "gdx" ? (
-        <section className="rounded-[1.4rem] border border-[#E6EADF] bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-[#141414]">1. Sell G$ for USDT</h2>
-          <GdxSwap key="sell-gdx" trade={trade} initialVia="usdt" initialSide="sell" />
-        </section>
+      {!ask && !checkout ? (
+        <button type="button" onClick={() => setAsk(true)} className={`${primary} mt-6 bg-[#D4F06B] text-[#141414]`}>
+          {flow === "buy" ? "How much to buy" : "How much to cash out"}
+        </button>
       ) : null}
-      <div className="overflow-hidden rounded-[1.4rem] border border-[#E6EADF] bg-white">
-        {token === "gdx" ? (
-          <p className="border-b border-[#E6EADF] px-4 py-2 text-xs text-[#5C6572]">
-            {flow === "buy" ? "1. Buy USDT with mobile money" : "2. Cash out USDT"}
-          </p>
-        ) : null}
-        {pending && !url ? <p className="px-4 py-16 text-center text-sm text-[#5C6572]">Loading Fonbnk…</p> : null}
-        {url ? (
+      <Dialog.Root open={ask && !checkout} onOpenChange={setAsk}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[60] bg-[#141414]/40 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
+          <Dialog.Content className="fixed right-0 bottom-0 left-0 z-[61] rounded-t-[1.75rem] bg-white px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-24px_80px_-28px_rgba(20,20,20,0.45)] outline-none sm:top-1/2 sm:right-auto sm:bottom-auto sm:left-1/2 sm:w-[min(100%-1.5rem,24.5rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[1.6rem] sm:pb-5">
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border sm:hidden" />
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Dialog.Title className="text-[1.35rem] font-semibold tracking-[-0.04em]">{flow === "buy" ? "How much to buy" : "How much to cash out"}</Dialog.Title>
+                <Dialog.Description className="mt-1 text-sm text-[#5C6572]">
+                  {place} · {unit}
+                </Dialog.Description>
+              </div>
+              <Dialog.Close
+                aria-label="Close"
+                onClick={() => router.push("/home/add")}
+                className="grid size-9 shrink-0 place-items-center rounded-full text-foreground"
+              >
+                <IconClose className="size-5" />
+              </Dialog.Close>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-1 rounded-full bg-[#F3F1EA] p-1">
+              {(
+                [
+                  ["buy", "Buy"],
+                  ["sell", "Cash out"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={flow === id}
+                  onClick={() => setFlow(id)}
+                  className={`h-10 rounded-full text-sm font-semibold ${flow === id ? "bg-white text-[#141414] shadow-[0_1px_4px_rgba(20,20,20,0.08)]" : "text-[#5C6572]"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <label className="mt-5 block">
+              <span className="sr-only">Amount in {unit}</span>
+              <span className="flex items-end gap-2 border-b border-[#E6EADF] pb-2">
+                <input
+                  value={amount}
+                  onChange={(event) => {
+                    setAmount(event.target.value.replace(/[^\d]/g, ""));
+                    setError("");
+                  }}
+                  inputMode="numeric"
+                  autoFocus
+                  placeholder="0"
+                  className="min-w-0 flex-1 bg-transparent text-[2.65rem] leading-none font-semibold tracking-[-0.05em] tabular-nums outline-none placeholder:text-[#C9CDC3]"
+                />
+                <span className="mb-1 text-sm font-semibold text-[#5C6572]">{unit}</span>
+              </span>
+            </label>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {amountChips(unit).map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => {
+                    setAmount(chip);
+                    setError("");
+                  }}
+                  className={`h-9 rounded-full px-3.5 text-sm font-medium ${amount === chip ? "bg-[#D4F06B] text-[#141414]" : "bg-[#F3F1EA] text-[#3A3F47]"}`}
+                >
+                  {formatLocal(chip)}
+                </button>
+              ))}
+            </div>
+            {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+            {!status.configured ? (
+              <div className="mt-3">
+                <Missing status={status} />
+              </div>
+            ) : null}
+            <button type="button" onClick={() => void openCheckout()} disabled={!status.configured || pending || !amount} className={`${primary} mt-5 bg-[#D4F06B] text-[#141414]`}>
+              {pending ? "Opening…" : flow === "buy" ? "Buy" : "Cash out"}
+            </button>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      {checkout && url ? (
+        <div className="fixed inset-0 z-[70] flex flex-col bg-white">
+          <header className="flex h-14 shrink-0 items-center gap-1 border-b border-[#E6EADF] bg-[#F7F6F3] px-2 pt-[env(safe-area-inset-top)]">
+            <button
+              type="button"
+              onClick={() => {
+                setCheckout(false);
+                setAsk(true);
+              }}
+              aria-label="Back"
+              className="grid size-11 place-items-center rounded-full"
+            >
+              <IconBack className="size-5" />
+            </button>
+            <p className="min-w-0 flex-1 truncate text-base font-semibold">{flow === "buy" ? "Buy" : "Cash out"}</p>
+          </header>
           <iframe
             key={url}
-            title="Fonbnk"
+            title={flow === "buy" ? "Fonbnk onramp" : "Fonbnk offramp"}
             src={url}
-            className="h-[min(44rem,80dvh)] w-full bg-white"
+            className="min-h-0 w-full flex-1 border-0 bg-white"
             allow="camera; microphone; payment; clipboard-write; geolocation"
             referrerPolicy="strict-origin-when-cross-origin"
           />
-        ) : null}
-      </div>
-      {flow === "buy" && token === "gdx" ? (
-        <section className="rounded-[1.4rem] border border-[#E6EADF] bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-[#141414]">2. Swap USDT into G$</h2>
-          <GdxSwap key="buy-gdx" trade={trade} initialVia="usdt" initialSide="buy" />
-        </section>
+        </div>
       ) : null}
-    </div>
+    </>
   );
 }
 

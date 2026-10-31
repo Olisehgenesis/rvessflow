@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isAddress, type Address } from "viem";
 import { people } from "@/lib/protocol";
-import { currencyForCountry } from "@/lib/place";
+import { countryForCurrency, currencyForCountry } from "@/lib/place";
 import { currencyByCode } from "@/lib/quote";
 
 const WHO = "rvess-account";
@@ -169,4 +169,16 @@ export async function currencyCode(): Promise<string> {
 export async function rememberCurrency(code: string) {
   const jar = await cookies();
   jar.set(CURRENCY, currencyByCode(code).code, cookie);
+}
+
+export async function fonbnkPlace(): Promise<{ country: string; unit: string }> {
+  const currency = await currencyCode();
+  const fromCurrency = countryForCurrency(currency);
+  if (fromCurrency) return { country: fromCurrency, unit: currencyByCode(currency).label };
+  const ip = await requestCountry();
+  if (ip) {
+    const mapped = currencyForCountry(ip);
+    return { country: ip, unit: mapped ? currencyByCode(mapped).label : "USD" };
+  }
+  return { country: "UG", unit: "UGX" };
 }

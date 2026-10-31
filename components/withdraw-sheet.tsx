@@ -60,7 +60,7 @@ export function WithdrawSheet({ savings, unit, conceal = false }: { savings: Sav
             <img src="/marks/phone.png" alt="" className="size-11 shrink-0 object-contain" />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold">Cash out to mobile money</span>
-              <span className="block text-xs text-muted-foreground">Fonbnk. USDT or G$ on Celo to a phone or bank.</span>
+              <span className="block text-xs text-muted-foreground">Say how much. Checkout uses this country and currency.</span>
             </span>
             <IconChevron className="size-4 shrink-0 text-muted-foreground" />
           </Link>
@@ -113,7 +113,7 @@ export function WithdrawSheet({ savings, unit, conceal = false }: { savings: Sav
 export function topUpMethods(_network: string) {
   return [
     { href: "/home/add/receive", title: "Receive", body: "Same address on Base and Celo.", src: "/marks/receive.png" },
-    { href: "/home/add/mobile", title: "Mobile money", body: "Fonbnk. USDT on Celo, or G$ after a swap. Cash out the same way.", src: "/marks/phone.png" },
+    { href: "/home/add/mobile", title: "Mobile money", body: "Buy or cash out in your currency. Phone checkout next.", src: "/marks/phone.png" },
     { href: "/home/add/card", title: "Card", body: "Transak or Coinbase. USDC arrives on Base.", src: "/marks/card.png" },
   ];
 }
