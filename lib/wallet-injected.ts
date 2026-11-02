@@ -64,17 +64,13 @@ export async function showInjectedWallets(modal: WalletModal | null | undefined)
       chain: "eip155",
     });
   }
-  wrapConnect(ConnectionController, RouterController);
+  wrapConnect(ConnectionController as never, RouterController as never);
   showWalletList(modal);
 }
 
 function wrapConnect(
-  ConnectionController: {
-    _getClient: () => { connectExternal?: (options: InjectedConnector) => Promise<{ address?: string } | undefined> } | undefined;
-  },
-  RouterController: {
-    push: (view: string, data?: { connector?: InjectedConnector }) => void;
-  },
+  ConnectionController: { _getClient: () => { connectExternal?: (options: unknown) => Promise<unknown> } | undefined },
+  RouterController: { push: (view: string, data?: { connector?: InjectedConnector }) => void },
 ) {
   if (wrapped) return;
   wrapped = true;
@@ -82,20 +78,20 @@ function wrapConnect(
   const original = client?.connectExternal?.bind(client);
   if (client) {
     client.connectExternal = async (options) => {
-      const address = await connectIfInstalled(options);
+      const address = await connectIfInstalled(options as InjectedConnector);
       if (address) return { address };
       if (!original) throw new Error("This wallet could not be opened.");
       return original(options);
     };
   }
   const push = RouterController.push.bind(RouterController);
-  RouterController.push = (view, data) => {
+  RouterController.push = ((view: string, data?: { connector?: InjectedConnector }) => {
     if (view === "ConnectingExternal" && data?.connector && (data.connector.type === "ANNOUNCED" || data.connector.type === "INJECTED" || data.connector.id.startsWith("rvess:"))) {
       void connectIfInstalled(data.connector).catch(() => undefined);
       return;
     }
     push(view, data);
-  };
+  }) as typeof RouterController.push;
 }
 
 async function connectIfInstalled(options: InjectedConnector) {
