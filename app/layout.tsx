@@ -28,7 +28,7 @@ const site = "https://rvessflow.vercel.app";
 export const metadata: Metadata = {
   metadataBase: new URL(site),
   title: "Rvess",
-  description: "Beta. Money moving, on your terms. A new way to save, pay and grow.",
+  description: "Beta. A new way to save, pay and grow.",
   applicationName: "Rvess",
   alternates: { canonical: "/" },
   openGraph: {
@@ -92,7 +92,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               applicationCategory: "FinanceApplication",
               operatingSystem: "Web",
               url: site,
-              description: "Money moving, on your terms. A new way to save, pay and grow.",
+              description: "A new way to save, pay and grow.",
             }),
           }}
         />

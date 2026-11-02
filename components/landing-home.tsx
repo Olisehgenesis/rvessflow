@@ -190,14 +190,11 @@ export function LandingHome() {
         <section className="mx-auto grid max-w-6xl items-center gap-6 px-5 pt-8 pb-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:gap-4 lg:px-8 lg:pt-10 lg:pb-2">
           <div className="max-w-xl">
             <h1 className="text-[2.85rem] leading-[0.94] font-semibold tracking-[-0.045em] sm:text-[4.05rem] lg:text-[4.85rem]">
-              Money moving,
+              A new way to save,
               <br />
-              on your terms.
+              pay and grow.
             </h1>
             <p className="mt-5 max-w-[28rem] text-[15px] leading-relaxed text-[#5C6572] sm:text-base">
-              A new way to save, pay and grow.
-            </p>
-            <p className="mt-2 max-w-[28rem] text-[15px] leading-relaxed text-[#5C6572] sm:text-base">
               Your money. Your goals. Your people. All working together in one place.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
