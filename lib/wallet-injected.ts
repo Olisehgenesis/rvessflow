@@ -15,9 +15,16 @@ type AnnouncedWallet = {
   provider: Eip1193;
 };
 
+type InjectedConnector = {
+  id: string;
+  type: string;
+  provider?: Eip1193;
+};
+
 let pending: Eip1193 | null = null;
 let closeModal: (() => void) | null = null;
 let wrapped = false;
+let originalOpen: ((options?: unknown) => Promise<unknown>) | null = null;
 
 export function clearInjectedConnection() {
   pending = null;
@@ -36,15 +43,16 @@ export function takeInjectedConnection() {
 type WalletModal = {
   close: () => void;
   open?: ((options?: unknown) => Promise<unknown>) & { rvess?: boolean };
+  subscribeState?: (callback: (state: { open?: boolean }) => void) => () => void;
 };
 
 /** Lists the browser's installed wallets inside the WalletConnect modal and connects the one that is chosen. */
 export async function showInjectedWallets(modal: WalletModal | null | undefined) {
   if (modal?.close) closeModal = () => modal.close();
-  showWalletList(modal);
-  const wallets = await discoverInjectedWallets();
-  const { ConnectorController, ConnectionController, OptionsController } = await import("@reown/appkit-controllers");
+  const wallets = await discoverInjectedWallets(200);
+  const { ConnectionController, ConnectorController, OptionsController, RouterController } = await import("@reown/appkit-controllers");
   OptionsController.setEIP6963Enabled(true);
+  OptionsController.setAllWallets("SHOW");
   for (const wallet of wallets) {
     ConnectorController.addConnector({
       id: `rvess:${wallet.info.rdns || wallet.info.uuid}`,
@@ -56,59 +64,94 @@ export async function showInjectedWallets(modal: WalletModal | null | undefined)
       chain: "eip155",
     });
   }
-  const client = ConnectionController._getClient();
-  if (!client || wrapped) return;
-  const original = client.connectExternal?.bind(client);
-  client.connectExternal = async (options) => {
-    const injected = options.provider as Eip1193 | undefined;
-    const installed = options.id.startsWith("rvess:") && (options.type === "ANNOUNCED" || options.type === "INJECTED");
-    if (installed && injected && typeof injected.request === "function") {
-      const accounts = await injected.request({ method: "eth_requestAccounts" });
-      const address = Array.isArray(accounts) ? String(accounts[0] ?? "") : "";
-      if (!/^0x[a-fA-F0-9]{40}$/.test(address)) throw new Error("The wallet did not return an account.");
-      pending = injected;
-      closeModal?.();
-      return { address };
-    }
-    if (!original) throw new Error("This wallet could not be opened.");
-    return original(options);
-  };
+  wrapConnect(ConnectionController, RouterController);
+  showWalletList(modal);
+}
+
+function wrapConnect(
+  ConnectionController: {
+    _getClient: () => { connectExternal?: (options: InjectedConnector) => Promise<{ address?: string } | undefined> } | undefined;
+  },
+  RouterController: {
+    push: (view: string, data?: { connector?: InjectedConnector }) => void;
+  },
+) {
+  if (wrapped) return;
   wrapped = true;
+  const client = ConnectionController._getClient();
+  const original = client?.connectExternal?.bind(client);
+  if (client) {
+    client.connectExternal = async (options) => {
+      const address = await connectIfInstalled(options);
+      if (address) return { address };
+      if (!original) throw new Error("This wallet could not be opened.");
+      return original(options);
+    };
+  }
+  const push = RouterController.push.bind(RouterController);
+  RouterController.push = (view, data) => {
+    if (view === "ConnectingExternal" && data?.connector && (data.connector.type === "ANNOUNCED" || data.connector.type === "INJECTED" || data.connector.id.startsWith("rvess:"))) {
+      void connectIfInstalled(data.connector).catch(() => undefined);
+      return;
+    }
+    push(view, data);
+  };
+}
+
+async function connectIfInstalled(options: InjectedConnector) {
+  const injected = options.provider;
+  const installed = options.type === "ANNOUNCED" || options.type === "INJECTED" || options.id.startsWith("rvess:");
+  if (!installed || !injected || typeof injected.request !== "function") return "";
+  const accounts = await injected.request({ method: "eth_requestAccounts" });
+  const address = Array.isArray(accounts) ? String(accounts[0] ?? "") : "";
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) throw new Error("The wallet did not return an account.");
+  pending = injected;
+  closeModal?.();
+  return address;
 }
 
 function showWalletList(modal: WalletModal | null | undefined) {
-  if (!modal?.open || modal.open.rvess) return;
-  const originalOpen = modal.open.bind(modal);
-  const open = async (options?: unknown) => {
-    await originalOpen(options);
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const basic = queryDeep(document.querySelector("w3m-modal"), "W3M-CONNECTING-WC-BASIC-VIEW");
-      if (basic?.shadowRoot) {
-        mountInstalledList(basic);
-        return;
-      }
-      await new Promise((resolve) => window.setTimeout(resolve, 50));
-    }
+  const mount = () => {
+    const basic = queryDeep(document.querySelector("w3m-modal"), "W3M-CONNECTING-WC-BASIC-VIEW");
+    if (basic?.shadowRoot) mountInstalledList(basic);
   };
-  modal.open = Object.assign(open, { rvess: true });
+  modal?.subscribeState?.((state) => {
+    if (state.open) {
+      mount();
+      window.setTimeout(mount, 50);
+      window.setTimeout(mount, 200);
+    }
+  });
+  if (modal?.open && !originalOpen) originalOpen = modal.open.bind(modal);
+  if (modal && originalOpen) {
+    const open = async (options?: unknown) => {
+      await originalOpen?.(options);
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        mount();
+        if (queryDeep(document.querySelector("w3m-modal"), "W3M-CONNECTOR-LIST")) return;
+        await new Promise((resolve) => window.setTimeout(resolve, 50));
+      }
+    };
+    modal.open = Object.assign(open, { rvess: true });
+  }
+  mount();
 }
 
 function mountInstalledList(basic: HTMLElement) {
   const root = basic.shadowRoot;
-  if (!root) return;
-  const mount = () => {
-    if (!basic.shadowRoot || basic.shadowRoot.querySelector("w3m-connector-list")) return;
-    const list = document.createElement("w3m-connector-list");
-    const column = basic.shadowRoot.querySelector("wui-flex");
-    (column ?? basic.shadowRoot).insertBefore(list, (column ?? basic.shadowRoot).firstChild);
-  };
-  mount();
-  const observer = new MutationObserver(mount);
-  observer.observe(root, { childList: true, subtree: true });
+  if (!root || root.querySelector("w3m-connector-list")) return;
+  const list = document.createElement("w3m-connector-list");
+  const column = root.querySelector("wui-flex");
+  (column ?? root).insertBefore(list, (column ?? root).firstChild);
 }
 
 function queryDeep(root: ParentNode | null, tag: string): HTMLElement | null {
   if (!root) return null;
+  if (root instanceof HTMLElement && root.tagName === tag) return root;
+  if (root instanceof Element && root.shadowRoot) {
+    const nested = queryDeep(root.shadowRoot, tag);
+    if (nested) return nested;
+  }
   for (const el of root.querySelectorAll("*")) {
     if (el.tagName === tag) return el as HTMLElement;
     const nested = el.shadowRoot ? queryDeep(el.shadowRoot, tag) : null;
