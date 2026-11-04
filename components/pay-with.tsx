@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { IconCheck, IconChevron } from "@/components/icons";
 import { TokenIcon } from "@/components/token-icon";
 import Link from "next/link";
@@ -8,6 +8,7 @@ import { previewPay, previewReceive } from "@/lib/actions";
 import { priced, showsLocal } from "@/lib/display";
 import { groupNetLabel, netFromLabel, type GroupNet } from "@/lib/group-network";
 import { networkLabel } from "@/lib/network";
+import { choiceKey, coverStatus, holdingCovers, pickCover } from "@/lib/pay-cover";
 import type { PayAsset, ReceiveAsset } from "@/lib/pay-math";
 import { chainQuote, type Quote } from "@/lib/quote";
 
@@ -71,16 +72,11 @@ function moneyOf(value: string) {
 }
 
 function choiceId(choice: PayChoice) {
-  return choice.id || `${choice.network ?? ""}-${choice.pay}`;
+  return choiceKey(choice);
 }
 
 function richest(choices: PayChoice[]): PayChoice | undefined {
-  const ranked = choices.reduce<PayChoice | undefined>((best, choice) => {
-    if (!best || moneyOf(choice.usd) > moneyOf(best.usd)) return choice;
-    return best;
-  }, undefined);
-  if (ranked && moneyOf(ranked.usd) > 0) return ranked;
-  return choices.find((choice) => netFromLabel(choice.network) === "celo" && choice.pay === "usdcx") ?? choices[0];
+  return pickCover(choices, 0);
 }
 
 function capOf(choice: PayChoice | undefined) {
@@ -233,6 +229,9 @@ export function PayWith({
   quote = chainQuote(),
   stayOn,
   onBlocked,
+  face,
+  onShort,
+  children,
 }: {
   choices: PayChoice[];
   mode: "vault" | "wallet" | "stream";
@@ -245,8 +244,13 @@ export function PayWith({
   /** When set, a token on the other chain asks the user to swap instead of paying. */
   stayOn?: GroupNet;
   onBlocked?: (blocked: boolean) => void;
+  /** Face amount of a fixed post, in token units. 1.00 USD collateral is 1. */
+  face?: number;
+  onShort?: (short: { short: boolean; ask: string; note: string }) => void;
+  children?: ReactNode;
 }) {
-  const start = richest(choices);
+  const pool = () => (stayOn ? choices.filter((choice) => netFromLabel(choice.network) === stayOn) : choices);
+  const start = (face ?? 0) > 0 ? pickCover(pool().length ? pool() : choices, face ?? 0) : richest(choices);
   const [pickedId, setPickedId] = useState(() => (start ? choiceId(start) : ""));
   const [usd, setUsd] = useState("");
   const [share, setShare] = useState(0);
@@ -256,6 +260,38 @@ export function PayWith({
   const picked = choices.find((choice) => choiceId(choice) === pickedId) ?? start;
   const tokenNet = netFromLabel(picked?.network);
   const swap = Boolean(stayOn && picked && tokenNet !== stayOn);
+  const passed = useRef(new Set<string>());
+  const postFace = face ?? 0;
+
+  useEffect(() => {
+    if (!(postFace > 0)) return;
+    const same = pool();
+    for (const choice of same) {
+      if (holdingCovers(choice, postFace)) passed.current.delete(choiceId(choice));
+    }
+    const current = same.find((choice) => choiceId(choice) === pickedId) ?? picked;
+    const spend = lines.find((line) => line.label === "You spend" || line.label === "You spend at most");
+    const unit = spend?.value.replace(/^[\d,.\s]+/, "").trim();
+    const quoteMatches = !unit || unit === current?.label;
+    const quoteShort = Boolean(quoteMatches && current && spend && coverStatus({ choices: same, picked: current, lines, face: postFace, chainName: "" }).short);
+    if (quoteShort && current) passed.current.add(choiceId(current));
+    const currentCovers = Boolean(current && holdingCovers(current, postFace) && !quoteShort);
+    if (currentCovers) return;
+    const next = same.find((choice) => choiceId(choice) !== pickedId && !passed.current.has(choiceId(choice)) && holdingCovers(choice, postFace));
+    if (next) setPickedId(choiceId(next));
+  }, [choices, lines, postFace, pickedId, stayOn, picked]);
+
+  const reported = useRef("");
+  useEffect(() => {
+    if (!onShort || !(postFace > 0)) return;
+    const chainName = stayOn ? groupNetLabel(stayOn) : "this chain";
+    const same = pool();
+    const next = swap ? { short: false, ask: "", note: "" } : coverStatus({ choices: same, picked, lines, face: postFace, chainName });
+    const key = `${next.short}|${next.ask}|${next.note}`;
+    if (reported.current === key) return;
+    reported.current = key;
+    onShort(next);
+  }, [onShort, postFace, stayOn, swap, choices, picked, lines]);
 
   useEffect(() => {
     onBlocked?.(swap);
@@ -273,6 +309,7 @@ export function PayWith({
       setError("");
       return;
     }
+    setLines([]);
     const handle = setTimeout(() => {
       void previewPay({
         pay: picked?.pay ?? "usdc",
@@ -320,6 +357,7 @@ export function PayWith({
         <p className="text-sm font-medium">Pay with</p>
         <TokenSelect choices={choices} quote={quote} value={picked ? choiceId(picked) : ""} onChange={choose} />
       </div>
+      {children}
       {swap ? (
         <div className="rounded-2xl bg-muted px-4 py-3 text-sm leading-relaxed">
           <p>

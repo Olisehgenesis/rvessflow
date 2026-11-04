@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { formatUnits, isAddress, parseUnits } from "viem";
 import { IconInfo } from "@/components/icons";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { TokenIcon } from "@/components/token-icon";
 import { useGoalName } from "@/components/goal-name";
 import { PayWith, ReceiveWith, type PayChoice } from "@/components/pay-with";
-import { parseGroupKey } from "@/lib/group-network";
+import { groupNetLabel, netFromLabel, parseGroupKey } from "@/lib/group-network";
 import { RecipientField } from "@/components/recipient-field";
 import { useSignedAction } from "@/components/sign-action";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { localFromUsd, priced, shortAddress, showsLocal, usdFromLocal } from "@/
 import { chainQuote, type Quote } from "@/lib/quote";
 import {
   addMoney,
+  freshPayChoices,
   createLock,
   createSaving,
   createStream,
@@ -35,6 +37,7 @@ import {
 } from "@/lib/actions";
 import type { Person } from "@/lib/protocol";
 import { DateField, addDays, dateProblem, formatDay, secondsUntilEnd, spanText, startOfDay, streamWindow } from "@/components/date-field";
+import { coverStatus, pickCover } from "@/lib/pay-cover";
 import { formatAmount, lockYieldWei, netSuperForUsd, parseUsd } from "@/lib/pay-math";
 
 const field = "h-12 rounded-2xl border-border bg-white px-4 text-base shadow-none";
@@ -422,17 +425,78 @@ export function GroupPay({
   choices: PayChoice[];
   quote?: Quote;
 }) {
+  const net = parseGroupKey(id).net;
+  const face = postFace(superWei);
+  const [live, setLive] = useState(choices);
   const [blocked, setBlocked] = useState(false);
+  const [gate, setGate] = useState(() => openingShort(choices, net, face));
   const [state, run, pending] = useSignedAction(doGroup);
+  useEffect(() => {
+    const gdxOnly = choices.every((choice) => choice.pay === "gdx");
+    const dollarOnly = choices.length > 0 && choices.every((choice) => choice.pay !== "gdx");
+    let stop = false;
+    async function tick() {
+      if (document.hidden) return;
+      const next = (await freshPayChoices()).filter((choice) => {
+        const onCelo = (choice.network ?? "").toLowerCase().includes("celo");
+        if (net === "celo" ? !onCelo : onCelo) return false;
+        if (gdxOnly && choice.pay !== "gdx") return false;
+        if (dollarOnly && choice.pay === "gdx") return false;
+        return true;
+      });
+      if (!stop && next.length) setLive(next);
+    }
+    const timer = window.setInterval(() => void tick(), 5000);
+    const onVis = () => {
+      if (!document.hidden) void tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+  const short = gate.short && !blocked;
   return (
     <form action={run} className="space-y-3">
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="fn" value={fn} />
-      <PayWith choices={choices} mode="wallet" fixedSuper={superWei} protocolOnTop quote={quote} stayOn={parseGroupKey(id).net} onBlocked={setBlocked} />
+      <PayWith choices={live} mode="wallet" fixedSuper={superWei} protocolOnTop quote={quote} stayOn={net} face={face} onBlocked={setBlocked} onShort={setGate}>
+        {short ? (
+          <div className="space-y-2">
+            {gate.note ? <p className="text-sm leading-relaxed text-[#6B7280]">{gate.note}</p> : null}
+            <Link href="/home/add/receive" className="flex h-12 w-full items-center justify-center rounded-full bg-[#E4E6EA] text-base font-medium text-[#6B7280]">
+              {gate.ask || "Deposit to this address"}
+            </Link>
+          </div>
+        ) : (
+          <Submit pending={pending} hold={blocked}>{label}</Submit>
+        )}
+      </PayWith>
       <ErrorNote error={state?.error} />
-      <Submit pending={pending} hold={blocked}>{label}</Submit>
     </form>
   );
+}
+
+function postFace(superWei: string) {
+  try {
+    const face = Number(formatUnits(BigInt(superWei), 18));
+    return Number.isFinite(face) && face > 0 ? face : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function openingShort(choices: PayChoice[], net: ReturnType<typeof parseGroupKey>["net"], face: number) {
+  const pool = choices.filter((choice) => netFromLabel(choice.network) === net);
+  return coverStatus({
+    choices: pool,
+    picked: pickCover(pool.length ? pool : choices, face),
+    lines: [],
+    face,
+    chainName: groupNetLabel(net),
+  });
 }
 
 function Field({ label, hint, ...props }: React.ComponentProps<typeof Input> & { label: string; hint?: string }) {

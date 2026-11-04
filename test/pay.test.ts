@@ -3,6 +3,7 @@ import { decodeFunctionData, parseAbi } from "viem";
 import test from "node:test";
 import { SLIPPAGE_BPS, SUPER_UNIT, baseMarket } from "@/lib/base-market";
 import { buildFundCalls, buildWithdrawCalls } from "@/lib/pay-build";
+import { coverStatus, holdingCovers, pickCover, tokenSpendGap } from "@/lib/pay-cover";
 import {
   formatPrice8,
   fundForNet,
@@ -216,6 +217,35 @@ test("withdrawing as ETH swaps the USDC and unwraps in the same router call", ()
   const unwrap = decodeFunctionData({ abi: routerAbi, data: outer.args[1][1] });
   assert.equal(unwrap.functionName, "unwrapWETH9");
   assert.equal(unwrap.args[1].toLowerCase(), payer);
+});
+
+test("a short cUSDx balance asks for the rest and a covering token is preferred", () => {
+  const short = { pay: "usdcx", label: "cUSDx", balance: "0.6", usd: "0.60", network: "Celo", id: "celo-usdcx" };
+  const enough = { pay: "usdt", label: "USDT", balance: "2.00", usd: "2.00", network: "Celo", id: "celo-usdt" };
+  assert.equal(holdingCovers(short, 1), false);
+  assert.equal(holdingCovers(enough, 1), true);
+  assert.equal(pickCover([short, enough], 1)?.id, "celo-usdt");
+  const gap = tokenSpendGap("0.6", "1.006 cUSDx");
+  assert.equal(gap?.short, true);
+  assert.match(gap?.ask ?? "", /^Add 0\.406 cUSDx$/);
+  const status = coverStatus({
+    choices: [short],
+    picked: short,
+    lines: [{ label: "You spend", value: "1.006 cUSDx" }],
+    face: 1,
+    chainName: "Celo",
+  });
+  assert.equal(status.short, true);
+  assert.match(status.note, /worth \$0\.60/);
+  assert.match(status.note, /Deposit the rest/);
+  const ready = coverStatus({
+    choices: [enough],
+    picked: enough,
+    lines: [{ label: "You spend at most", value: "1.01 USDT" }],
+    face: 1,
+    chainName: "Celo",
+  });
+  assert.equal(ready.short, false);
 });
 
 test("lock yield is principal times the per-token rate over the term", () => {

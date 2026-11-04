@@ -1256,6 +1256,16 @@ export async function previewPay(input: {
   }
 }
 
+export async function freshPayChoices() {
+  try {
+    const who = await viewer();
+    const { loadPayChoices } = await import("@/lib/holdings");
+    return await loadPayChoices(who.address);
+  } catch {
+    return [];
+  }
+}
+
 export async function watchWallet(): Promise<{ stamp?: string; error?: string }> {
   try {
     const who = await viewer();

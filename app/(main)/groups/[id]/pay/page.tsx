@@ -74,7 +74,7 @@ async function PayBody({ params }: { params: Promise<{ id: string }> }) {
         <>
           <Notice>This includes the 0.3% protocol fee. You get it back if the group is cancelled before it starts, or when it finishes.</Notice>
           <div className="mt-4">
-            <GroupPay id={group.id} fn="postCollateral" label={`Pay ${amountLabel}`} superWei={group.collateral} choices={payChoices} />
+            <GroupPay id={group.id} fn="postCollateral" label={`Post ${amountLabel}`} superWei={group.collateral} choices={payChoices} />
           </div>
         </>
       ) : null}
