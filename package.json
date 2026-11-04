@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@base-org/account": "^2.5.13",
-    "@dicebear/core": "^9.4.2",
+    "@dicebear/core": "^9.4.3",
     "@dicebear/personas": "^9.4.2",
     "@dotenvx/dotenvx": "^2.38.2",
     "@dotenvx/next-env": "^2.4.12",
