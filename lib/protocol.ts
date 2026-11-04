@@ -360,6 +360,10 @@ export type MemberRow = {
   posted: boolean;
   /** Paid the contribution for the cycle that is open now. */
   paidTurn: boolean;
+  /** Unix time of that payment. Zero when this turn is unpaid. */
+  paidAt: number;
+  /** Seconds after the cycle start before this member's window opens. */
+  offset: number;
   collateral: string;
   given: string;
   received: string;
@@ -1205,7 +1209,9 @@ async function readGroupRow(id: bigint, net: GroupNet): Promise<GroupRow> {
       name: personName(member[0]),
       phone: phonesLive && phoneRows[index]?.status === "success" ? quietName(phoneRows[index].result) : "",
       posted: member[3],
-      paidTurn: paidTurn[index] ?? false,
+      paidTurn: paidTurn[index]?.paid ?? false,
+      paidAt: paidTurn[index]?.paidAt ?? 0,
+      offset: Number(member[1]),
       collateral: member[2].toString(),
       given: member[5].toString(),
       received: member[6].toString(),
@@ -1233,7 +1239,7 @@ async function readPaidTurn(
   cycle: bigint,
   count: number,
   running: boolean,
-): Promise<boolean[]> {
+): Promise<{ paid: boolean; paidAt: number }[]> {
   if (!running || !count) return [];
   try {
     const rows = await site.client.multicall({
@@ -1245,7 +1251,11 @@ async function readPaidTurn(
       })),
       allowFailure: true as const,
     });
-    return rows.map((row) => row.status === "success" && paidStatus(Number(row.result[2])));
+    return rows.map((row) => {
+      if (row.status !== "success") return { paid: false, paidAt: 0 };
+      const paid = paidStatus(Number(row.result[2]));
+      return { paid, paidAt: paid ? Number(row.result[1]) : 0 };
+    });
   } catch {
     return [];
   }

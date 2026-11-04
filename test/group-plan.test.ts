@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DAY } from "@/lib/cycle";
-import { liveRotationPlan, rotationPlan, turnMoneyLine, weiTimes } from "@/lib/group-plan";
+import { liveRotationPlan, rotationPlan, turnMoneyLine, turnTimes, weiTimes } from "@/lib/group-plan";
 
 describe("group rotation plan", () => {
   it("shows what you post and what each turn receives", () => {
@@ -59,5 +59,22 @@ describe("group rotation plan", () => {
       turnMoneyLine({ each: "1.00 USD", pot: "3.00 USD", recipient: "Ada (you)", paid: 1, members: 3 }),
       "Each person pays 1.00 USD this turn. 1 of 3 has paid. The 3.00 USD goes to Ada (you).",
     );
+  });
+
+  it("reads the payment window from the group start", () => {
+    const start = 1_793_806_313;
+    const times = turnTimes({
+      startTime: start,
+      cycle: 0,
+      cycles: 1,
+      cycleSeconds: 7 * DAY,
+      windowSeconds: 2 * DAY,
+      graceSeconds: DAY,
+      offset: 0,
+    });
+    assert.equal(times.onTimeEnd, start + 2 * DAY);
+    assert.equal(times.payUntil, start + 3 * DAY);
+    assert.equal(times.turnEnds, start + 7 * DAY);
+    assert.equal(times.nextOpens, 0);
   });
 });

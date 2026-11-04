@@ -93,6 +93,25 @@ export function liveRotationPlan(input: {
   };
 }
 
+/** Windows taken from the group start, the cycle length, and each member's offset. */
+export function turnTimes(input: {
+  startTime: number;
+  cycle: number;
+  cycles: number;
+  cycleSeconds: number;
+  windowSeconds: number;
+  graceSeconds: number;
+  offset: number;
+}) {
+  const cycleStart = input.startTime + input.cycle * input.cycleSeconds;
+  const windowStart = cycleStart + input.offset;
+  const onTimeEnd = windowStart + input.windowSeconds;
+  const payUntil = onTimeEnd + input.graceSeconds;
+  const turnEnds = cycleStart + input.cycleSeconds;
+  const nextOpens = input.cycle + 1 < input.cycles ? input.startTime + (input.cycle + 1) * input.cycleSeconds + input.offset : 0;
+  return { windowStart, onTimeEnd, payUntil, turnEnds, nextOpens };
+}
+
 /** One sentence for a live turn: everyone pays, some already have, and one person receives the pot. */
 export function turnMoneyLine(input: { each: string; pot: string; recipient: string; paid: number; members: number }): string {
   const paid = `${input.paid} of ${input.members} ${input.paid === 1 ? "has" : "have"} paid`;

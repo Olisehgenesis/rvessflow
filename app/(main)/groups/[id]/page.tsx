@@ -3,11 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import Loading from "../../loading";
 import { GroupButton } from "@/components/forms";
+import { GroupWhen } from "@/components/group-when";
 import { GroupNav } from "@/components/group-bits";
 import { CollateralList, GroupHero, GroupRing, GroupSection, GroupStatGrid, MemberCard, groupMark } from "@/components/groups-ui";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
-import { liveRotationPlan, turnMoneyLine, weiTimes } from "@/lib/group-plan";
+import { liveRotationPlan, turnMoneyLine, turnTimes, weiTimes } from "@/lib/group-plan";
 import { groupNetLabel, parseGroupKey } from "@/lib/group-network";
 import { GroupMoney } from "@/components/token-icon";
 import { labeledGroup } from "@/lib/group-token";
@@ -115,7 +116,21 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
                     : collateralLine}
                 </p>
                 {group.started && youPaid ? <p className="mt-1 text-sm font-medium text-[#141414]">You paid your {payEach}.</p> : null}
-                {group.started ? <p className="mt-2 text-xs text-[#5C6572]">Each turn lasts {spanLabel(group.cycleSeconds)}. Dates are not guessed.</p> : null}
+                {group.started && me ? (
+                  <GroupWhen
+                    paidAt={me.paidAt}
+                    youReceive={Boolean(recipient && me.account && plan.turns[current]?.name.endsWith("(you)"))}
+                    {...turnTimes({
+                      startTime: group.startTime,
+                      cycle: current,
+                      cycles: group.cycles,
+                      cycleSeconds: group.cycleSeconds,
+                      windowSeconds: group.windowSeconds,
+                      graceSeconds: group.graceSeconds,
+                      offset: me.offset,
+                    })}
+                  />
+                ) : null}
               </div>
             </div>
           </GroupSection>
