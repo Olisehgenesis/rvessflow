@@ -7,7 +7,7 @@ import { GroupNav } from "@/components/group-bits";
 import { CollateralList, GroupHero, GroupRing, GroupSection, GroupStatGrid, MemberCard, groupMark } from "@/components/groups-ui";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
-import { liveRotationPlan, weiTimes } from "@/lib/group-plan";
+import { liveRotationPlan, turnMoneyLine, weiTimes } from "@/lib/group-plan";
 import { groupNetLabel, parseGroupKey } from "@/lib/group-network";
 import { GroupMoney } from "@/components/token-icon";
 import { labeledGroup } from "@/lib/group-token";
@@ -48,11 +48,14 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
       you: member.account.toLowerCase() === data.me.address.toLowerCase(),
     })),
   });
+  const youPaid = Boolean(me?.paidTurn);
+  const paidCount = group.members.filter((member) => member.paidTurn).length;
+  const payEach = labeledGroup(group.contribution, group.token);
   const payLabel =
     !group.started && !group.cancelled && me && !me.posted
       ? `Post ${labeledGroup(group.collateral, group.token)}`
-      : group.started && group.cycleOpen
-        ? `Pay ${labeledGroup(group.contribution, group.token)}`
+      : group.started && group.cycleOpen && me && !youPaid
+        ? `Pay ${payEach}`
         : "";
   const recipient = plan.turns[current];
   const posted = group.members.filter((member) => member.posted).length;
@@ -102,11 +105,16 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-[#5C6572]">
                   {group.started
-                    ? recipient
-                      ? `This turn goes to ${recipient.name}. Pot ${labeledGroup(weiTimes(group.contribution, group.members.length), group.token)}.`
-                      : `Cycle ${turn}.`
+                    ? turnMoneyLine({
+                        each: payEach,
+                        pot: labeledGroup(weiTimes(group.contribution, group.members.length), group.token),
+                        recipient: recipient?.name ?? "this turn",
+                        paid: paidCount,
+                        members: group.members.length,
+                      })
                     : collateralLine}
                 </p>
+                {group.started && youPaid ? <p className="mt-1 text-sm font-medium text-[#141414]">You paid your {payEach}.</p> : null}
                 {group.started ? <p className="mt-2 text-xs text-[#5C6572]">Each turn lasts {spanLabel(group.cycleSeconds)}. Dates are not guessed.</p> : null}
               </div>
             </div>
@@ -143,7 +151,7 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
                   address={member.account}
                   you={member.account.toLowerCase() === data.me.address.toLowerCase()}
                   role={member.account.toLowerCase() === group.creator.toLowerCase() ? "Organizer" : "Member"}
-                  status={member.posted ? "Posted" : "Not yet"}
+                  status={group.started ? (member.paidTurn ? `Paid ${payEach}` : `Owes ${payEach}`) : member.posted ? "Posted" : "Not yet"}
                 />
               ))}
             </div>
@@ -159,6 +167,7 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
             </ul>
           </GroupSection>
           <div className="sticky bottom-20 z-10 space-y-3 rounded-[1.4rem] border border-[#E6EADF] bg-white p-4 lg:static lg:bottom-auto">
+            {group.started && youPaid ? <p className="text-sm leading-relaxed text-[#5C6572]">You paid your {payEach} this turn. The others still pay theirs.</p> : null}
             {payLabel ? (
               <Link href={`${base}/pay`} className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[#D6F34A] text-sm font-semibold text-[#141414]">
                 {payLabel}

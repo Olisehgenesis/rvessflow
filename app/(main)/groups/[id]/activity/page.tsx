@@ -35,6 +35,7 @@ async function ActivityBody({ params }: { params: Promise<{ id: string }> }) {
           <li key={member.account} className="py-3">
             <p className="font-medium">{member.name}</p>
             <p className="mt-1 text-xs text-muted-foreground">
+              {group.started && member.paidTurn ? `Paid ${labeledGroup(group.contribution, group.token)} this turn · ` : group.started ? `Has not paid ${labeledGroup(group.contribution, group.token)} this turn · ` : ""}
               {member.posted ? `${labeledGroup(group.collateral, group.token)} posted` : `Needs to post ${labeledGroup(group.collateral, group.token)}`}
               {` · Given ${labeledGroup(member.given, group.token)} · Received ${labeledGroup(member.received, group.token)}`}
               {member.missed ? ` · Missed ${member.missed}` : ""}

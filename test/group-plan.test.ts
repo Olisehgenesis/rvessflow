@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DAY } from "@/lib/cycle";
-import { liveRotationPlan, rotationPlan, weiTimes } from "@/lib/group-plan";
+import { liveRotationPlan, rotationPlan, turnMoneyLine, weiTimes } from "@/lib/group-plan";
 
 describe("group rotation plan", () => {
   it("shows what you post and what each turn receives", () => {
@@ -52,5 +52,12 @@ describe("group rotation plan", () => {
     });
     assert.equal(plan.youPost, "1.00 USD");
     assert.equal(plan.eachTurn, "3.00 USD");
+  });
+
+  it("says who has paid this turn and who receives the pot", () => {
+    assert.equal(
+      turnMoneyLine({ each: "1.00 USD", pot: "3.00 USD", recipient: "Ada (you)", paid: 1, members: 3 }),
+      "Each person pays 1.00 USD this turn. 1 of 3 has paid. The 3.00 USD goes to Ada (you).",
+    );
   });
 });

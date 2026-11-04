@@ -45,7 +45,15 @@ async function MembersBody({ params }: { params: Promise<{ id: string }> }) {
                 address={member.account}
                 you={you}
                 role={`Turn ${place + 1}`}
-                status={member.posted ? `${labeledGroup(group.collateral, group.token)} posted` : "Needs collateral"}
+                status={
+                  group.started
+                    ? member.paidTurn
+                      ? `Paid ${labeledGroup(group.contribution, group.token)} this turn`
+                      : `Owes ${labeledGroup(group.contribution, group.token)} this turn`
+                    : member.posted
+                      ? `${labeledGroup(group.collateral, group.token)} posted`
+                      : "Needs collateral"
+                }
               />
               {canMove ? (
                 <div className="mt-2">

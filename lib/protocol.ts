@@ -358,6 +358,8 @@ export type MemberRow = {
   name: string;
   phone: string;
   posted: boolean;
+  /** Paid the contribution for the cycle that is open now. */
+  paidTurn: boolean;
   collateral: string;
   given: string;
   received: string;
@@ -1166,6 +1168,8 @@ async function readGroupRow(id: bigint, net: GroupNet): Promise<GroupRow> {
         })
       : Promise.resolve(null),
   ]);
+  const cycleIndex = current?.[0] ?? 0n;
+  const paidTurn = await readPaidTurn(site, id, cycleIndex, members.length, running);
   const phoneRows = count
     ? await site.client.multicall({
         contracts: members.map((member) => ({
@@ -1201,6 +1205,7 @@ async function readGroupRow(id: bigint, net: GroupNet): Promise<GroupRow> {
       name: personName(member[0]),
       phone: phonesLive && phoneRows[index]?.status === "success" ? quietName(phoneRows[index].result) : "",
       posted: member[3],
+      paidTurn: paidTurn[index] ?? false,
       collateral: member[2].toString(),
       given: member[5].toString(),
       received: member[6].toString(),
@@ -1211,6 +1216,39 @@ async function readGroupRow(id: bigint, net: GroupNet): Promise<GroupRow> {
     canArrange: seating.known,
     canPhone: phonesLive,
   };
+}
+
+const paymentAbi = parseAbi([
+  "function payments(uint256 id, uint256 cycle, uint256 index) view returns (uint128 amount, uint64 paidAt, uint8 status)",
+]);
+
+/** On time, late, or repaid. A slash is not a payment. */
+function paidStatus(status: number) {
+  return status === 1 || status === 2 || status === 4;
+}
+
+async function readPaidTurn(
+  site: ReturnType<typeof groupSite>,
+  id: bigint,
+  cycle: bigint,
+  count: number,
+  running: boolean,
+): Promise<boolean[]> {
+  if (!running || !count) return [];
+  try {
+    const rows = await site.client.multicall({
+      contracts: Array.from({ length: count }, (_, index) => ({
+        address: site.groups,
+        abi: paymentAbi,
+        functionName: "payments" as const,
+        args: [id, cycle, BigInt(index)] as const,
+      })),
+      allowFailure: true as const,
+    });
+    return rows.map((row) => row.status === "success" && paidStatus(Number(row.result[2])));
+  } catch {
+    return [];
+  }
 }
 
 async function readPayout(id: bigint, count: number, net: GroupNet = appGroupNet()): Promise<{ order: number[]; known: boolean }> {

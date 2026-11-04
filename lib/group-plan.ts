@@ -93,6 +93,12 @@ export function liveRotationPlan(input: {
   };
 }
 
+/** One sentence for a live turn: everyone pays, some already have, and one person receives the pot. */
+export function turnMoneyLine(input: { each: string; pot: string; recipient: string; paid: number; members: number }): string {
+  const paid = `${input.paid} of ${input.members} ${input.paid === 1 ? "has" : "have"} paid`;
+  return `Each person pays ${input.each} this turn. ${paid}. The ${input.pot} goes to ${input.recipient}.`;
+}
+
 export function draftCycleSeconds(cycle: string, days: string): number {
   return cyclePlan(cycle, Number(days))?.cycle ?? 0;
 }

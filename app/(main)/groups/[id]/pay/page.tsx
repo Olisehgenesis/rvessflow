@@ -27,7 +27,8 @@ async function PayBody({ params }: { params: Promise<{ id: string }> }) {
   if (!group) notFound();
   const me = group.members.find((member) => member.account.toLowerCase() === data.me.address.toLowerCase());
   const posting = !group.started && !group.cancelled && me && !me.posted;
-  const cycle = group.started && group.cycleOpen;
+  const youPaid = Boolean(me?.paidTurn);
+  const cycle = group.started && group.cycleOpen && !youPaid;
   const gdx = groupTokenKindFromAddress(group.token) === "gdx";
   const net = parseGroupKey(group.id).net;
   const payChoices = choices.filter((choice) => {
@@ -55,7 +56,9 @@ async function PayBody({ params }: { params: Promise<{ id: string }> }) {
         body={
           posting
             ? `You post ${plan.youPost}. Each of the other members posts the same. This stays with the group until it finishes or is cancelled.`
-            : `Cycle ${Number(group.cycle) + 1} of ${group.cycles}.`
+            : youPaid
+              ? `You already paid ${labeledGroup(group.contribution, group.token)} this turn.`
+              : `Cycle ${Number(group.cycle) + 1} of ${group.cycles}. Each person pays ${labeledGroup(group.contribution, group.token)}. The pot goes to whoever holds this turn.`
         }
       />
       <p className="mb-4 font-display text-4xl font-semibold tracking-tight">{amountLabel}</p>
@@ -79,7 +82,7 @@ async function PayBody({ params }: { params: Promise<{ id: string }> }) {
         </>
       ) : null}
       {cycle ? <GroupPay id={group.id} fn="contribute" label={`Pay ${labeledGroup(group.contribution, group.token)}`} superWei={group.contribution} choices={payChoices} /> : null}
-      {!posting && !cycle ? <p className="text-sm text-muted-foreground">There is nothing to pay on this group right now.</p> : null}
+      {!posting && !cycle && !(group.started && youPaid) ? <p className="text-sm text-muted-foreground">There is nothing to pay on this group right now.</p> : null}
     </Page>
   );
 }
