@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { getAddress, isAddress, type Address } from "viem";
 import { cyclePlan, readCycles, spanLabel } from "@/lib/cycle";
+import { assignNameCode, chosenName } from "@/lib/display";
 import { asGroupToken, draftAmount, groupTerms, type GroupTokenKind } from "@/lib/group-token";
 import { appGroupNet, groupNetLabel, isGroupNet, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
 import { plainGroupWaits } from "@/lib/group-upgrade";
@@ -382,6 +383,88 @@ function named(data: World, address: Address) {
   return personName(address);
 }
 
+/** The name already saved for this wallet, when it is a real name. */
+export async function savedDisplayName(address: Address): Promise<string | null> {
+  const key = getAddress(address).toLowerCase();
+  try {
+    await ensureSchema();
+    const found = await rows<{ name: string }>(
+      sql`SELECT name FROM app.profiles WHERE lower(address) = ${key}
+          UNION ALL
+          SELECT name FROM demo.profiles WHERE lower(address) = ${key}`,
+    );
+    for (const row of found) {
+      const name = chosenName(row.name);
+      if (name) return name;
+    }
+  } catch {
+    return null;
+  }
+  try {
+    const applied = await rows<{ name: string }>(
+      sql`SELECT name FROM app.applications WHERE lower(address) = ${key}
+          UNION ALL
+          SELECT name FROM demo.applications WHERE lower(address) = ${key}`,
+    );
+    for (const row of applied) {
+      const name = chosenName(row.name);
+      if (name) return name;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** Names already used by someone else. */
+export async function takenDisplayNames(address: Address): Promise<string[]> {
+  try {
+    await ensureSchema();
+    const key = getAddress(address).toLowerCase();
+    const found = await rows<{ name: string }>(
+      sql`SELECT name FROM app.profiles WHERE lower(address) <> ${key}
+          UNION ALL
+          SELECT name FROM demo.profiles WHERE lower(address) <> ${key}`,
+    );
+    return found.flatMap((row) => {
+      const name = chosenName(row.name);
+      return name ? [name] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** The name to store. A name someone else already uses gets the next number. */
+export async function codedDisplayName(address: Address, raw: string): Promise<string | null> {
+  const wanted = chosenName(raw);
+  if (!wanted) return null;
+  return assignNameCode(wanted, await takenDisplayNames(address));
+}
+
+/** Keeps a chosen name on the profile so the next sign-in does not ask again. */
+export async function keepDisplayName(address: Address, raw: string): Promise<void> {
+  const wanted = chosenName(raw);
+  if (!wanted) return;
+  const current = await savedDisplayName(address);
+  const name = current?.toLowerCase() === wanted.toLowerCase() ? current : ((await codedDisplayName(address, wanted)) ?? wanted);
+  try {
+    await ensureSchema();
+    const checksum = getAddress(address);
+    const key = checksum.toLowerCase();
+    const profiles = sql.raw(`${bucketFor(checksum)}.profiles`);
+    const existing = await rows<{ name: string }>(sql`SELECT name FROM ${profiles} WHERE lower(address) = ${key} LIMIT 1`);
+    if (existing.length) {
+      if (chosenName(existing[0].name) === name) return;
+      await rows(sql`UPDATE ${profiles} SET name = ${name} WHERE lower(address) = ${key}`);
+      return;
+    }
+    await rows(sql`INSERT INTO ${profiles} (address, name, email, password) VALUES (${checksum}, ${name}, '', '')`);
+  } catch {
+    return;
+  }
+}
+
 function primaryPhone(data: World, address: string) {
   const home = profileFor(data[bucketFor(address)], address)?.phones[0];
   if (home) return home;
@@ -392,10 +475,14 @@ function primaryPhone(data: World, address: string) {
   return "";
 }
 
+function shownName(current: string, incoming: string): string {
+  return chosenName(incoming) ?? chosenName(current) ?? current;
+}
+
 function ensureProfile(store: Store, who: Viewer): Profile {
   const found = profileFor(store, who.address);
   if (found) {
-    found.name = who.name;
+    found.name = shownName(found.name, who.name);
     found.address = who.address;
     return found;
   }
@@ -709,7 +796,7 @@ export async function dropPhone(raw: string) {
   const profile = profileFor(data[bucket], who.address);
   if (!profile) return;
   profile.phones = profile.phones.filter((item) => item !== digits);
-  profile.name = who.name;
+  profile.name = shownName(profile.name, who.name);
   await writeBucket(bucket, data[bucket]);
 }
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useFlowClock } from "@/components/flowing";
 import { IconChevron, IconEye, IconEyeOff } from "@/components/icons";
 import { RetryButton } from "@/components/retry-button";
-import { homeBalancePlaces, liveHomeColumns } from "@/lib/home-math";
+import { liveHomeColumns, mainBalancePlaces } from "@/lib/home-math";
 import type { Quote } from "@/lib/quote";
 import { TopUpSheet, WithdrawSheet, type SavingBox } from "@/components/withdraw-sheet";
 
@@ -142,18 +142,17 @@ export function HomeBalance({
         locked: BigInt(lockedUsd8),
         total: BigInt(availableUsd8) + BigInt(streamingUsd8) + BigInt(lockedUsd8),
       };
-  const places = homeBalancePlaces(ticking || live.streaming > 0n);
-  const shownTotal = formatUsdPlaces(live.total, places);
-  const shownAvailable = formatUsdPlaces(live.available, places);
-  const shownStreaming = formatUsdPlaces(live.streaming, places);
-  const shownLocked = formatUsdPlaces(live.locked, places);
+  const shownTotal = formatUsdPlaces(live.total);
+  const shownAvailable = formatUsdPlaces(live.available);
+  const shownStreaming = formatUsdPlaces(live.streaming);
+  const shownLocked = formatUsdPlaces(live.locked);
   const price = BigInt(pulse?.usdcUsd8 ?? usdcUsd8);
   const localQuote = pulse?.quote ?? quote;
   const preferLocal = Boolean(localUnit && localQuote);
-  const shownLocal = preferLocal && localQuote ? formatLocal(live.total, localQuote, price, places) : totalLocal;
-  const availableLocal = preferLocal && localQuote ? formatLocal(live.available, localQuote, price, places) : "";
-  const streamingLocal = preferLocal && localQuote ? formatLocal(live.streaming, localQuote, price, places) : "";
-  const lockedLocal = preferLocal && localQuote ? formatLocal(live.locked, localQuote, price, places) : "";
+  const shownLocal = preferLocal && localQuote ? formatLocal(live.total, localQuote, price) : totalLocal;
+  const availableLocal = preferLocal && localQuote ? formatLocal(live.available, localQuote, price) : "";
+  const streamingLocal = preferLocal && localQuote ? formatLocal(live.streaming, localQuote, price) : "";
+  const lockedLocal = preferLocal && localQuote ? formatLocal(live.locked, localQuote, price) : "";
   const figure = (prefix: string, value: string) => {
     const lead = prefix === "$" ? "$" : `${prefix} `;
     if (conceal) return hidden;
@@ -257,27 +256,28 @@ export function HomeBalance({
   );
 }
 
-function formatUsdPlaces(usd8: bigint, places: number): string {
+function formatUsdPlaces(usd8: bigint): string {
   const negative = usd8 < 0n;
   const abs = negative ? -usd8 : usd8;
   const scale = 100_000_000n;
   const whole = abs / scale;
+  const places = mainBalancePlaces(whole);
   const grouped = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  if (places <= 0) return `${negative ? "-" : ""}${grouped}`;
   const frac = ((abs % scale) * 10n ** BigInt(places)) / scale;
   return `${negative ? "-" : ""}${grouped}.${frac.toString().padStart(places, "0")}`;
 }
 
-function formatLocal(usd8: bigint, quote: Quote, usdcUsd8: bigint, places: number): string {
+function formatLocal(usd8: bigint, quote: Quote, usdcUsd8: bigint): string {
   if (quote.code === "usd" || quote.code === "fusdcx" || !(quote.perToken > 0) || usdcUsd8 <= 0n) return "";
   const per = BigInt(Math.round(quote.perToken * 1_000_000));
   if (per <= 0n) return "";
-  const scale = 10n ** BigInt(Math.max(places, 0));
   const den = usdcUsd8 * 1_000_000n;
+  const whole = (usd8 * per) / den;
+  const places = mainBalancePlaces(whole);
+  const scale = 10n ** BigInt(places);
   const scaled = (usd8 * per * scale + den / 2n) / den;
-  const whole = scaled / scale;
-  const grouped = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  if (places <= 0) return grouped;
+  const shownWhole = scaled / scale;
+  const grouped = shownWhole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   const frac = (scaled % scale).toString().padStart(places, "0");
   return `${grouped}.${frac}`;
 }

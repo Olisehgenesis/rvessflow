@@ -92,6 +92,12 @@ export function parseUsd(value: string): bigint {
  * Super tokens equal to `usdMicros` of value at a Chainlink USDC/USD price (8 decimals).
  * 1 USDCx tracks 1 USDC, so a price above or below $1 changes how many tokens $1 buys.
  */
+/** Super-token wei streamed over `seconds`. `perSecond` is wei per second for each 1e18 of principal. */
+export function lockYieldWei(principal: bigint, perSecond: bigint, seconds: number): bigint {
+  if (principal <= 0n || perSecond <= 0n || seconds <= 0) return 0n;
+  return (principal * perSecond * BigInt(seconds)) / 10n ** 18n;
+}
+
 export function netSuperForUsd(usdMicros: bigint, usdcUsd8: bigint): bigint {
   if (usdcUsd8 <= 0n) throw new Error("The USDC price is not available.");
   const usdc = ceilDiv(usdMicros * 100_000_000n, usdcUsd8);

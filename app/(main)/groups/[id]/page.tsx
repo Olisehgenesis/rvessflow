@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import Loading from "../../loading";
 import { GroupButton } from "@/components/forms";
 import { GroupNav } from "@/components/group-bits";
-import { GroupHero, GroupRing, GroupSection, GroupStatGrid, MemberCard, groupMark } from "@/components/groups-ui";
+import { CollateralList, GroupHero, GroupRing, GroupSection, GroupStatGrid, MemberCard, groupMark } from "@/components/groups-ui";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
 import { liveRotationPlan, weiTimes } from "@/lib/group-plan";
@@ -56,6 +56,22 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
         : "";
   const recipient = plan.turns[current];
   const posted = group.members.filter((member) => member.posted).length;
+  const stillNeed = group.members.length - posted;
+  const youPosted = Boolean(me?.posted);
+  const collateralLine = !me
+    ? `${posted} of ${group.members.length} posted collateral.`
+    : youPosted && stillNeed === 0
+      ? "Everyone has posted. The organizer can start the rotation."
+      : youPosted
+        ? `You posted. ${stillNeed === 1 ? "1 person still needs to." : `${stillNeed} people still need to.`}`
+        : `You have not posted yet. ${posted} of ${group.members.length} have.`;
+  const collateralOrder = [...group.members].sort((a, b) => {
+    if (a.posted !== b.posted) return a.posted ? 1 : -1;
+    const youA = a.account.toLowerCase() === data.me.address.toLowerCase();
+    const youB = b.account.toLowerCase() === data.me.address.toLowerCase();
+    if (youA !== youB) return youA ? -1 : 1;
+    return 0;
+  });
   const ringValue = group.started ? turn : posted;
   const ringMax = group.started ? group.cycles : group.members.length;
   const ringCaption = group.started ? `${turn}/${group.cycles}` : `${posted}/${group.members.length}`;
@@ -89,12 +105,27 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
                     ? recipient
                       ? `This turn goes to ${recipient.name}. Pot ${labeledGroup(weiTimes(group.contribution, group.members.length), group.token)}.`
                       : `Cycle ${turn}.`
-                    : `${posted} of ${group.members.length} posted collateral.`}
+                    : collateralLine}
                 </p>
                 {group.started ? <p className="mt-2 text-xs text-[#5C6572]">Each turn lasts {spanLabel(group.cycleSeconds)}. Dates are not guessed.</p> : null}
               </div>
             </div>
           </GroupSection>
+          {!group.started && !group.cancelled ? (
+            <GroupSection title="Who has posted">
+              <p className="mb-3 flex flex-wrap items-center gap-1.5 text-sm text-[#5C6572]">
+                Each person posts <GroupMoney wei={group.collateral} token={group.token} /> before the rotation can start.
+              </p>
+              <CollateralList
+                items={collateralOrder.map((member) => ({
+                  id: member.account,
+                  name: member.name,
+                  done: member.posted,
+                  you: member.account.toLowerCase() === data.me.address.toLowerCase(),
+                }))}
+              />
+            </GroupSection>
+          ) : null}
           <GroupStatGrid
             items={[
               { label: "Total contribution", value: <GroupMoney wei={weiTimes(group.contribution, group.members.length)} token={group.token} /> },
@@ -112,7 +143,7 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
                   address={member.account}
                   you={member.account.toLowerCase() === data.me.address.toLowerCase()}
                   role={member.account.toLowerCase() === group.creator.toLowerCase() ? "Organizer" : "Member"}
-                  status={member.posted ? "Posted" : "Pending"}
+                  status={member.posted ? "Posted" : "Not yet"}
                 />
               ))}
             </div>

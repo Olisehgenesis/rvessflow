@@ -206,7 +206,7 @@ async function HomeReady({
               <section>
                 <div className="mb-2 flex items-end justify-between">
                   <h2 className="text-base font-semibold">Goals and streams</h2>
-                  <Link href="/goals" className="text-sm font-medium text-[#5C6572]">
+                  <Link href="/home/plans" className="text-sm font-medium text-[#5C6572]">
                     View all
                   </Link>
                 </div>
@@ -315,7 +315,7 @@ async function HomeReady({
         <section className="mt-6">
           <div className="mb-2 flex items-end justify-between">
             <h2 className="text-base font-semibold">Goals and streams</h2>
-            <Link href="/goals" className="text-sm font-medium text-muted-foreground">
+            <Link href="/home/plans" className="text-sm font-medium text-muted-foreground">
               View all
             </Link>
           </div>

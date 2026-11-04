@@ -45,7 +45,7 @@ async function WithdrawBody() {
       <section className="mt-8">
         <h2 className="text-sm font-semibold">From a saving</h2>
         <div className="mt-3">
-          <WithdrawForm idleUsd={holdings.idleUsd} />
+          <WithdrawForm idleUsd={holdings.idleUsd} quote={quote} />
         </div>
       </section>
     </main>

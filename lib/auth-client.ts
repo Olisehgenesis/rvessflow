@@ -7,13 +7,12 @@ import { recoverPasskey } from "@/lib/passkey-recover";
 import type { PasskeyProof } from "@/lib/passkey-proof";
 import { samePasskeyId } from "@/lib/passkey-proof";
 import { readPasskeys, savePasskey, type SavedPasskey } from "@/lib/passkey-vault";
-import { appChain, appNetwork, appRpc, walletNetwork } from "@/lib/network";
-import { clearInjectedConnection, peekInjectedConnection, showInjectedWallets, takeInjectedConnection } from "@/lib/wallet-injected";
+import { appChain, appRpc, walletNetwork } from "@/lib/network";
+import { clearInjectedConnection, restoreInjected } from "@/lib/wallet-injected";
+import { pickWallet } from "@/lib/wallet-picker";
 
 export const walletConnectProjectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "fb48461bfb6043c40729e05706109f1a";
-
-const baseWalletId = "fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa";
 
 type EthereumProvider = Awaited<ReturnType<(typeof import("@walletconnect/ethereum-provider"))["default"]["init"]>>;
 type WalletConnection = {
@@ -21,6 +20,7 @@ type WalletConnection = {
   connect?: () => Promise<unknown>;
   connected?: boolean;
   accounts?: readonly string[];
+  session?: unknown;
 };
 
 let providerPromise: Promise<EthereumProvider> | null = null;
@@ -39,29 +39,10 @@ function walletConnectProvider(): Promise<WalletConnection> {
   providerPromise ??= (async () => {
     const chain = appChain();
     const { default: EthereumProvider } = await import("@walletconnect/ethereum-provider");
-    const baseWallets = appNetwork() === "celo"
-      ? {}
-      : {
-          explorerRecommendedWalletIds: [baseWalletId],
-          mobileWallets: [
-            {
-              id: "rvess-base",
-              name: "Base",
-              links: { native: "cbwallet://wc", universal: "https://go.cb-w.com/wc" },
-            },
-          ],
-          desktopWallets: [
-            {
-              id: "rvess-base",
-              name: "Base",
-              links: { native: "cbwallet://wc", universal: "https://go.cb-w.com/wc" },
-            },
-          ],
-        };
     return EthereumProvider.init({
       projectId: walletConnectProjectId,
       chains: [chain.id],
-      showQrModal: true,
+      showQrModal: false,
       metadata: {
         name: "Rvess",
         description: "Money moving, on your terms.",
@@ -69,15 +50,32 @@ function walletConnectProvider(): Promise<WalletConnection> {
         icons: [`${window.location.origin}/icon-512.png`],
       },
       rpcMap: { [chain.id]: appRpc() },
-      qrModalOptions: {
-        themeMode: "light",
-        enableExplorer: true,
-        enableMobileFullScreen: true,
-        ...baseWallets,
-      },
     });
   })();
   return providerPromise as Promise<WalletConnection>;
+}
+
+export async function hasWalletConnectSession() {
+  const provider = await walletConnectProvider();
+  return Boolean(provider.session);
+}
+
+export async function pairWalletConnect(onUri: (uri: string) => void, signal?: AbortSignal): Promise<WalletConnection> {
+  const provider = (await walletConnectProvider()) as EthereumProvider;
+  if (provider.session) return provider as WalletConnection;
+  const show = (uri: string) => onUri(uri);
+  provider.on("display_uri", show);
+  const abort = () => {
+    void provider.disconnect().catch(() => undefined);
+  };
+  signal?.addEventListener("abort", abort, { once: true });
+  try {
+    await provider.connect();
+    return provider as WalletConnection;
+  } finally {
+    signal?.removeEventListener("abort", abort);
+    provider.removeListener("display_uri", show);
+  }
 }
 
 function loadPasskeyLibs(): Promise<PasskeyLibs> {
@@ -111,6 +109,49 @@ export function walletProvider(): Promise<WalletConnection> {
     chosen = provider;
     return provider;
   });
+}
+
+function sessionAccounts(provider: WalletConnection): string[] {
+  const session = provider.session as { namespaces?: Record<string, { accounts?: string[] }> } | undefined;
+  if (!session?.namespaces) return [];
+  return Object.values(session.namespaces).flatMap((item) =>
+    (item.accounts ?? []).map((id) => {
+      const parts = id.split(":");
+      return parts[2] || parts[parts.length - 1] || "";
+    }),
+  );
+}
+
+async function accountsOf(provider: WalletConnection): Promise<string[]> {
+  if (provider.accounts?.length) return [...provider.accounts];
+  const fromSession = sessionAccounts(provider).filter(Boolean);
+  if (fromSession.length) return fromSession;
+  const listed = await provider.request({ method: "eth_accounts" }).catch(() => []);
+  return Array.isArray(listed) ? listed.map(String) : [];
+}
+
+async function matchesWallet(provider: WalletConnection, address: string): Promise<boolean> {
+  const want = address.toLowerCase();
+  return (await accountsOf(provider)).some((item) => item.toLowerCase() === want);
+}
+
+/**
+ * Signs with the wallet already on this account. Does not open WalletConnect
+ * when a session or an authorized injected wallet is still there.
+ */
+export async function readyWallet(address: string): Promise<WalletConnection> {
+  if (chosen && (await matchesWallet(chosen, address))) return chosen;
+  const injected = await restoreInjected(address);
+  if (injected && (await matchesWallet(injected, address))) {
+    rememberConnection(injected, address);
+    return injected;
+  }
+  const provider = await walletConnectProvider();
+  if (provider.session && (await matchesWallet(provider, address))) {
+    rememberConnection(provider, address);
+    return provider;
+  }
+  throw new Error("Reconnect the wallet for this account.");
 }
 
 export function createPasskeyWallet(label: string): Promise<{ address: string; label: string }> {
@@ -268,16 +309,9 @@ export function requestCeloWalletAccount(): Promise<string> {
 
 async function connectWalletConnect(network: "base" | "celo"): Promise<string> {
   if (!walletConnectProjectId) throw new Error("WalletConnect is not configured.");
-  const provider = await walletConnectProvider();
   clearInjectedConnection();
-  const modal = (provider as { modal?: { close: () => void } }).modal;
-  await showInjectedWallets(modal);
-  try {
-    if (!provider.connected) await provider.connect?.();
-  } catch (error) {
-    if (!peekInjectedConnection()) throw error;
-  }
-  const active: WalletConnection = takeInjectedConnection() ?? provider;
+  const picked = await pickWallet(network);
+  const active: WalletConnection = picked.kind === "injected" ? picked.provider : await walletConnectProvider();
   if (network === "base") await joinBase(active);
   const address = active.accounts?.[0];
   if (address && isAddress(address)) return rememberConnection(active, address);

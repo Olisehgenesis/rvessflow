@@ -99,6 +99,7 @@ async function balanceOf(site: VaultSite, owner: Address, token: Address) {
 }
 
 async function sizedAmount(pay: PayAsset | undefined, amount: string): Promise<bigint> {
+  if (pay === "gdx") return parseAmount(amount);
   return pay ? superForUsd(amount, pay) : parseAmount(amount);
 }
 
@@ -363,6 +364,15 @@ async function planLock(owner: Address, intent: Extract<Intent, { kind: "lock" }
   if (intent.submitted) return pending(intent);
   const amount = await sizedAmount(pay, intent.amount);
   if (amount > BigInt("0xffffffffffffffffffffffffffffffff")) throw new Error("That amount is too large for a lock.");
+  if (intent.earnYield) {
+    const rate = await site.client.readContract({
+      address: site.locks,
+      abi: lockAbi,
+      functionName: "yieldPerTokenPerSecond",
+      args: [token],
+    });
+    if (rate === 0n) throw new Error("Earn yield isn't funded for this token yet. Leave it off and create the lock.");
+  }
   const calls: PreparedCall[] = [];
   const due = withProtocolFee(amount);
   if (pay) await coverWallet(calls, site, owner, pay, due);

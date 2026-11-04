@@ -135,7 +135,7 @@ async function GoalBody({
       {flow.settled ? null : (
       <div className="lg:rounded-3xl lg:border lg:border-[#E6EADF] lg:bg-white lg:p-6 lg:shadow-[0_1px_0_rgba(20,20,20,0.04)]">
         <div className="mt-5 space-y-3 lg:mt-0">
-          {saving ? <AddToGoal id={flow.id} choices={choices} /> : null}
+          {saving ? <AddToGoal id={flow.id} choices={choices} quote={quote} /> : null}
           {saving ? (
             appPaused ? (
               <NamedAction id={flow.id} fn="resume" action={doVault} label="Resume goal" />

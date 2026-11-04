@@ -87,3 +87,30 @@ export async function PlanList({
     </Page>
   );
 }
+
+export async function OpenPlans() {
+  const who = await viewer();
+  const [data, quote, notes, priced] = await Promise.all([
+    loadPortfolio(who),
+    loadQuote(),
+    goalNotes(who.address),
+    loadPrices(),
+  ]);
+  const prices = { usdcUsd8: priced.usdcUsd8, ethUsd8: priced.ethUsd8, gdxUsd8: priced.gdxUsd8 };
+  const flows = data.flows.filter((flow) => !flow.settled);
+  return (
+    <Page bleed title="Goals and streams" back="/home">
+      {flows.length === 0 ? (
+        <p className="rounded-2xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground">Nothing open yet. A saving or a stream shows up here.</p>
+      ) : (
+        <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
+          {flows.map((flow) => (
+            <li key={flow.id}>
+              <GoalLink flow={flow} readAt={data.readAt} quote={quote} prices={prices} appPaused={Boolean(notes[flow.id]?.paused)} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Page>
+  );
+}

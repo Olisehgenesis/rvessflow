@@ -1,8 +1,12 @@
 import { formatUsd8 } from "@/lib/pay-math";
 
-/** Home headline: three places when idle, four when a stream is live. */
-export function homeBalancePlaces(streaming: boolean): number {
-  return streaming ? 4 : 3;
+/**
+ * Main balance places. More than three digits in the whole part uses 2 decimals.
+ * A smaller balance uses 4, so a short amount still shows the fraction.
+ */
+export function mainBalancePlaces(whole: bigint): number {
+  const abs = whole < 0n ? -whole : whole;
+  return abs.toString().length > 3 ? 2 : 4;
 }
 
 function weiToUsd8(wei: bigint, usdcUsd8: bigint): bigint {

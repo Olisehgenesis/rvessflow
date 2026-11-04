@@ -5,9 +5,11 @@ import { IconCheck, IconChevron } from "@/components/icons";
 import { TokenIcon } from "@/components/token-icon";
 import Link from "next/link";
 import { previewPay, previewReceive } from "@/lib/actions";
+import { priced, showsLocal } from "@/lib/display";
 import { groupNetLabel, netFromLabel, type GroupNet } from "@/lib/group-network";
 import { networkLabel } from "@/lib/network";
 import type { PayAsset, ReceiveAsset } from "@/lib/pay-math";
+import { chainQuote, type Quote } from "@/lib/quote";
 
 export type PayChoice = {
   pay: PayAsset;
@@ -91,26 +93,48 @@ function shareOf(usd: string, cap: number) {
   return Math.min(100, Math.max(0, share));
 }
 
-function dollars(cap: number, share: number) {
+function fromShare(cap: number, share: number, digits: number) {
   if (!(cap > 0) || share <= 0) return "";
-  return ((cap * share) / 100).toFixed(2);
+  const value = (cap * share) / 100;
+  if (digits <= 0) {
+    const whole = Math.round(value);
+    return whole > 0 ? String(whole) : "";
+  }
+  return value.toFixed(Math.min(digits, 2));
+}
+
+function shownCap(choice: PayChoice | undefined, quote: Quote) {
+  if (choice?.pay === "gdx") return { cap: moneyOf(choice.balance), digits: 4, unit: "G$" };
+  const usd = capOf(choice);
+  if (!showsLocal(quote)) return { cap: usd, digits: 2, unit: "USD" };
+  return { cap: usd * quote.perToken, digits: quote.digits, unit: quote.unit };
+}
+
+function choiceValue(choice: PayChoice, quote: Quote) {
+  if (choice.pay === "gdx") return `${choice.balance} G$`;
+  return priced(choice.usd, quote);
 }
 
 function AmountShare({
   cap,
-  usd,
-  onUsd,
+  amount,
+  digits,
+  unit,
+  onAmount,
 }: {
   cap: number;
-  usd: string;
-  onUsd: (value: string) => void;
+  amount: string;
+  digits: number;
+  unit: string;
+  onAmount: (value: string) => void;
 }) {
-  const share = shareOf(usd, cap);
+  const share = shareOf(amount, cap);
   const open = cap > 0;
+  const label = `Amount in ${unit}`;
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium">Amount in USD</span>
+        <span className="text-sm font-medium">{label}</span>
         <span className="text-sm font-semibold tabular-nums">{open ? `${share}%` : "0%"}</span>
       </div>
       <input
@@ -121,24 +145,24 @@ function AmountShare({
         value={open ? share : 0}
         disabled={!open}
         aria-label="Share of the selected token"
-        onChange={(event) => onUsd(dollars(cap, Number(event.target.value)))}
+        onChange={(event) => onAmount(fromShare(cap, Number(event.target.value), digits))}
         className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[#E7EDE0] accent-[#141414] disabled:cursor-not-allowed disabled:opacity-40"
       />
       <input
         name="amount"
-        aria-label="Amount in USD"
-        value={usd}
+        aria-label={label}
+        value={amount}
         inputMode="decimal"
-        placeholder={open ? dollars(cap, 100) : "0.00"}
+        placeholder={open ? fromShare(cap, 100, digits) : digits <= 0 ? "0" : "0.00"}
         className={inputClass}
         required
-        onChange={(event) => onUsd(event.target.value)}
+        onChange={(event) => onAmount(event.target.value)}
       />
     </div>
   );
 }
 
-function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value: string; onChange: (id: string) => void }) {
+function TokenSelect({ choices, value, quote, onChange }: { choices: PayChoice[]; value: string; quote: Quote; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const picked = choices.find((choice) => choiceId(choice) === value) ?? choices[0];
   if (!picked) return <p className="text-sm text-muted-foreground">No token is available in this wallet.</p>;
@@ -159,7 +183,7 @@ function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value
             {picked.balance} available
           </span>
         </span>
-        <span className="text-sm font-medium tabular-nums">${picked.usd}</span>
+        <span className="text-sm font-medium tabular-nums">{choiceValue(picked, quote)}</span>
         <IconChevron className={`size-4 shrink-0 text-muted-foreground transition-transform ${open ? "-rotate-90" : "rotate-90"}`} />
       </button>
       {open ? (
@@ -186,7 +210,7 @@ function TokenSelect({ choices, value, onChange }: { choices: PayChoice[]; value
                       {choice.balance} available
                     </span>
                   </span>
-                  <span className="text-sm font-medium tabular-nums">${choice.usd}</span>
+                  <span className="text-sm font-medium tabular-nums">{choiceValue(choice, quote)}</span>
                   {selected ? <IconCheck className="size-4 text-[#141414]" /> : <span className="size-4" />}
                 </button>
               </li>
@@ -206,6 +230,7 @@ export function PayWith({
   protocolOnTop,
   full,
   onAmount,
+  quote = chainQuote(),
   stayOn,
   onBlocked,
 }: {
@@ -215,7 +240,8 @@ export function PayWith({
   fixedSuper?: string;
   protocolOnTop?: boolean;
   full?: boolean;
-  onAmount?: (usd: string) => void;
+  onAmount?: (amount: string, pay: PayAsset, network?: string) => void;
+  quote?: Quote;
   /** When set, a token on the other chain asks the user to swap instead of paying. */
   stayOn?: GroupNet;
   onBlocked?: (blocked: boolean) => void;
@@ -266,20 +292,21 @@ export function PayWith({
     return () => clearTimeout(handle);
   }, [pickedId, usd, duration, fixedSuper, mode, protocolOnTop, full, swap, picked?.pay, picked?.network]);
 
-  const cap = capOf(picked);
+  const shown = shownCap(picked, quote);
 
   function writeUsd(next: string) {
     setUsd(next);
-    setShare(shareOf(next, cap));
-    onAmount?.(next);
+    setShare(shareOf(next, shown.cap));
+    if (picked) onAmount?.(next, picked.pay, picked.network);
   }
 
   function choose(id: string) {
     const next = choices.find((choice) => choiceId(choice) === id);
-    const amount = dollars(capOf(next), share);
+    const nextCap = shownCap(next, quote);
+    const amount = fromShare(nextCap.cap, share, nextCap.digits);
     setPickedId(id);
     setUsd(amount);
-    onAmount?.(amount);
+    if (next) onAmount?.(amount, next.pay, next.network);
   }
 
   const here = stayOn ? groupNetLabel(stayOn) : "";
@@ -291,7 +318,7 @@ export function PayWith({
       <input type="hidden" name="network" value={tokenNet} />
       <div className="space-y-1.5">
         <p className="text-sm font-medium">Pay with</p>
-        <TokenSelect choices={choices} value={picked ? choiceId(picked) : ""} onChange={choose} />
+        <TokenSelect choices={choices} quote={quote} value={picked ? choiceId(picked) : ""} onChange={choose} />
       </div>
       {swap ? (
         <div className="rounded-2xl bg-muted px-4 py-3 text-sm leading-relaxed">
@@ -303,7 +330,7 @@ export function PayWith({
           </Link>
         </div>
       ) : null}
-      {swap || fixedSuper ? null : <AmountShare cap={cap} usd={usd} onUsd={writeUsd} />}
+      {swap || fixedSuper ? null : <AmountShare cap={shown.cap} amount={usd} digits={shown.digits} unit={shown.unit} onAmount={writeUsd} />}
       {swap ? null : <QuoteList lines={lines} error={error} />}
     </div>
   );
@@ -315,7 +342,7 @@ const receiveChoices: { receive: ReceiveAsset; label: string }[] = [
   { receive: "eth", label: "ETH" },
 ];
 
-export function ReceiveWith() {
+export function ReceiveWith({ quote = chainQuote() }: { quote?: Quote }) {
   const [receive, setReceive] = useState<ReceiveAsset>("usdc");
   const [usd, setUsd] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
@@ -358,7 +385,7 @@ export function ReceiveWith() {
         </div>
       </div>
       <label className="block space-y-1.5">
-        <span className="text-sm font-medium">Amount in USD</span>
+        <span className="text-sm font-medium">Amount in {quote.unit}</span>
         <input
           name="amount"
           value={usd}

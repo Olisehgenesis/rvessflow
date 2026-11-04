@@ -9,9 +9,9 @@ import { Progress } from "@/components/ui/progress";
 import { assetByAddress } from "@/lib/assets";
 import { tokenUsdWei, type FlowPrices } from "@/lib/flow-value";
 import { networkLabel } from "@/lib/network";
-import { percent, show } from "@/lib/display";
+import { percent, show, usdCaption } from "@/lib/display";
 import { labeledGroup } from "@/lib/group-token";
-import { chainQuote, type Quote } from "@/lib/quote";
+import type { Quote } from "@/lib/quote";
 import type { FlowRow, LockRow } from "@/lib/protocol";
 
 export type ProductKind = "saving" | "flow" | "expense" | "lock" | "group";
@@ -181,7 +181,7 @@ export function GoalLink({
   const pace = goalStatus(flow, readAt, appPaused);
   const live = pace === "Active" && flow.kind !== "saving" && flow.active && !flow.paused;
   const local = quote.code !== "usd" && quote.code !== "fusdcx";
-  const usdLine = show(part, chainQuote(), 2);
+  const usdLine = usdCaption(part);
   return (
     <Link href={href ?? `/goals/${flow.id}`} className="block rounded-2xl border border-border bg-card p-4 lg:transition-colors lg:duration-150 lg:hover:border-[#C9D7A4] lg:focus-visible:outline-2 lg:focus-visible:outline-offset-2 lg:focus-visible:outline-[#141414]">
       <div className="flex items-start gap-3">
@@ -199,12 +199,12 @@ export function GoalLink({
       <div className="mt-3 flex flex-nowrap items-baseline justify-between gap-3">
         <p className="flex min-w-0 flex-1 flex-nowrap items-baseline gap-1 overflow-hidden font-display text-sm font-semibold whitespace-nowrap tabular-nums">
           <span>{quote.unit}</span>
-          {live ? <FlowingText readAt={readAt} base={part} perSecond={rate} ceiling={whole} fine plain quote={quote} /> : show(part, quote, 4)}
-          <span className="font-medium text-muted-foreground"> / {show(whole, quote, 4)}</span>
+          {live ? <FlowingText readAt={readAt} base={part} perSecond={rate} ceiling={whole} plain quote={quote} /> : show(part, quote)}
+          <span className="font-medium text-muted-foreground"> / {show(whole, quote)}</span>
         </p>
         <p className="shrink-0 text-xs font-medium tabular-nums whitespace-nowrap">{progress === 0 && BigInt(part || "0") > 0n ? "<1%" : `${progress}%`}</p>
       </div>
-      {local ? <p className="mt-0.5 text-[11px] text-muted-foreground">${usdLine}</p> : null}
+      {local ? <p className="mt-0.5 text-[11px] text-muted-foreground">{usdLine}</p> : null}
       <Progress value={progress} indicatorClassName="bg-foreground" className="mt-2 h-1.5 bg-muted" />
       <div className="mt-3 flex items-center justify-between gap-3 text-xs">
         <span className="flex items-center gap-1.5 text-muted-foreground">

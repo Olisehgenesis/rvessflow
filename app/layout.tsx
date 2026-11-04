@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Caveat, Geist_Mono, Inter } from "next/font/google";
+import { ConnectWalletHost } from "@/components/connect-wallet-modal";
 import { PwaRegister } from "@/components/install-app";
 import { SignProgressHost } from "@/components/sign-progress";
 import "./globals.css";
@@ -82,6 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <PwaRegister />
         <SignProgressHost />
+        <ConnectWalletHost />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

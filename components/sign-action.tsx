@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import { continueIntent, type ActionState } from "@/lib/actions";
 import { sendCalls } from "@/lib/client-sign";
 import { setSignTrack } from "@/components/sign-progress";
+import { knownRevert } from "@/lib/revert-reason";
 import { describeCalls, humanArt, humanTrack, phaseTitle, type HumanPhase, type SignStep } from "@/lib/sign-steps";
 import type { Intent } from "@/lib/intent";
 
 function explain(error: unknown): string {
   const message = error instanceof Error ? error.message : "The transaction failed.";
+  const known = knownRevert(message);
+  if (known) return known;
   if (/reject|denied|dismiss/i.test(message)) return "The signature was dismissed.";
   if (/gas required exceeds allowance \(0\)|insufficient funds/i.test(message)) {
     return "This wallet does not have enough of the native coin for the network fee.";
@@ -32,7 +35,7 @@ function explain(error: unknown): string {
   if (/Invalid parameters were provided to the RPC method/i.test(message)) {
     return "That didn't go through. Refresh and try again.";
   }
-  if (/0xfa3505cf|UserOperation reverted during simulation/i.test(message)) {
+  if (/UserOperation reverted during simulation/i.test(message)) {
     return "This didn't go through. Try again.";
   }
   if (/0x[0-9a-f]{8}/i.test(message) || /https?:\/\//i.test(message)) {
@@ -57,6 +60,7 @@ function show(intent: Intent, phase: HumanPhase, extra?: { error?: string; busy?
 
 export function useSignedAction(
   action: (prev: ActionState, data: FormData) => Promise<ActionState>,
+  options?: { art?: string; title?: string },
 ): [ActionState, (payload: FormData) => void, boolean] {
   const router = useRouter();
   const [state, run, pending] = useActionState(action, null);
@@ -69,9 +73,9 @@ export function useSignedAction(
     if (pending) {
       setSignTrack({
         open: true,
-        title: "Creating",
+        title: options?.title ?? "Creating",
         body: "",
-        art: "/marks/saving.png",
+        art: options?.art ?? "/marks/saving.png",
         busy: true,
         steps: humanTrack("create"),
       });
@@ -81,14 +85,14 @@ export function useSignedAction(
       setSignTrack({
         open: true,
         title: "Didn't go through",
-        body: "",
-        art: "/marks/saving.png",
+        body: state.error,
+        art: options?.art ?? "/marks/saving.png",
         busy: false,
         error: state.error,
         steps: humanTrack("create", true),
       });
     }
-  }, [pending, signing, state]);
+  }, [pending, signing, state, options?.art, options?.title]);
 
   useEffect(() => {
     const sign = state?.sign;

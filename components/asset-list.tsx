@@ -42,14 +42,12 @@ export function AssetList({
           <li key={row.key} id={desk ? undefined : row.key}>
             {row.parts ? (
               <Link href={`/home/assets/${row.key}`} className={rowClass}>
-                <TokenIcon symbol={row.label} network={row.network} />
-                <AssetAmounts row={row} localUnit={localUnit} named={false} />
+                <AssetFace row={row} localUnit={localUnit} />
                 <IconChevron className="size-4 shrink-0 text-muted-foreground" />
               </Link>
             ) : (
               <button type="button" className={rowClass} onClick={() => setPicked(row)} aria-label={row.label}>
-                <TokenIcon symbol={row.label} network={row.network} />
-                <AssetAmounts row={row} localUnit={localUnit} named={false} />
+                <AssetFace row={row} localUnit={localUnit} />
               </button>
             )}
           </li>
@@ -75,23 +73,26 @@ export function AssetList({
   );
 }
 
-function AssetAmounts({ row, localUnit, named }: { row: HoldingRow; localUnit?: string; named: boolean }) {
+function AssetFace({ row, localUnit }: { row: HoldingRow; localUnit?: string }) {
+  const local = Boolean(row.local && localUnit);
+  const detail = row.parts ? (local ? `$${row.usd}` : null) : `${row.amount} ${row.label}`;
   return (
-    <span className="min-w-0 flex-1">
-      {named ? (
-        <>
-          <span className="block text-sm font-semibold">{row.label}</span>
-          <span className="block text-xs text-muted-foreground">{row.network}</span>
-        </>
-      ) : (
-        <span className="block text-xs text-muted-foreground">{row.network}</span>
-      )}
-      <span className="mt-0.5 block text-sm font-semibold">
-        {row.local && localUnit ? <PrivateLine value={`${localUnit} ${row.local}`} /> : <PrivateUsd value={row.usd} />}
+    <>
+      <TokenIcon symbol={row.label} network={row.network} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold">{row.label}</span>
+        <span className="block truncate text-xs text-muted-foreground">{row.network}</span>
       </span>
-      <span className="block text-[11px] text-muted-foreground">
-        <PrivateLine value={row.amount} />
+      <span className="shrink-0 text-right">
+        <span className="block text-sm font-semibold tabular-nums">
+          {local ? <PrivateLine value={`${localUnit} ${row.local}`} /> : <PrivateUsd value={row.usd} />}
+        </span>
+        {detail ? (
+          <span className="block text-[11px] text-muted-foreground tabular-nums">
+            <PrivateLine value={detail} />
+          </span>
+        ) : null}
       </span>
-    </span>
+    </>
   );
 }

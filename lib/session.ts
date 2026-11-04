@@ -13,6 +13,7 @@ const CURRENCY = "rvess-currency";
 const ADDR = "rvess-address";
 const METHOD = "rvess-auth";
 const LABEL = "rvess-label";
+const NAME_SKIP = "rvess-name-skip";
 const TERMS = "rvess-terms";
 
 export type AuthMethod = "passkey" | "wallet" | "tester";
@@ -116,13 +117,24 @@ export async function rememberWallet(address: Address, method: "passkey" | "wall
   jar.delete(WHO);
 }
 
+export async function nameSkipped(): Promise<boolean> {
+  const jar = await cookies();
+  return jar.get(NAME_SKIP)?.value === "1";
+}
+
+export async function dismissNamePrompt() {
+  const jar = await cookies();
+  jar.set(NAME_SKIP, "1", cookie);
+}
+
 export async function rememberName(name: string) {
   const who = await viewer();
-  if (who.method !== "wallet") return;
+  if (who.method !== "wallet" && who.method !== "passkey") return;
   const next = name.trim().slice(0, 32);
-  if (!next || next === "Wallet") return;
+  if (!next || next === "Wallet" || next === "Passkey") return;
   const jar = await cookies();
   jar.set(LABEL, next, cookie);
+  jar.delete(NAME_SKIP);
 }
 
 export async function rememberAccount(index: number) {
@@ -141,6 +153,7 @@ export async function clearSession() {
   jar.delete(ADDR);
   jar.delete(METHOD);
   jar.delete(LABEL);
+  jar.delete(NAME_SKIP);
   jar.delete(TERMS);
 }
 

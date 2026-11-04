@@ -8,25 +8,23 @@ import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
 import { allLabels, draftsIfReady } from "@/lib/circle";
 import { MIN_GROUP_MEMBERS } from "@/lib/group-ui";
-import { loadPortfolio, networkName } from "@/lib/protocol";
+import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
 
-export default function GroupsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+export default function GroupsPage() {
   return (
     <Suspense fallback={<Loading />}>
-      <GroupsBody searchParams={searchParams} />
+      <GroupsBody />
     </Suspense>
   );
 }
 
-async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
-  const { tab } = await searchParams;
-  const joined = tab === "joined";
+async function GroupsBody() {
   const who = await viewer();
   const [data, directory, labels] = await Promise.all([loadPortfolio(who), draftsIfReady(who.address), allLabels().catch(() => [])]);
   const nameFor = (id: string, fallback: string) => labels.find((item) => item.ref === id)?.name || fallback;
-  const drafts = directory.drafts.filter((draft) => (joined ? draft.role === "member" || draft.role === "applied" : draft.role === "organizer"));
-  const groups = data.groups.filter((group) => (joined ? group.creator.toLowerCase() !== data.me.address.toLowerCase() : group.creator.toLowerCase() === data.me.address.toLowerCase()));
+  const drafts = directory.drafts.filter((draft) => draft.role === "organizer" || draft.role === "member" || draft.role === "applied");
+  const groups = data.groups;
   const empty = drafts.length === 0 && groups.length === 0;
   const invited = drafts.filter((draft) => draft.role === "applied");
   const ready = drafts.filter((draft) => draft.role !== "applied");
@@ -49,17 +47,9 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
           Join with a code
         </Link>
       </div>
-      <div className="mb-5 flex gap-2">
-        <Tab href="/groups" pressed={!joined}>
-          My groups
-        </Tab>
-        <Tab href="/groups?tab=joined" pressed={joined}>
-          Joined
-        </Tab>
-      </div>
-      {directory.down ? <p className="mb-4 text-sm text-[#5C6572]">The member directory is unavailable, so drafts cannot load. Groups already on {networkName} still show here.</p> : null}
+      {directory.down ? <p className="mb-4 text-sm text-[#5C6572]">The member directory is unavailable, so drafts cannot load. Groups you already belong to still show here.</p> : null}
       {empty ? (
-        <EmptyGroups joined={joined} />
+        <EmptyGroups />
       ) : (
         <div className="space-y-6 lg:max-w-4xl">
           {live.length > 0 ? (
@@ -172,10 +162,3 @@ async function GroupsBody({ searchParams }: { searchParams: Promise<{ tab?: stri
   );
 }
 
-function Tab({ href, pressed, children }: { href: string; pressed: boolean; children: string }) {
-  return (
-    <Link href={href} aria-current={pressed ? "page" : undefined} className={`rounded-full px-4 py-2 text-sm font-medium ${pressed ? "bg-[#141414] text-white" : "border border-[#E6EADF] bg-white text-[#3A3F47]"}`}>
-      {children}
-    </Link>
-  );
-}

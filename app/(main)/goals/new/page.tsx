@@ -7,6 +7,7 @@ import { Page } from "@/components/ui-bits";
 import { loadPayChoices } from "@/lib/holdings";
 import { nextLabel } from "@/lib/next-label";
 import { loadPortfolio } from "@/lib/protocol";
+import { loadQuote } from "@/lib/rates";
 import { viewer } from "@/lib/session";
 
 export default function NewGoalPage({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
@@ -19,7 +20,7 @@ export default function NewGoalPage({ searchParams }: { searchParams: Promise<{ 
 
 async function NewGoalBody({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
   const who = await viewer();
-  const [data, choices] = await Promise.all([loadPortfolio(who), loadPayChoices(who.address)]);
+  const [data, choices, quote] = await Promise.all([loadPortfolio(who), loadPayChoices(who.address), loadQuote()]);
   const params = await searchParams;
   const kind = params.kind === "flow" || params.kind === "expense" ? params.kind : "saving";
   const title = kind === "flow" ? "Flow" : kind === "expense" ? "Streaming payment" : "Saving";
@@ -32,9 +33,9 @@ async function NewGoalBody({ searchParams }: { searchParams: Promise<{ kind?: st
       <GoalName placeholder={fallback} fallback={fallback}>
         <KindIntro kind={kind} rest={line} />
         {kind === "saving" ? (
-          <SavingForm me={data.me.address} choices={choices} />
+          <SavingForm me={data.me.address} choices={choices} quote={quote} />
         ) : (
-          <StreamForm kind={kind} me={data.me.address} choices={choices} />
+          <StreamForm kind={kind} me={data.me.address} choices={choices} quote={quote} />
         )}
       </GoalName>
     </Page>

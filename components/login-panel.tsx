@@ -6,7 +6,7 @@ import { Check, ChevronLeft, ChevronRight, Fingerprint, Lock, Mail, Shield, Wall
 import { IconMark } from "@/components/icons";
 import { enterApp, lookUpEmail, noteTerms, openSession } from "@/lib/actions";
 import { createPasskeyWallet, finishPasskey, prepareSignIn, requestPasskey, requestWalletAccount } from "@/lib/auth-client";
-import { shortAddress } from "@/lib/display";
+import { chosenName, shortAddress } from "@/lib/display";
 import { readPasskeys, type SavedPasskey } from "@/lib/passkey-vault";
 
 type Kind = "passkey" | "wallet";
@@ -155,7 +155,9 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
       try {
         const address = await connecting;
         await noteTerms();
-        await openSession(address, "wallet", name.trim());
+        const listed = await readPasskeys().catch(() => saved);
+        const known = listed.find((item) => item.address.toLowerCase() === address.toLowerCase());
+        await openSession(address, "wallet", chosenName(known?.label) ?? name.trim());
       } catch (error) {
         if (redirectError(error)) throw error;
         setPhase(cancelled(error) ? { name: "cancelled", kind: "wallet", attempt: "connect" } : { name: "failed", kind: "wallet", attempt: "connect", detail: failureDetail(error) });
@@ -560,7 +562,7 @@ export function LoginPanel({ intent = "start" }: { intent?: "start" | "login" })
       {phase.name === "connecting" ? (
         <Status
           title="Connecting wallet"
-          body="Confirm in WalletConnect. Installed wallets, Base, and every other wallet are listed there."
+          body="Pick an installed wallet, or scan a WalletConnect QR."
           mark={<WaitMark icon={<Wallet className="size-6" />} />}
           bar
         />

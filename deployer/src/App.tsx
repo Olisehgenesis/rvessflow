@@ -350,6 +350,12 @@ export function App() {
 
       {chain.mainnet && <p className="note quiet">{chain.name}. These contracts have not had an external audit.</p>}
 
+      {chain.groups !== zeroAddress && !fresh ? (
+        <p className="note">This chain already has the protocol. The section below finishes the group upgrade. It does not deploy a new set of contracts.</p>
+      ) : null}
+
+      {chain.groups === zeroAddress || fresh ? (
+        <>
       {ownerPreview && (
         <p className="note">
           Any two of these three control {ownerPreview.address}.
@@ -466,6 +472,8 @@ export function App() {
       {done && (
         <AllowGoodDollar chain={chain} allowlist={shownAddresses?.allowlist ?? chain.allowlist} wallet={wallet} wallets={installed} onConnect={onConnect} />
       )}
+        </>
+      ) : null}
       {chain.groups !== zeroAddress && (
         <UpgradeGroups chain={chain} wallet={wallet} wallets={installed} onConnect={onConnect} />
       )}

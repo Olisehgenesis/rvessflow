@@ -70,6 +70,8 @@ function when(readyAt: bigint) {
 }
 
 function scheduledSentence(chainName: string, pending: Address, readyAt: bigint) {
+  const past = readyAt > 0n && BigInt(Math.floor(Date.now() / 1000)) >= readyAt;
+  if (past) return `The wait on ${chainName} ended ${when(readyAt)}. The new code is ${pending}. Two owner wallets sign the finish, then one of them sends it.`;
   return `Scheduled on ${chainName}. The new code is ${pending}. The group contract people use stays on the current code until ${when(readyAt)}.`;
 }
 
@@ -436,7 +438,9 @@ export function UpgradeGroups({
       <h2>Upgrade the group contract</h2>
       <p className="lede">
         {alreadyScheduled && live
-          ? `The schedule is already signed. Nothing else is signed until ${when(live.readyAt)}. After that, two of the three owner wallets sign the finish. One wallet is not enough.`
+          ? ready
+            ? `The wait ended ${when(live.readyAt)}. ${finishSigs.length} of ${safe?.threshold ?? 2} owner wallets have signed the finish. Connect the next owner in this browser and sign, then send the finish.`
+            : `The schedule is already signed. Nothing else is signed until ${when(live.readyAt)}. After that, two of the three owner wallets sign the finish. One wallet is not enough.`
           : `This deploys the group code that can pay each turn as a transfer, then prepares the upgrade for the group contract already on ${chain.name}. When the owner is a group of wallets, two of them sign here. The new code waits six hours after that schedule is sent.`}
       </p>
       <dl className="addresses">
@@ -503,6 +507,11 @@ export function UpgradeGroups({
         >
           Schedule the upgrade
         </button>
+      )}
+      {safe && alreadyScheduled && ready && (
+        <p className="note">
+          {finishSigs.length} of {safe.threshold} finish signatures. {safe.owners.map((owner) => (finishSigs.some((item) => same(item.owner, owner)) ? `${owner} signed` : `${owner} has not signed`)).join(". ")}.
+        </p>
       )}
       {walletIsSigner && finishData && ready && (
         <button className="sign" type="button" onClick={signFinish} disabled={busy || finishSigned}>

@@ -9,61 +9,47 @@ import { LoginGate } from "@/components/login-gate";
 import { ProductGlyph, type MarkName } from "@/components/landing-icons";
 import { PhoneStage } from "@/components/landing-phone";
 
-const features: { name: MarkName; title: string; body: string; well: string; ink: string }[] = [
+const features: { name: MarkName; title: string; body: string }[] = [
   {
     name: "save",
     title: "Save",
     body: "Set goals and watch your money grow.",
-    well: "bg-[#E7F6D8]",
-    ink: "text-[#3C9A34]",
   },
   {
     name: "stream",
     title: "Stream",
     body: "Send and receive recurring payments.",
-    well: "bg-[#EDE7FF]",
-    ink: "text-[#7A5CDB]",
   },
   {
     name: "lock",
     title: "Lock",
     body: "Keep your funds safe until the right time.",
-    well: "bg-[#F1F0EC]",
-    ink: "text-[#17191C]",
   },
   {
     name: "groups",
     title: "Groups",
     body: "Save together with trusted people.",
-    well: "bg-[#E5F0FF]",
-    ink: "text-[#3B82F6]",
   },
 ];
 
-const tools: { name: MarkName; title: string; body: string; action: string; well: string; ink: string }[] = [
+const tools: { name: MarkName; title: string; body: string; action: string }[] = [
   {
     name: "save",
     title: "Everyday Saver",
     body: "Build your goals, fund your future.",
     action: "Start saving",
-    well: "bg-[#F3E9FF]",
-    ink: "text-[#6FAE3A]",
   },
   {
     name: "swirl",
     title: "Flow Plans",
     body: "Automate your recurring payments.",
     action: "Create a plan",
-    well: "bg-[#F3E9FF]",
-    ink: "text-[#8B6FE0]",
   },
   {
     name: "lock",
     title: "Lock Vault",
     body: "Choose your term. Lock your funds.",
     action: "Create a vault",
-    well: "bg-[#F4F1EA]",
-    ink: "text-[#17191C]",
   },
 ];
 
@@ -217,9 +203,7 @@ export function LandingHome() {
                   onClick={() => openAuth("start")}
                   className="flex w-full items-center gap-3 py-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#141414]"
                 >
-                  <span className={`grid size-11 shrink-0 place-items-center rounded-full ${feature.well} ${feature.ink}`}>
-                    <ProductGlyph name={feature.name} className="size-5" />
-                  </span>
+                  <ProductGlyph name={feature.name} className="size-11 shrink-0" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px] font-semibold">{feature.title}</span>
                     <span className="mt-0.5 block text-sm leading-snug text-[#5C6572]">{feature.body}</span>
@@ -232,9 +216,7 @@ export function LandingHome() {
           <ul className="hidden lg:grid lg:grid-cols-4">
             {features.map((feature, index) => (
               <li key={feature.title} className={`px-6 text-center ${index > 0 ? "border-l border-[#E6E2D8]" : ""}`}>
-                <span className={`mx-auto grid size-12 place-items-center rounded-full ${feature.well} ${feature.ink}`}>
-                  <ProductGlyph name={feature.name} className="size-6" />
-                </span>
+                <ProductGlyph name={feature.name} className="mx-auto size-14" />
                 <h2 className="mt-4 text-base font-semibold">{feature.title}</h2>
                 <p className="mx-auto mt-1.5 max-w-[14rem] text-sm leading-relaxed text-[#5C6572]">{feature.body}</p>
               </li>
@@ -260,9 +242,7 @@ export function LandingHome() {
           <ul className="grid grid-cols-3 gap-4">
             {tools.map((tool) => (
               <li key={tool.title} className="flex min-h-[280px] flex-col rounded-[1.4rem] border border-[#EFECE6] bg-white px-5 pt-6 pb-5 shadow-[0_1px_0_rgba(20,20,20,0.03)]">
-                <span className={`grid size-14 place-items-center rounded-2xl ${tool.well} ${tool.ink}`}>
-                  <ProductGlyph name={tool.name} className="size-7" />
-                </span>
+                <ProductGlyph name={tool.name} className="size-14" />
                 <h3 className="mt-6 text-[15px] font-semibold">{tool.title}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-[#5C6572]">{tool.body}</p>
                 <button

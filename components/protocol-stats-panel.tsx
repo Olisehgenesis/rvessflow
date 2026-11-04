@@ -88,8 +88,8 @@ function ChainCard({ chain }: { chain: ChainStats }) {
 function Loading() {
   return (
     <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3" aria-busy="true" aria-label="Loading on-chain stats">
-      {Array.from({ length: 7 }, (_, i) => (
-        <li key={i} className="h-[5.5rem] animate-pulse rounded-2xl bg-white" />
+        {Array.from({ length: 7 }, (_, i) => (
+          <li key={i} className="h-[5.5rem] animate-pulse rounded-2xl bg-white" />
       ))}
     </ul>
   );

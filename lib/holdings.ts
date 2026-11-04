@@ -426,7 +426,7 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
   ];
   const total = [...usdParts, ...ethParts, ...celoParts, gdxPiece].reduce((sum, piece) => sum + piece.value, 0n);
   const streamingUsd8 = valueOf(BigInt(portfolio.streaming), 18, prices.usdcUsd8);
-  const lockedUsd8 = valueOf(BigInt(portfolio.locked), 18, prices.usdcUsd8) + valueOf(ethxLocked, 18, prices.ethUsd8);
+  const lockedUsd8 = valueOf(BigInt(portfolio.locked), 18, prices.usdcUsd8) + valueOf(ethxLocked, 18, chain.id === 42220 ? celoPrice : prices.ethUsd8);
   const columns = balanceColumns(total, streamingUsd8, lockedUsd8);
   const idleValue = valueOf(BigInt(portfolio.idle), 18, prices.usdcUsd8);
   const localUnit = quote.code === "usd" || quote.code === "fusdcx" ? undefined : quote.unit;
@@ -482,7 +482,7 @@ function payChoices(
   gdx = 0n,
 ): PayChoice[] {
   const choices: PayChoice[] = [];
-  const celo = Boolean(network?.startsWith("Celo"));
+  const celo = network ? network.startsWith("Celo") : chain.id === 42220;
   const tag = (pay: PayAsset) => (net ? `${net}-${pay}` : pay);
   choices.push(superChoice(superAmount, prices.usdcUsd8, celo ? "cUSDx" : stableLabel, network, tag("usdcx")));
   if (celo || chain.id === 42220) {
@@ -497,12 +497,13 @@ function payChoices(
       id: tag("gdx"),
     });
   }
+  const nativeUsd8 = celo ? prices.celoUsd8 : prices.ethUsd8;
   choices.push({
     pay: "eth",
     label: celo ? "CELO" : chain.nativeCurrency.symbol,
     balance: formatAmount(eth, 18, 6),
-    usd: money(valueOf(eth, 18, prices.ethUsd8)),
-    maxUsd: maxUsdInput(valueOf(eth, 18, prices.ethUsd8)),
+    usd: money(valueOf(eth, 18, nativeUsd8)),
+    maxUsd: maxUsdInput(valueOf(eth, 18, nativeUsd8)),
     network,
     id: tag("eth"),
   });

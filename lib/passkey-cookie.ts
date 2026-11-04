@@ -56,3 +56,9 @@ export async function passkeyFromCookie(id: string): Promise<PasskeyRecord | nul
   const records = await readCookie();
   return records.find((item) => samePasskeyId(item.id, id)) ?? null;
 }
+
+export async function passkeyLabelFor(address: string): Promise<string | null> {
+  const records = await readCookie();
+  const hit = records.find((item) => item.address.toLowerCase() === address.toLowerCase());
+  return hit?.label ?? null;
+}

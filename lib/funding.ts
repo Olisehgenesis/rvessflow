@@ -26,7 +26,7 @@ import {
   type ReceiveAsset,
 } from "@/lib/pay-math";
 import { loadPrices, type Prices } from "@/lib/prices";
-import { addresses, cfaAbi, erc20, factoryAbi, publicClient, stableLabel, streamNeed, vaultAbi } from "@/lib/protocol";
+import { addresses, cfaAbi, erc20, factoryAbi, parseAmount, publicClient, stableLabel, streamNeed, vaultAbi } from "@/lib/protocol";
 import { siteSuper, vaultSite, type VaultSite } from "@/lib/vault-site";
 
 const quoterAbi = parseAbi([
@@ -496,9 +496,9 @@ export async function previewLines(input: {
   let face = 0n;
   if (input.superWei) face = BigInt(input.superWei);
   else if (input.usd) {
-    face = input.pay === "gdx" ? netToken18ForUsd(parseUsd(input.usd), prices.gdxUsd8) : netSuperForUsd(parseUsd(input.usd), prices.usdcUsd8);
+    face = input.pay === "gdx" ? parseAmount(input.usd) : netSuperForUsd(parseUsd(input.usd), prices.usdcUsd8);
   }
-  if (face <= 0n) throw new Error("Enter the amount in USD.");
+  if (face <= 0n) throw new Error(input.pay === "gdx" ? "Enter the amount in G$." : "Enter the amount in USD.");
   const facePrice = input.pay === "gdx" ? prices.gdxUsd8 : prices.usdcUsd8;
   const heading = `$${formatUsd8(usd8OfSuper(face, facePrice))}`;
   let needed = face;
@@ -550,9 +550,9 @@ export async function previewLines(input: {
     const digits = input.pay === "eth" ? 6 : 2;
     const symbol = input.pay === "eth" ? "CELO" : "USDT";
     return shownQuote([
-      { label: "You spend", value: `${formatAmount(amountInMax, scale, digits)} ${symbol}` },
+      { label: "You spend at most", value: `${formatAmount(amountInMax, scale, digits)} ${symbol}` },
       { label: "Protocol fee", value: `0.30% · $${formatUsd8(usd8OfSuper(fee, prices.usdcUsd8))}` },
-      { label: "Slippage", value: "0.50%" },
+      { label: "Slippage", value: "0.50% max" },
     ]);
   }
   if (input.pay !== "usdc" && input.pay !== "usdcx") {

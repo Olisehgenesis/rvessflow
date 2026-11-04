@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { getAddress, isAddress, type Address } from "viem";
 import { assetKind } from "@/lib/assets";
 import type { DepositPreview } from "@/lib/deposit-math";
-import { asTokenAmount, shortAddress } from "@/lib/display";
+import { asTokenAmount, chosenName, localizeDollars, shortAddress, usdFromLocal } from "@/lib/display";
 import { idleSuper, previewLines, previewWithdraw, walletSuper } from "@/lib/funding";
 import { walletStamp } from "@/lib/holdings";
 import type { Intent, SignPayload } from "@/lib/intent";
@@ -50,7 +50,9 @@ import {
   deleteDraft,
   dropPhone,
   groupCreateIntent,
+  codedDisplayName,
   findAccount,
+  keepDisplayName,
   findGroupCode,
   hintForEmail,
   launchDraft,
@@ -66,9 +68,10 @@ import {
   savePhone,
   setDraftOpen,
 } from "@/lib/circle";
+import { knownDisplayName } from "@/lib/known-name";
 import { filledName } from "@/lib/next-label";
 import { finishTour, restartTourRecord, saveTourStep, skipTour } from "@/lib/onboarding";
-import { acceptedTerms, accountIndex, clearSession, currencyChoice, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet, viewer, type Viewer } from "@/lib/session";
+import { acceptedTerms, accountIndex, clearSession, currencyChoice, dismissNamePrompt, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet, viewer, type Viewer } from "@/lib/session";
 
 export type ActionState = { error?: string; sign?: SignPayload; saved?: boolean } | null;
 
@@ -160,9 +163,19 @@ function payField(formData: FormData): PayAsset | undefined {
   return raw ? readPay(raw) : undefined;
 }
 
-function usdField(formData: FormData): string {
-  const amount = String(formData.get("amount") ?? "");
-  parseUsd(amount);
+async function usdField(formData: FormData): Promise<string> {
+  const raw = String(formData.get("amount") ?? "").replace(/,/g, "").trim();
+  if (payField(formData) === "gdx") {
+    if (!/^\d+(\.\d{1,18})?$/.test(raw) || Number(raw) <= 0) throw new Error("Enter the amount in G$.");
+    return raw;
+  }
+  const quote = await loadQuote();
+  const amount = usdFromLocal(raw, quote);
+  try {
+    parseUsd(amount);
+  } catch {
+    throw new Error(`Enter the amount in ${quote.unit}.`);
+  }
   return amount;
 }
 
@@ -340,12 +353,31 @@ export async function openSession(address: string, method: "passkey" | "wallet",
     throw new Error("That sign-in could not be saved.");
   }
   await requireTerms();
-  await rememberWallet(getAddress(address), method, label.trim().slice(0, 32));
+  const account = getAddress(address);
+  let shown = label.trim().slice(0, 32);
+  if (!chosenName(shown)) shown = (await knownDisplayName(account)) ?? shown;
+  else shown = (await codedDisplayName(account, shown)) ?? shown;
+  await rememberWallet(account, method, shown);
+  if (chosenName(shown)) await keepDisplayName(account, shown);
   redirect("/home");
 }
 
-export async function saveDisplayName(formData: FormData) {
-  await rememberName(String(formData.get("name") ?? ""));
+export async function saveDisplayName(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const who = await viewer();
+    const next = await codedDisplayName(who.address, String(formData.get("name") ?? ""));
+    if (!next) return { error: "Enter a name to continue." };
+    await rememberName(next);
+    await keepDisplayName(who.address, next);
+    refresh();
+    return null;
+  } catch (error) {
+    return spoken(error);
+  }
+}
+
+export async function skipDisplayName() {
+  await dismissNamePrompt();
   refresh();
 }
 
@@ -408,7 +440,7 @@ export async function createSaving(_prev: ActionState, formData: FormData): Prom
     const book = await loadPortfolio(who);
     const name = filledName(String(formData.get("name") ?? ""), "saving", book.flows.filter((row) => row.kind === "saving").map((row) => row.name));
     const pay = payField(formData);
-    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
+    const amount = pay ? await usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const description = String(formData.get("description") ?? "").trim().slice(0, 280);
     const intent = refIntent({
       kind: "saving" as const,
@@ -455,7 +487,7 @@ export async function createStream(_prev: ActionState, formData: FormData): Prom
       book.flows.filter((row) => row.kind === flowKind).map((row) => row.name),
     );
     const pay = payField(formData);
-    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
+    const amount = pay ? await usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const description = String(formData.get("description") ?? "").trim().slice(0, 280);
     const intent = refIntent({
       kind: "stream" as const,
@@ -502,7 +534,7 @@ export async function createLock(_prev: ActionState, formData: FormData): Promis
     const pay = payField(formData);
     const network = networkField(formData);
     const token = pay ? vaultSite(network).fusdcx : String(formData.get("token") ?? "");
-    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
+    const amount = pay ? await usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const name = pay ? "USD" : String(formData.get("name") ?? "USD");
     const intent = refIntent({
       kind: "lock" as const,
@@ -545,7 +577,7 @@ export async function addMoney(_prev: ActionState, formData: FormData): Promise<
     const who = await viewer();
     const pay = payField(formData);
     const network = networkField(formData);
-    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
+    const amount = pay ? await usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const intent = refIntent({
       kind: "deposit" as const,
       token: vaultSite(network).fusdcx,
@@ -846,7 +878,7 @@ export async function doAddFunds(_prev: ActionState, formData: FormData): Promis
     const pay = payField(formData);
     const crossed = wrongChain(id, formData);
     if (crossed) return { error: crossed };
-    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
+    const amount = pay ? await usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""));
     const [data, notes] = await Promise.all([loadPortfolio(who), goalNotes(who.address)]);
     const flow = data.flows.find((item) => item.id === id);
     if (flow?.kind === "saving" && notes[id]?.paused) {
@@ -930,7 +962,7 @@ export async function doLockTop(_prev: ActionState, formData: FormData): Promise
     if (crossed) return { error: crossed };
     const data = await loadPortfolio(who);
     const lock = data.locks.find((item) => item.id === id);
-    const amount = pay ? usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""), lock ? assetKind(lock.token) === "ethx" : false);
+    const amount = pay ? await usdField(formData) : await quotedAmount(String(formData.get("amount") ?? ""), lock ? assetKind(lock.token) === "ethx" : false);
     const intent = refIntent({ kind: "lockAct" as const, fn: "topup" as const, id, amount, pay, ref: "" });
     if (who.method === "tester") {
       if (pay || parseGroupKey(id).net !== appGroupNet()) return await finishTester(intent);
@@ -1073,7 +1105,7 @@ export async function withdrawUsd(_prev: ActionState, formData: FormData): Promi
   try {
     await requireTerms();
     const who = await viewer();
-    const amount = usdField(formData);
+    const amount = await usdField(formData);
     const receive = readReceive(String(formData.get("receive") ?? "usdc"));
     const intent = refIntent({ kind: "withdraw" as const, amount, receive, ref: "" });
     await captureServerEvent(who.address, "funds_withdrawal_started", { receive_asset: receive });
@@ -1198,10 +1230,13 @@ export async function previewPay(input: {
   try {
     const who = await viewer();
     const pay = readPay(input.pay);
+    const quote = await loadQuote();
+    const typed = input.usd?.replace(/,/g, "").trim();
+    const usd = typed && pay !== "gdx" ? usdFromLocal(typed, quote) : typed;
     const covered = input.full ? 0n : input.mode === "wallet" ? await walletSuper(who.address) : await idleSuper(who.address);
     const lines = await previewLines({
       pay,
-      usd: input.usd,
+      usd,
       superWei: input.superWei,
       mode: input.mode,
       duration: input.duration,
@@ -1210,11 +1245,14 @@ export async function previewPay(input: {
       full: input.full,
       network: input.network,
     });
-    return { lines };
+    return { lines: lines.map((line) => ({ ...line, value: localizeDollars(line.value, quote) })) };
   } catch (error) {
     const message = error instanceof Error ? error.message : "The quote failed.";
     if (message.includes("Cannot decode zero data") || message.includes("viem@")) return { lines: [] };
-    return { lines: [], error: message };
+    const quote = await loadQuote().catch(() => null);
+    const gdx = input.pay === "gdx";
+    const friendly = gdx && message === "Enter the amount in USD." ? "Enter the amount in G$." : quote && message === "Enter the amount in USD." ? `Enter the amount in ${quote.unit}.` : message;
+    return { lines: [], error: friendly };
   }
 }
 
@@ -1269,8 +1307,12 @@ export async function restartOnboarding() {
 
 export async function previewReceive(input: { usd: string; receive: string }): Promise<{ lines: { label: string; value: string }[]; error?: string }> {
   try {
-    return { lines: await previewWithdraw(input.usd, readReceive(input.receive)) };
+    const quote = await loadQuote();
+    const lines = await previewWithdraw(usdFromLocal(input.usd, quote), readReceive(input.receive));
+    return { lines: lines.map((line) => ({ ...line, value: localizeDollars(line.value, quote) })) };
   } catch (error) {
-    return { lines: [], error: error instanceof Error ? error.message : "The quote failed." };
+    const message = error instanceof Error ? error.message : "The quote failed.";
+    const quote = await loadQuote().catch(() => null);
+    return { lines: [], error: quote && message === "Enter the amount in USD." ? `Enter the amount in ${quote.unit}.` : message };
   }
 }

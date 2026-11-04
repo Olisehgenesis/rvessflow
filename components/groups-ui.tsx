@@ -105,6 +105,25 @@ export function GroupStepper({ step, labels }: { step: number; labels: string[] 
   );
 }
 
+export function CollateralList({ items }: { items: { id: string; name: string; done: boolean; you?: boolean }[] }) {
+  return (
+    <ul className="space-y-2">
+      {items.map((item) => (
+        <li key={item.id} className="flex items-center gap-3 text-sm">
+          <span
+            className={`grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${item.done ? "bg-[#E7F4C4] text-[#141414]" : "border border-[#D7DCCE] bg-white text-transparent"}`}
+            aria-hidden
+          >
+            {item.done ? "✓" : ""}
+          </span>
+          <span className="min-w-0 flex-1 truncate font-medium text-[#141414]">{item.you ? `${item.name} (you)` : item.name}</span>
+          <span className={item.done ? "shrink-0 font-medium text-[#3C4A2E]" : "shrink-0 text-[#5C6572]"}>{item.done ? "Posted" : "Not yet"}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function GroupNeed({ items }: { items: { done: boolean; label: string }[] }) {
   return (
     <ul className="space-y-2">

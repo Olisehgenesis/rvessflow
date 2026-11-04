@@ -2,7 +2,7 @@
 
 import { createPublicClient, encodePacked, erc20Abi, http, maxUint256, parseErc6492Signature, type Address, type Hash, type Hex, type PublicClient } from "viem";
 import { base as baseChain, celo as celoChain } from "viem/chains";
-import { walletProvider } from "@/lib/auth-client";
+import { readyWallet, walletProvider } from "@/lib/auth-client";
 import { appChain, appNetwork, appRpc, celoRpcUrls, celoTransport, walletNetwork } from "@/lib/network";
 import type { PreparedCall, SignPayload } from "@/lib/intent";
 import { readPasskeys } from "@/lib/passkey-vault";
@@ -10,6 +10,7 @@ import { estimationSkipped, passkeyPaysWith, usdcCanPayFee, userOpCost } from "@
 import { celoFeeTx, celoFeeCurrencies, celoGasSkimCall, pickCeloFee, pickCeloFeeCovering, tokenAmountForCeloGas, withSkimGas } from "@/lib/celo-fee";
 import { batchId, batchOutcome, batchUnsupported, walletSendCallsParam } from "@/lib/wallet-batch";
 import { isCreateVaultOnly, vaultAlreadyExists } from "@/lib/vault-create";
+import { explainRevert } from "@/lib/revert-reason";
 import { CELO_TOP_WEI } from "@/lib/good-fv";
 
 const network = appNetwork();
@@ -38,9 +39,24 @@ async function waitForBatch(provider: Awaited<ReturnType<typeof walletProvider>>
   throw new Error("The wallet accepted the transaction, but it has not confirmed yet. Refresh in a moment.");
 }
 
-async function wait(hash: Hash, reader: Pick<PublicClient, "waitForTransactionReceipt"> = client) {
+type ReceiptReader = {
+  waitForTransactionReceipt: (args: { hash: Hash; timeout?: number }) => Promise<{ status: string; blockNumber: bigint }>;
+  getTransaction: (args: { hash: Hash }) => Promise<{ to: Address | null; input: Hex; from: Address; value: bigint }>;
+  call: (args: { to: Address; data: Hex; account: Address; value: bigint; blockNumber: bigint }) => Promise<unknown>;
+};
+
+async function wait(hash: Hash, reader: ReceiptReader = client) {
   const receipt = await reader.waitForTransactionReceipt({ hash, timeout: 120_000 });
-  if (receipt.status !== "success") throw new Error("The transaction reverted.");
+  if (receipt.status === "success") return;
+  try {
+    const tx = await reader.getTransaction({ hash });
+    if (tx.to) {
+      await reader.call({ to: tx.to, data: tx.input, account: tx.from, value: tx.value, blockNumber: receipt.blockNumber });
+    }
+  } catch (error) {
+    throw new Error(explainRevert(error));
+  }
+  throw new Error("The transaction reverted.");
 }
 
 function settlement(chainId?: number) {
@@ -128,8 +144,7 @@ async function onChain(
 }
 
 async function sendWallet(calls: PreparedCall[], from: Address, where: ReturnType<typeof settlement>, onHash?: (hash: Hash) => void) {
-  const provider = await walletProvider();
-  if (!provider.connected && provider.connect) await provider.connect();
+  const provider = await readyWallet(from);
   await onChain(provider, where.params);
   const listed = provider.accounts?.[0];
   const accounts = listed ? null : ((await provider.request({ method: "eth_accounts" })) as string[] | undefined);

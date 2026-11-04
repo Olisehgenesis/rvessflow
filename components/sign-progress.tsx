@@ -92,6 +92,7 @@ export function SignProgressHost() {
           <div className="mt-5">
             <Rail steps={state.steps} />
           </div>
+          {state.error ? <p className="mt-4 text-center text-sm leading-relaxed text-[#E24B4A]">{state.error}</p> : null}
           {failed ? (
             <Button type="button" className="mt-5 h-11 w-full rounded-full text-sm" onClick={() => setSignTrack(null)}>
               Try again

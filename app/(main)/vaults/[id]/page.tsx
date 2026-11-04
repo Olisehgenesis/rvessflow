@@ -61,7 +61,7 @@ async function LockBody({ params }: { params: Promise<{ id: string }> }) {
             </>
           ) : (
             <>
-              <TopUpLock id={lock.id} choices={choices} />
+              <TopUpLock id={lock.id} choices={choices} quote={quote} />
               <Notice>Breaking early pays {labeled(lock.breakPayout, quote)} and leaves {labeled(lock.breakPenalty, quote)} in the bonus pool. Yield already streamed is not clawed back.</Notice>
               <BreakLock id={lock.id} />
             </>

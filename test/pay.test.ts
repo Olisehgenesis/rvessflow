@@ -7,6 +7,7 @@ import {
   formatPrice8,
   fundForNet,
   grossForNet,
+  lockYieldWei,
   netSuperForUsd,
   netToken18ForUsd,
   parseUsd,
@@ -215,4 +216,11 @@ test("withdrawing as ETH swaps the USDC and unwraps in the same router call", ()
   const unwrap = decodeFunctionData({ abi: routerAbi, data: outer.args[1][1] });
   assert.equal(unwrap.functionName, "unwrapWETH9");
   assert.equal(unwrap.args[1].toLowerCase(), payer);
+});
+
+test("lock yield is principal times the per-token rate over the term", () => {
+  const principal = 10n * 10n ** 18n;
+  const perSecond = 1_000_000_000_000n;
+  assert.equal(lockYieldWei(principal, perSecond, 3600), perSecond * 3600n * 10n);
+  assert.equal(lockYieldWei(principal, 0n, 3600), 0n);
 });

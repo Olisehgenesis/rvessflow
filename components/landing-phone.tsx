@@ -45,10 +45,10 @@ function DemoMoney({
 }
 
 const quick = [
-  { name: "save" as const, label: "Save", well: "bg-[#E5F6D4]", ink: "text-[#3C9A34]" },
-  { name: "stream" as const, label: "Stream", well: "bg-[#EDE6FF]", ink: "text-[#7A5CDB]" },
-  { name: "lock" as const, label: "Lock", well: "bg-[#F1F0EC]", ink: "text-[#1A1C1F]" },
-  { name: "groups" as const, label: "Groups", well: "bg-[#E4F0FF]", ink: "text-[#3B82F6]" },
+  { name: "save" as const, label: "Save" },
+  { name: "stream" as const, label: "Stream" },
+  { name: "lock" as const, label: "Lock" },
+  { name: "groups" as const, label: "Groups" },
 ];
 
 function Device() {
@@ -86,9 +86,7 @@ function Device() {
               <IconMark className="size-5 [--background:#ffffff]" />
               Rvess
             </p>
-            <span className="grid size-6 place-items-center rounded-full bg-[#F4F3EF]">
-              <ProductGlyph name="lock" className="size-3.5" />
-            </span>
+            <ProductGlyph name="lock" className="size-6" />
           </div>
           <p className="mt-3.5 h-4 text-[11px] text-[#8B919A]">Total balance</p>
           <p className="mt-0.5 h-7 overflow-hidden text-[1.42rem] leading-none font-semibold tracking-[-0.045em] whitespace-nowrap tabular-nums">
@@ -103,9 +101,7 @@ function Device() {
           <ul className="mt-4 grid grid-cols-4 gap-1">
             {quick.map((item) => (
               <li key={item.label} className="flex flex-col items-center gap-1">
-                <span className={`grid size-9 place-items-center rounded-full ${item.well} ${item.ink}`}>
-                  <ProductGlyph name={item.name} className="size-4" />
-                </span>
+                <ProductGlyph name={item.name} className="size-9" />
                 <span className="text-[10px] font-medium text-[#3A4048]">{item.label}</span>
               </li>
             ))}
@@ -113,36 +109,28 @@ function Device() {
           <p className="mt-3.5 text-[11px] font-medium text-[#8B919A]">Active</p>
           <ul className="mt-1.5 grid grid-cols-2 gap-2">
             <li className="rounded-[1.05rem] bg-[#F5F4F1] px-2.5 py-2.5">
-              <span className="grid size-6 place-items-center rounded-full bg-[#E5F6D4] text-[#3C9A34]">
-                <ProductGlyph name="save" className="size-3.5" />
-              </span>
+              <ProductGlyph name="save" className="size-7" />
               <p className="mt-2 text-[11px] leading-tight font-semibold">Travel Goal</p>
               <p className="mt-0.5 text-[10px] leading-4 text-[#8B919A] tabular-nums">
                 <DemoMoney dollars="820" perSecond={travelRate} ceiling="1000" places={2} /> / $1,000
               </p>
             </li>
             <li className="rounded-[1.05rem] bg-[#F5F4F1] px-2.5 py-2.5">
-              <span className="grid size-6 place-items-center rounded-full bg-[#EDE6FF] text-[#7A5CDB]">
-                <ProductGlyph name="stream" className="size-3.5" />
-              </span>
+              <ProductGlyph name="stream" className="size-7" />
               <p className="mt-2 text-[11px] leading-tight font-semibold">Stream Plan</p>
               <p className="mt-0.5 text-[10px] leading-4 text-[#8B919A] tabular-nums">
                 <DemoMoney dollars="12.40" perSecond={streamRate} ceiling="45" places={2} /> / $45
               </p>
             </li>
             <li className="rounded-[1.05rem] bg-[#F5F4F1] px-2.5 py-2.5">
-              <span className="grid size-6 place-items-center rounded-full bg-[#F1F0EC] text-[#1A1C1F]">
-                <ProductGlyph name="lock" className="size-3.5" />
-              </span>
+              <ProductGlyph name="lock" className="size-7" />
               <p className="mt-2 text-[11px] leading-tight font-semibold">Lock Vault</p>
               <p className="mt-0.5 h-4 overflow-hidden text-[10px] leading-4 text-[#8B919A] whitespace-nowrap tabular-nums">
                 $1,000 · 3 months
               </p>
             </li>
             <li className="rounded-[1.05rem] bg-[#F5F4F1] px-2.5 py-2.5">
-              <span className="grid size-6 place-items-center rounded-full bg-[#E4F0FF] text-[#3B82F6]">
-                <ProductGlyph name="groups" className="size-3.5" />
-              </span>
+              <ProductGlyph name="groups" className="size-7" />
               <p className="mt-1.5 text-[10px] font-medium text-[#8B919A]">Group</p>
               <p className="text-[11px] leading-tight font-semibold">Group Rotation</p>
               <p className="mt-0.5 text-[10px] leading-tight text-[#8B919A]">Next turn: 3 days</p>

@@ -12,6 +12,7 @@ const feedAbi = parseAbi([
 
 export type Prices = {
   ethUsd8: bigint;
+  celoUsd8: bigint;
   usdcUsd8: bigint;
   usdtUsd8: bigint;
   gdxUsd8: bigint;
@@ -101,7 +102,8 @@ export async function loadPrices(): Promise<Prices> {
     } catch {
       ethUsd8 = 0n;
     }
-    const prices: Prices = { ethUsd8, usdcUsd8: 100_000_000n, usdtUsd8: 100_000_000n, gdxUsd8: await gdxFromReserve(), updatedAt: now };
+    const celoUsd8 = chain.id === 42220 ? ethUsd8 : await coinUsd8("celo").catch(() => 0n);
+    const prices: Prices = { ethUsd8, celoUsd8, usdcUsd8: 100_000_000n, usdtUsd8: 100_000_000n, gdxUsd8: await gdxFromReserve(), updatedAt: now };
     cache = { at, prices };
     return prices;
   }
@@ -114,6 +116,7 @@ export async function loadPrices(): Promise<Prices> {
     ]);
     const prices: Prices = {
       ethUsd8: fresh(eth.updatedAt) ? eth.usd8 : await ethFallback(),
+      celoUsd8: await coinUsd8("celo").catch(() => 0n),
       usdcUsd8: fresh(usdc.updatedAt) ? usdc.usd8 : 100_000_000n,
       usdtUsd8: fresh(usdt.updatedAt) ? usdt.usd8 : 100_000_000n,
       gdxUsd8: await gdxFromReserve(),
