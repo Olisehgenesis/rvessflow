@@ -20,4 +20,3 @@ The app and the contracts it calls are on Base mainnet. Base Sepolia addresses i
 - A bundler paymaster, so a new passkey account can pay gas without already holding ETH.
 - An on-chain description and a way to raise a saving goal's target after creation. The create form matches the mockup and sets the target equal to the first deposit.
 - Activity history before the factory's recent logs, and top-ups that were never written to the app database, are absent from the feed.
-- `SECURITY.md` and an external audit. These contracts are unaudited. Do not add real funds beyond what you can afford to lose.

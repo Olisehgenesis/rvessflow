@@ -62,7 +62,7 @@ async function AdvancedBody() {
             </li>
           </ul>
           <div className="pt-3">
-            <Notice>These contracts are unaudited. An upgrade waits six hours after it is scheduled.</Notice>
+            <Notice>An upgrade waits six hours after it is scheduled.</Notice>
           </div>
         </SettingsSection>
       </div>

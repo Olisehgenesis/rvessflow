@@ -4,10 +4,6 @@ export const terms = [
     body: "You sign for your own vault, lock, and group. Rvess does not keep your key. A passkey stays on your device. A connected wallet signs in the wallet.",
   },
   {
-    title: "Unaudited contracts",
-    body: "These contracts have not had an external audit. Put in only money you can afford to lose.",
-  },
-  {
     title: "Savings and streams",
     body: "A saving goal holds tokens in your vault. An expense or a flow goal is a Superfluid stream. It keeps running until it is settled or protected. After the extra hour of cushion, Superfluid can liquidate the stream deposit.",
   },

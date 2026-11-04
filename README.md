@@ -2,8 +2,6 @@
 
 RvessFlow is a savings wallet on Base, built on Superfluid. Money moves as real Superfluid streams: a constant-flow agreement (CFA) stream or a general-distribution agreement (GDA) pool. People see USD. On Base mainnet, savings are accounted in USDCx, the Super Token wrapper of USDC. On Base Sepolia the stable token is fUSDCx. An existing ETHx balance still shows. Production reads Base mainnet. `npm run dev -- sepolia` and `npm run build -- sepolia` read the Base Sepolia deployment.
 
-**These contracts have not been audited. Do not put real funds in them.**
-
 The contract reference is [CONTRACTS.md](CONTRACTS.md).
 
 ## What a person can do

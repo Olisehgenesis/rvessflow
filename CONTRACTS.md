@@ -1,7 +1,5 @@
 # RvessFlow Protocol
 
-These contracts were reviewed against a Solidity security checklist. That is not an external audit. Do not put real funds in them.
-
 The RvessFlow Protocol holds savings and pays them out as Superfluid streams. A flow or subflow is a constant-flow agreement (CFA) stream. A group pot is a general-distribution agreement (GDA) pool. The accepted tokens are Super Tokens on the allowlist. Live lists are in the tables under each chain. The allowlist has no enumerator: `isAllowed`, `kindOf`, and `underlyingOf` are the source of truth. Kind `0` is Wrapper, `1` is Native, `2` is Pure. Underlying ERC-20s (USDC, USDT, USDm) are not allowlisted themselves.
 
 The protocol owner is one address. That address should be a Safe, so several people sign upgrades and treasury actions, and the contracts still see a single owner. The owner can add support managers, set the token list, set the lock penalty and the yield rate, fund yield, and upgrade the contracts. The owner cannot withdraw a user's flow balance, lock principal, penalty pool, unused yield budget, group collateral, or a group pot, and cannot rewrite who paid whom.
@@ -108,7 +106,7 @@ Base mainnet and Base Sepolia are separate deployments. Money on one does not mo
 
 ### Base mainnet
 
-Deployed 25 October 2026. These contracts have not had an external audit. Any two of the three wallets below can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. The owner is the 2-of-3 Safe.
+Deployed 25 October 2026. Any two of the three wallets below can upgrade, pause, change tokens, change fees, and name managers. One wallet is not enough. The owner is the 2-of-3 Safe.
 
 | | Address |
 | --- | --- |
@@ -247,7 +245,7 @@ Source of those constants: `src/SuperfluidAddresses.sol`.
 
 ### Celo mainnet
 
-Chain id 42220. Explorer: [celoscan.io](https://celoscan.io). The live protocol was signed 29 October 2026. The owner is the same 2-of-3 Safe as Base. Upgrade delay on this code is six hours. These contracts have not had an external audit.
+Chain id 42220. Explorer: [celoscan.io](https://celoscan.io). The live protocol was signed 29 October 2026. The owner is the same 2-of-3 Safe as Base. Upgrade delay on this code is six hours.
 
 Allowed Super Tokens (read 31 October 2026 from `0xfc48D9CaeBb63Ac94D1170E921E126d9722B6C4E`; allowlist `contractVersion` 4, not paused):
 

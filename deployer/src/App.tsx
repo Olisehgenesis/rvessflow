@@ -348,8 +348,6 @@ export function App() {
         </p>
       )}
 
-      {chain.mainnet && <p className="note quiet">{chain.name}. These contracts have not had an external audit.</p>}
-
       {chain.groups !== zeroAddress && !fresh ? (
         <p className="note">This chain already has the protocol. The section below finishes the group upgrade. It does not deploy a new set of contracts.</p>
       ) : null}
