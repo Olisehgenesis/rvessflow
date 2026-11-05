@@ -9,6 +9,24 @@ export function mainBalancePlaces(whole: bigint): number {
   return abs.toString().length > 3 ? 2 : 4;
 }
 
+/**
+ * Digits for a live balance. The usual 2 or 4 stay when a second already
+ * changes one of them. A slower flow gets two more. A flow too small to see
+ * even then gets a third, and never more than 8.
+ */
+export function flowingPlaces(base: number, perSec: bigint, scale = 100_000_000n): number {
+  if (perSec <= 0n || scale <= 0n || base < 0) return base;
+  const step = (places: number) => {
+    const unit = scale / 10n ** BigInt(places);
+    return unit > 0n ? unit : 1n;
+  };
+  if (perSec >= step(base)) return base;
+  const max = Math.min(base + 3, 8);
+  const two = Math.min(base + 2, max);
+  if (perSec >= step(two)) return two;
+  return max;
+}
+
 function weiToUsd8(wei: bigint, usdcUsd8: bigint): bigint {
   if (wei <= 0n || usdcUsd8 <= 0n) return 0n;
   return (wei * usdcUsd8) / 10n ** 18n;

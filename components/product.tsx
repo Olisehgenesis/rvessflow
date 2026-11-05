@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FlowingText } from "@/components/flowing";
+import { flowingPlaces } from "@/lib/home-math";
 import { IconCalendar, IconChevron, IconLock } from "@/components/icons";
 import { PenaltyHint } from "@/components/penalty-hint";
 import { TokenMark } from "@/components/forms";
@@ -182,6 +183,13 @@ export function GoalLink({
   const live = pace === "Active" && flow.kind !== "saving" && flow.active && !flow.paused;
   const local = quote.code !== "usd" && quote.code !== "fusdcx";
   const usdLine = usdCaption(part);
+  const perSecond = (perToken: number) => {
+    const rateWei = BigInt(rate || "0");
+    if (rateWei <= 0n || !(perToken > 0)) return 0n;
+    return (rateWei * BigInt(Math.round(perToken * 100_000_000))) / 10n ** 18n;
+  };
+  const places = flowingPlaces(quote.digits > 0 ? quote.digits : 2, perSecond(quote.perToken > 0 ? quote.perToken : 1));
+  const usdPlaces = flowingPlaces(2, perSecond(1));
   return (
     <Link href={href ?? `/goals/${flow.id}`} className="block rounded-2xl border border-border bg-card p-4 lg:transition-colors lg:duration-150 lg:hover:border-[#C9D7A4] lg:focus-visible:outline-2 lg:focus-visible:outline-offset-2 lg:focus-visible:outline-[#141414]">
       <div className="flex items-start gap-3">
@@ -199,12 +207,31 @@ export function GoalLink({
       <div className="mt-3 flex flex-nowrap items-baseline justify-between gap-3">
         <p className="flex min-w-0 flex-1 flex-nowrap items-baseline gap-1 overflow-hidden font-display text-sm font-semibold whitespace-nowrap tabular-nums">
           <span>{quote.unit}</span>
-          {live ? <FlowingText readAt={readAt} base={part} perSecond={rate} ceiling={whole} plain quote={quote} /> : show(part, quote)}
+          {live ? <FlowingText readAt={readAt} base={part} perSecond={rate} ceiling={whole} places={places} plain quote={quote} /> : show(part, quote)}
           <span className="font-medium text-muted-foreground"> / {show(whole, quote)}</span>
         </p>
         <p className="shrink-0 text-xs font-medium tabular-nums whitespace-nowrap">{progress === 0 && BigInt(part || "0") > 0n ? "<1%" : `${progress}%`}</p>
       </div>
-      {local ? <p className="mt-0.5 text-[11px] text-muted-foreground">{usdLine}</p> : null}
+      {local ? (
+        <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+          {live ? (
+            <>
+              $
+              <FlowingText
+                readAt={readAt}
+                base={part}
+                perSecond={rate}
+                ceiling={whole}
+                places={usdPlaces}
+                plain
+                quote={{ code: "usd", unit: "USD", perToken: 1, digits: 2, note: "" }}
+              />
+            </>
+          ) : (
+            usdLine
+          )}
+        </p>
+      ) : null}
       <Progress value={progress} indicatorClassName="bg-foreground" className="mt-2 h-1.5 bg-muted" />
       <div className="mt-3 flex items-center justify-between gap-3 text-xs">
         <span className="flex items-center gap-1.5 text-muted-foreground">

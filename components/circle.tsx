@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Dialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { GroupRotationPlan } from "@/components/group-bits";
@@ -9,7 +9,7 @@ import { useSignedAction } from "@/components/sign-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorNote } from "@/components/ui-bits";
-import { draftCycleSeconds, rotationPlan, roundPhrase, turnsInRounds } from "@/lib/group-plan";
+import { draftCycleSeconds, rotationPlan, roundPhrase, runDuration, turnsInRounds } from "@/lib/group-plan";
 import {
   acceptJoin,
   addMember,
@@ -285,16 +285,23 @@ function StartGroup({ draft }: { draft: DraftView }) {
   const [state, action, pending] = useSignedAction(startDraft);
   const [dropState, drop, dropping] = useActionState(removeDraft, null);
   const expanded = expandRounds(draft.cycles, draft.members.length);
+  const seconds = draftCycleSeconds(draft.cycle, draft.days);
+  const [startsAt, setStartsAt] = useState(0);
+  useEffect(() => {
+    setStartsAt(Math.floor(Date.now() / 1000));
+  }, []);
   const plan = rotationPlan({
     contribution: draft.contribution,
     token: draft.token,
     cycles: expanded.turns,
-    cycleSeconds: draftCycleSeconds(draft.cycle, draft.days),
+    cycleSeconds: seconds,
+    startsAt,
     members: draft.members,
   });
+  const duration = expanded.turns && seconds ? runDuration(draft.cycles, draft.members.length, seconds) : "";
   const lead = expanded.error
     ? expanded.error
-    : `${roundPhrase(draft.cycles)} ${draft.cycles === 1 ? "is" : "are"} ${expanded.turns} turns. Each person receives the pot ${draft.cycles === 1 ? "once" : `${draft.cycles} times`}. You post ${plan.youPost}.`;
+    : `${roundPhrase(draft.cycles)} ${draft.cycles === 1 ? "is" : "are"} ${expanded.turns} turns${duration ? ` over ${duration}` : ""}. Each person receives the pot ${draft.cycles === 1 ? "once" : `${draft.cycles} times`}. You post ${plan.youPost}. Dates are if you start today.`;
   return (
     <div className="space-y-3">
       {ready && !expanded.error ? (

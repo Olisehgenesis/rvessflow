@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DAY } from "@/lib/cycle";
-import { liveRotationPlan, rotationLengthLabel, rotationPlan, turnHeading, turnMoneyLine, turnTimes, turnsInRounds, weiTimes } from "@/lib/group-plan";
+import { liveRotationPlan, receiveAt, rotationLengthLabel, rotationPlan, runDuration, turnHeading, turnMoneyLine, turnTimes, turnsInRounds, weiTimes } from "@/lib/group-plan";
 
 describe("group rotation plan", () => {
   it("shows what you post and what each turn receives", () => {
@@ -42,6 +42,18 @@ describe("group rotation plan", () => {
     assert.equal(plan.turns[0]?.round, 1);
     assert.equal(plan.turns[2]?.round, 1);
     assert.equal(plan.turns[2]?.when, "After 14 days");
+    assert.equal(runDuration(1, 3, 7 * DAY), "21 days");
+    const start = 1_793_806_313;
+    const dated = rotationPlan({
+      contribution: "1",
+      token: "usd",
+      cycles: 3,
+      cycleSeconds: 7 * DAY,
+      startsAt: start,
+      members,
+    });
+    assert.equal(dated.turns[0]?.at, receiveAt(start, 0, 7 * DAY));
+    assert.equal(dated.turns[2]?.at, start + 14 * DAY);
     assert.equal(turnHeading(0, 3, 3), "Turn 1 of 3 · Round 1 of 1");
     assert.equal(rotationLengthLabel(3, 3), "1 round · 3 turns, one for each person");
     assert.equal(rotationLengthLabel(1, 3), "1 turn · one person receives the pot");

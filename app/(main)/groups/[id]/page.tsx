@@ -44,6 +44,7 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
     token: group.token,
     cycles: group.cycles,
     cycleSeconds: group.cycleSeconds,
+    startsAt: group.started ? group.startTime : 0,
     members: group.members.map((member) => ({
       name: member.name,
       you: member.account.toLowerCase() === data.me.address.toLowerCase(),

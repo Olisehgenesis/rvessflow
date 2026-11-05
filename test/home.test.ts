@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { balanceColumns, hasTokenAmount, holdingCaption, liveHomeColumns, mainBalancePlaces, showGettingStarted, sortHoldingsByBalance, usdcEquivalent } from "@/lib/home-math";
+import { balanceColumns, flowingPlaces, hasTokenAmount, holdingCaption, liveHomeColumns, mainBalancePlaces, showGettingStarted, sortHoldingsByBalance, usdcEquivalent } from "@/lib/home-math";
 
 describe("home balance columns", () => {
   it("splits a total into available, streaming, and locked that add back up", () => {
@@ -117,6 +117,14 @@ describe("getting started", () => {
     assert.equal(mainBalancePlaces(999n), 4);
     assert.equal(mainBalancePlaces(1000n), 2);
     assert.equal(mainBalancePlaces(127547n), 2);
+  });
+
+  it("adds two decimals when a second moves them, and a third when the flow is slower", () => {
+    assert.equal(flowingPlaces(4, 0n), 4);
+    assert.equal(flowingPlaces(4, 1_000_000n), 4);
+    assert.equal(flowingPlaces(4, 200n), 6);
+    assert.equal(flowingPlaces(4, 10n), 7);
+    assert.equal(flowingPlaces(2, 10n), 5);
   });
 
   it("puts the largest asset first", () => {

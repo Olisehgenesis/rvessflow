@@ -1,15 +1,17 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorNote } from "@/components/ui-bits";
 import { ChainTiles, CycleCount, DurationChips, PayoutTiles, TokenChips, field } from "@/components/group-terms";
 import { GroupMoney, TokenIcon } from "@/components/token-icon";
+import { GroupRotationPlan } from "@/components/group-bits";
 import { GroupSection, GroupStepper, MemberCard, groupMark } from "@/components/groups-ui";
 import { createDraft, type ActionState } from "@/lib/actions";
 import { cyclePlan, spanLabel, type CycleChoice } from "@/lib/cycle";
+import { rotationPlan, runDuration, turnsInRounds } from "@/lib/group-plan";
 import { type GroupTokenKind } from "@/lib/group-token";
 import { MIN_GROUP_MEMBERS } from "@/lib/group-ui";
 import { groupNetLabel, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
@@ -44,6 +46,7 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
   const plan = cyclePlan(choice, Number(days));
   const rounds = Number(cycles) || 0;
   const roundLabel = rounds === 1 ? "1 round" : `${rounds} rounds`;
+  const preview = useReceivePreview(organizer, rounds, plan?.cycle ?? 0, contribution, token);
   const detailsReady = Boolean(name.trim() && Number(contribution) > 0);
   const scheduleReady = Boolean(plan && Number(cycles));
   const mark = step === 4 ? groupMark.success : groupMark.create;
@@ -148,8 +151,23 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
                   <Row label="Each member pays" value={<GroupMoney amount={contribution} token={token} network={network} />} />
                   <Row label="How often" value={spanLabel(plan.cycle)} />
                   <Row label="Rounds" value={roundLabel} />
+                  <Row label="Run duration" value={preview.duration || "—"} />
                   <Row label="Who receives" value="Each person, once per round" />
                 </dl>
+              ) : null}
+              {preview.plan ? (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs leading-relaxed text-[#5C6572]">Dates if you start today, with you and two more people.</p>
+                  <GroupRotationPlan
+                    youPost={preview.plan.youPost}
+                    othersCount={preview.plan.othersCount}
+                    othersPost={preview.plan.othersPost}
+                    eachTurn={preview.plan.eachTurn}
+                    turns={preview.plan.turns}
+                  />
+                </div>
+              ) : preview.error ? (
+                <p className="mt-4 text-sm text-[#5C6572]">{preview.error}</p>
               ) : null}
             </GroupSection>
             <StickyNext>
@@ -216,11 +234,24 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
                 />
                 <Row label="Frequency" value={plan ? spanLabel(plan.cycle) : "Choose a cycle length"} />
                 <Row label="Rounds" value={roundLabel} />
+                <Row label="Run duration" value={preview.duration || "—"} />
                 <Row label="Who receives" value="Each person, once per round" />
                 <Row label="Payout" value={payout === "plain" ? "Paid each turn" : "Streaming pot"} />
                 <Row label="Blockchain" value={groupNetLabel(network)} />
                 <Row label="Members" value={`You now. Add ${MIN_GROUP_MEMBERS - 1} more after saving.`} />
               </dl>
+              {preview.plan ? (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs leading-relaxed text-[#5C6572]">Dates if you start today, with you and two more people.</p>
+                  <GroupRotationPlan
+                    youPost={preview.plan.youPost}
+                    othersCount={preview.plan.othersCount}
+                    othersPost={preview.plan.othersPost}
+                    eachTurn={preview.plan.eachTurn}
+                    turns={preview.plan.turns}
+                  />
+                </div>
+              ) : null}
             </GroupSection>
             <ErrorNote error={state?.error} />
             <StickyNext>
@@ -240,7 +271,7 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
           {step === 1
             ? "Start a rotating savings group and grow together."
             : step === 2
-              ? "One round is one turn for every member. Each person receives the pot once per round."
+              ? "The run duration is one turn for every person, once per round. Dates below are if you start today."
               : step === 3
                 ? `You need ${MIN_GROUP_MEMBERS} people, including you, before the group can start on-chain.`
                 : "Check the terms. Starting the rotation happens after people join."}
@@ -248,6 +279,36 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
       </aside>
     </div>
   );
+}
+
+function useReceivePreview(organizer: string, rounds: number, cycleSeconds: number, contribution: string, token: GroupTokenKind) {
+  const [startsAt, setStartsAt] = useState(0);
+  useEffect(() => {
+    setStartsAt(Math.floor(Date.now() / 1000));
+  }, [rounds, cycleSeconds]);
+  if (!rounds || !cycleSeconds) return { duration: "", error: "", plan: null };
+  try {
+    const members = [
+      { name: organizer || "You", you: true },
+      { name: "Person 2" },
+      { name: "Person 3" },
+    ];
+    const turns = turnsInRounds(rounds, members.length);
+    return {
+      duration: runDuration(rounds, members.length, cycleSeconds),
+      error: "",
+      plan: rotationPlan({
+        contribution: contribution || "0",
+        token,
+        cycles: turns,
+        cycleSeconds,
+        startsAt,
+        members,
+      }),
+    };
+  } catch (error) {
+    return { duration: "", error: error instanceof Error ? error.message : "That run is too long.", plan: null };
+  }
 }
 
 function StickyNext({ children }: { children: React.ReactNode }) {

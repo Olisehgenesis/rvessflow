@@ -7,6 +7,8 @@ export type TurnShare = {
   round: number;
   name: string;
   when: string;
+  /** Unix seconds this person starts receiving. Zero until a start time is known. */
+  at: number;
   receives: string;
 };
 
@@ -83,11 +85,22 @@ function whenTurnStarts(index: number, cycleSeconds: number): string {
   return `After ${spanLabel(index * cycleSeconds)}`;
 }
 
+export function receiveAt(startsAt: number, index: number, cycleSeconds: number): number {
+  if (!startsAt || index < 0) return 0;
+  return startsAt + index * cycleSeconds;
+}
+
+/** How long a full run lasts: every round, one turn per person. */
+export function runDuration(rounds: number, members: number, cycleSeconds: number): string {
+  return spanLabel(turnsInRounds(rounds, members) * cycleSeconds);
+}
+
 export function rotationPlan(input: {
   contribution: string;
   token: GroupTokenKind;
   cycles: number;
   cycleSeconds: number;
+  startsAt?: number;
   members: { name: string; you?: boolean }[];
 }): {
   youPost: string;
@@ -107,6 +120,7 @@ export function rotationPlan(input: {
       round: roundNumber(index, input.cycles, input.members.length),
       name,
       when: whenTurnStarts(index, input.cycleSeconds),
+      at: receiveAt(input.startsAt ?? 0, index, input.cycleSeconds),
       receives: eachTurn,
     };
   });
@@ -124,6 +138,7 @@ export function liveRotationPlan(input: {
   token: string;
   cycles: number;
   cycleSeconds: number;
+  startsAt?: number;
   members: { name: string; you?: boolean }[];
 }) {
   const youPost = labeledGroup(weiTimes(input.contributionWei, input.cycles), input.token);
@@ -136,6 +151,7 @@ export function liveRotationPlan(input: {
       round: roundNumber(index, input.cycles, input.members.length),
       name,
       when: whenTurnStarts(index, input.cycleSeconds),
+      at: receiveAt(input.startsAt ?? 0, index, input.cycleSeconds),
       receives: eachTurn,
     };
   });

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { TurnShare } from "@/lib/group-plan";
+import { ReceiveWhen } from "@/components/receive-when";
 import { GroupEmpty, groupMark } from "@/components/groups-ui";
 
 export function GroupLead({ src, title, body }: { src: string; title: string; body?: string }) {
@@ -105,7 +106,7 @@ export function GroupRotationPlan({
                       {turn.name}
                     </p>
                     <p className="mt-0.5 text-xs leading-relaxed text-[#5C6572]">
-                      Gets {turn.receives} · {turn.when}
+                      Gets {turn.receives} · {turn.at ? <ReceiveWhen at={turn.at} /> : turn.when}
                     </p>
                   </li>
                 ))}
