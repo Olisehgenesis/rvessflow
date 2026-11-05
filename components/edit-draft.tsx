@@ -74,12 +74,12 @@ export function EditDraftForm({
           <DurationChips choice={choice} onChoice={setChoice} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="cycles">How many turns</Label>
+          <Label htmlFor="cycles">How many rounds</Label>
           <CycleCount value={cycles} onChange={setCycles} />
         </div>
         {choice === "custom" ? (
           <label className="block space-y-1.5 sm:col-span-2">
-            <Label htmlFor="days">Days each turn</Label>
+            <Label htmlFor="days">Days each turn lasts</Label>
             <Input id="days" name="days" defaultValue={draft.days} inputMode="numeric" className={field} />
           </label>
         ) : (
@@ -115,7 +115,7 @@ export function EditLiveForm({ id, name, description }: { id: string; name: stri
         <Label htmlFor="description">Description</Label>
         <Input id="description" name="description" defaultValue={description} className={field} />
       </label>
-      <p className="text-sm leading-relaxed text-muted-foreground">The contribution, cycle length, and number of cycles are fixed once the group is on-chain.</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">The contribution, how often, and the rounds are fixed once the group is on-chain.</p>
       <ErrorNote error={state?.error} />
       <Button type="submit" disabled={pending} className="h-12 w-full rounded-full text-base">
         {pending ? "Saving…" : "Save changes"}

@@ -23,7 +23,7 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [contribution, setContribution] = useState("");
-  const [cycles, setCycles] = useState("2");
+  const [cycles, setCycles] = useState("1");
   const [choice, setChoice] = useState<CycleChoice>("week");
   const [days, setDays] = useState("14");
   const [network, setNetwork] = useState<GroupNet>(recommendedGroupNet);
@@ -42,7 +42,8 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
     }
   }
   const plan = cyclePlan(choice, Number(days));
-  const total = Number(contribution) > 0 ? (Number(contribution) * Number(cycles || 0)).toLocaleString("en-US", { maximumFractionDigits: 2 }) : "";
+  const rounds = Number(cycles) || 0;
+  const roundLabel = rounds === 1 ? "1 round" : `${rounds} rounds`;
   const detailsReady = Boolean(name.trim() && Number(contribution) > 0);
   const scheduleReady = Boolean(plan && Number(cycles));
   const mark = step === 4 ? groupMark.success : groupMark.create;
@@ -75,7 +76,7 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
             }}
           >
             <GroupSection title="Group details">
-              <p className="mb-4 text-sm leading-relaxed text-[#5C6572]">Name the group and how much each person pays each turn.</p>
+              <p className="mb-4 text-sm leading-relaxed text-[#5C6572]">Name the group and how much each person pays on each turn.</p>
               <div className="grid gap-4">
                 <label className="block space-y-1.5">
                   <Label htmlFor="name">Group name</Label>
@@ -123,7 +124,7 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
             <GroupSection title="Schedule">
               <div className="grid gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="cycles">Number of turns</Label>
+                  <Label htmlFor="cycles">Number of rounds</Label>
                   <CycleCount value={cycles} onChange={setCycles} />
                 </div>
                 {choice === "custom" ? (
@@ -146,8 +147,8 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
                 <dl className="mt-5 divide-y divide-[#E6EADF] rounded-2xl bg-[#F7F8F4] text-sm">
                   <Row label="Each member pays" value={<GroupMoney amount={contribution} token={token} network={network} />} />
                   <Row label="How often" value={spanLabel(plan.cycle)} />
-                  <Row label="Turns" value={cycles} />
-                  <Row label="You post for all turns" value={total ? <GroupMoney amount={total} token={token} network={network} /> : "—"} />
+                  <Row label="Rounds" value={roundLabel} />
+                  <Row label="Who receives" value="Each person, once per round" />
                 </dl>
               ) : null}
             </GroupSection>
@@ -214,8 +215,8 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
                   }
                 />
                 <Row label="Frequency" value={plan ? spanLabel(plan.cycle) : "Choose a cycle length"} />
-                <Row label="Turns" value={cycles} />
-                <Row label="You pay, all turns" value={total ? <GroupMoney amount={total} token={token} network={network} /> : "—"} />
+                <Row label="Rounds" value={roundLabel} />
+                <Row label="Who receives" value="Each person, once per round" />
                 <Row label="Payout" value={payout === "plain" ? "Paid each turn" : "Streaming pot"} />
                 <Row label="Blockchain" value={groupNetLabel(network)} />
                 <Row label="Members" value={`You now. Add ${MIN_GROUP_MEMBERS - 1} more after saving.`} />
@@ -239,7 +240,7 @@ export function CreateGroup({ live, organizer }: { live: Record<GroupNet, boolea
           {step === 1
             ? "Start a rotating savings group and grow together."
             : step === 2
-              ? "Each member pays the same amount, then takes a turn receiving the pot."
+              ? "One round is one turn for every member. Each person receives the pot once per round."
               : step === 3
                 ? `You need ${MIN_GROUP_MEMBERS} people, including you, before the group can start on-chain.`
                 : "Check the terms. Starting the rotation happens after people join."}

@@ -5,11 +5,12 @@ export const MAX_CYCLE = 366 * DAY;
 export const MIN_GROUP_CYCLES = 1;
 export const MAX_GROUP_CYCLES = 520;
 export const CYCLE_PRESETS = [2, 4, 8, 12, 26, 52] as const;
+export const ROUND_PRESETS = [1, 2, 4, 12] as const;
 
 export function readCycles(value: unknown): number {
   const n = typeof value === "number" ? value : Number(String(value ?? "").trim());
   if (!Number.isInteger(n) || n < MIN_GROUP_CYCLES || n > MAX_GROUP_CYCLES) {
-    throw new Error(`Pick between ${MIN_GROUP_CYCLES} and ${MAX_GROUP_CYCLES} turns.`);
+    throw new Error(`Pick between ${MIN_GROUP_CYCLES} and ${MAX_GROUP_CYCLES} rounds.`);
   }
   return n;
 }

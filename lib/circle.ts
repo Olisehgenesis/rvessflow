@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { getAddress, isAddress, type Address } from "viem";
 import { cyclePlan, readCycles, spanLabel } from "@/lib/cycle";
+import { roundPhrase, turnsInRounds } from "@/lib/group-plan";
 import { assignNameCode, chosenName } from "@/lib/display";
 import { asGroupToken, draftAmount, groupTerms, type GroupTokenKind } from "@/lib/group-token";
 import { appGroupNet, groupNetLabel, isGroupNet, recommendedGroupNet, type GroupNet } from "@/lib/group-network";
@@ -563,7 +564,7 @@ function view(data: World, draft: Draft, who: Viewer): DraftView {
     networkLabel: groupNetLabel(draft.network),
     token: draft.token,
     plain: draft.plain,
-    summary: `${plan ? `${draftAmount(draft.contribution, draft.token)} each cycle, ${draft.cycles} cycles of ${spanLabel(plan.cycle)}.` : `${draftAmount(draft.contribution, draft.token)} each cycle.`} ${draft.plain ? "Each contribution is paid to the person whose turn it is." : "The pot streams to the person whose turn it is."}`,
+    summary: `${roundPhrase(draft.cycles)}. One round is one turn for each member.${plan ? ` Each turn lasts ${spanLabel(plan.cycle)}.` : ""} ${draft.plain ? "Each contribution is paid to the person whose turn it is." : "The pot streams to the person whose turn it is."}`,
     open: draft.open,
     mine,
     member: draft.members.some((item) => same(item, who.address)),
@@ -1068,6 +1069,11 @@ export async function deleteDraft(id: string) {
   await writeBucket(bucket, data[bucket]);
 }
 
+function chainTurns(rounds: number, members: readonly string[]): number {
+  const people = new Set(members.map((item) => item.toLowerCase())).size;
+  return turnsInRounds(rounds, people);
+}
+
 export async function groupCreateIntent(draftId: string) {
   const who = await viewer();
   const data = await world();
@@ -1092,7 +1098,7 @@ export async function groupCreateIntent(draftId: string) {
     draftId,
     contribution: draft.contribution,
     members,
-    cycles: draft.cycles,
+    cycles: chainTurns(draft.cycles, members),
     cycleSeconds: plan.cycle,
     windowSeconds: plan.window,
     graceSeconds: plan.grace,
@@ -1130,7 +1136,7 @@ export async function launchDraft(id: string) {
   const chainId = await openGroup(index, {
     contribution: draft.contribution,
     members,
-    cycles: draft.cycles,
+    cycles: chainTurns(draft.cycles, members),
     cycleSeconds: plan.cycle,
     windowSeconds: plan.window,
     graceSeconds: plan.grace,

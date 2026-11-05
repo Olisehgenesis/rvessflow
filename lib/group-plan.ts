@@ -1,12 +1,65 @@
-import { cyclePlan, spanLabel } from "@/lib/cycle";
+import { cyclePlan, MAX_GROUP_CYCLES, spanLabel } from "@/lib/cycle";
 import { labeledGroup, type GroupTokenKind } from "@/lib/group-token";
 
 export type TurnShare = {
   turn: number;
+  /** 0 when the rotation is not a whole number of rounds. */
+  round: number;
   name: string;
   when: string;
   receives: string;
 };
+
+/** One round is one turn for every member. The contract stores that as turns. */
+export function turnsInRounds(rounds: number, members: number): number {
+  const count = Math.floor(rounds);
+  const people = Math.floor(members);
+  if (!Number.isInteger(count) || count < 1) throw new Error("Pick at least 1 round.");
+  if (!Number.isInteger(people) || people < 1) throw new Error("Add the members before counting turns.");
+  const turns = count * people;
+  if (turns > MAX_GROUP_CYCLES) {
+    throw new Error(
+      `${count} ${count === 1 ? "round" : "rounds"} with ${people} people is ${turns} turns. The contract allows ${MAX_GROUP_CYCLES}.`,
+    );
+  }
+  return turns;
+}
+
+export function fullRounds(cycles: number, members: number): boolean {
+  const people = Math.max(Math.floor(members), 1);
+  return cycles >= people && cycles % people === 0;
+}
+
+export function roundPhrase(rounds: number): string {
+  return rounds === 1 ? "1 round" : `${rounds} rounds`;
+}
+
+export function turnHeading(cycleIndex: number, cycles: number, members: number): string {
+  const turn = Math.min(cycleIndex + 1, Math.max(cycles, 1));
+  const people = Math.max(Math.floor(members), 1);
+  if (!fullRounds(cycles, people)) return `Turn ${turn} of ${cycles}`;
+  const round = Math.floor(cycleIndex / people) + 1;
+  const rounds = cycles / people;
+  return `Turn ${turn} of ${cycles} · Round ${round} of ${rounds}`;
+}
+
+export function rotationLengthLabel(cycles: number, members: number): string {
+  const people = Math.max(Math.floor(members), 1);
+  if (fullRounds(cycles, people)) {
+    const rounds = cycles / people;
+    return rounds === 1
+      ? `1 round · ${people} turns, one for each person`
+      : `${rounds} rounds · ${cycles} turns, one for each person each round`;
+  }
+  if (cycles === 1) return "1 turn · one person receives the pot";
+  return `${cycles} turns`;
+}
+
+function roundNumber(index: number, cycles: number, members: number): number {
+  const people = Math.max(members, 1);
+  if (!fullRounds(cycles, people)) return 0;
+  return Math.floor(index / people) + 1;
+}
 
 export function weiTimes(wei: string, n: number): string {
   if (!Number.isInteger(n) || n < 0) return wei;
@@ -51,6 +104,7 @@ export function rotationPlan(input: {
     const name = member ? (member.you ? `${member.name} (you)` : member.name) : `Turn ${index + 1}`;
     return {
       turn: index + 1,
+      round: roundNumber(index, input.cycles, input.members.length),
       name,
       when: whenTurnStarts(index, input.cycleSeconds),
       receives: eachTurn,
@@ -79,6 +133,7 @@ export function liveRotationPlan(input: {
     const name = member ? (member.you ? `${member.name} (you)` : member.name) : `Turn ${index + 1}`;
     return {
       turn: index + 1,
+      round: roundNumber(index, input.cycles, input.members.length),
       name,
       when: whenTurnStarts(index, input.cycleSeconds),
       receives: eachTurn,

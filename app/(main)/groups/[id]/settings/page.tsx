@@ -8,6 +8,7 @@ import { Page } from "@/components/ui-bits";
 import { liveGroupTabs } from "@/lib/group-ui";
 import { spanLabel } from "@/lib/cycle";
 import { groupLabel } from "@/lib/circle";
+import { rotationLengthLabel } from "@/lib/group-plan";
 import { labeledGroup } from "@/lib/group-token";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
@@ -47,8 +48,8 @@ async function SettingsBody({ params }: { params: Promise<{ id: string }> }) {
           <dd className="font-medium">{spanLabel(group.cycleSeconds)}</dd>
         </div>
         <div className="flex justify-between gap-4 py-3">
-          <dt className="text-muted-foreground">Total cycles</dt>
-          <dd className="font-medium">{group.cycles}</dd>
+          <dt className="text-muted-foreground">Rounds</dt>
+          <dd className="max-w-[16rem] text-right font-medium">{rotationLengthLabel(group.cycles, group.members.length)}</dd>
         </div>
       </dl>
       <ul className="mt-4 divide-y divide-border border-y border-border text-sm">

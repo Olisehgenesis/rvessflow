@@ -30,13 +30,13 @@ async function SettingsBody({ params }: { params: Promise<{ id: string }> }) {
         <Fact label="Description" value={draft.description || "None"} />
         <Fact label="Contribution" value={<GroupMoney amount={draft.contribution} token={draft.token} network={draft.network} />} />
         <Fact label="Cycle" value={draft.cycleLabel} />
-        <Fact label="Total cycles" value={String(draft.cycles)} />
+        <Fact label="Rounds" value={draft.cycles === 1 ? "1 round. Each person receives once." : `${draft.cycles} rounds. Each person receives ${draft.cycles} times.`} />
         <Fact label="Each turn" value={draft.plain ? "Paid as a transfer" : "Streams"} />
       </dl>
       <ul className="mt-4 divide-y divide-border border-y border-border text-sm">
         {draft.mine ? <Item href={`${base}/edit`} title="Edit group" body="Change the name, amount, and cycle before this group is started." /> : null}
         <Item href={`${base}/invite`} title="Invite" body={`Code ${draft.code}`} />
-        <Item href={base} title="Payout order" body="Turn 1 receives the first cycle. Reorder from Members." />
+        <Item href={base} title="Payout order" body="Round 1 starts with the first person. Reorder from Members." />
         <Item href={`${base}/notifications`} title="Notifications" body="Saved on this phone." />
       </ul>
       <p className="mt-4 text-sm leading-relaxed text-muted-foreground">A group has one organizer. Pausing a running group is not a control the organizer has. Cancel is available on the group after it is on-chain and before the rotation starts.</p>

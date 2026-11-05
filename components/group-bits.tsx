@@ -93,22 +93,40 @@ export function GroupRotationPlan({
       </dl>
       {turns.length > 0 ? (
         <ol className="divide-y divide-[#E6EADF] overflow-hidden rounded-2xl border border-[#E6EADF] bg-white text-sm">
-          {turns.map((turn) => (
-            <li key={turn.turn} className="px-4 py-3">
-              <p className="font-medium text-[#141414]">
-                Turn {turn.turn}
-                <span className="font-normal text-[#5C6572]"> · </span>
-                {turn.name}
-              </p>
-              <p className="mt-0.5 text-xs leading-relaxed text-[#5C6572]">
-                Gets {turn.receives} · {turn.when}
-              </p>
+          {groupTurns(turns).map((round) => (
+            <li key={round.key}>
+              {round.label ? <p className="bg-[#F7F8F4] px-4 py-2 text-xs font-semibold text-[#141414]">{round.label}</p> : null}
+              <ol>
+                {round.turns.map((turn) => (
+                  <li key={turn.turn} className="border-t border-[#E6EADF] px-4 py-3 first:border-t-0">
+                    <p className="font-medium text-[#141414]">
+                      Turn {turn.turn}
+                      <span className="font-normal text-[#5C6572]"> · </span>
+                      {turn.name}
+                    </p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-[#5C6572]">
+                      Gets {turn.receives} · {turn.when}
+                    </p>
+                  </li>
+                ))}
+              </ol>
             </li>
           ))}
         </ol>
       ) : null}
     </div>
   );
+}
+
+function groupTurns(turns: TurnShare[]) {
+  const rounds: { key: string; label: string; turns: TurnShare[] }[] = [];
+  for (const turn of turns) {
+    const key = turn.round > 0 ? `round-${turn.round}` : "turns";
+    const last = rounds[rounds.length - 1];
+    if (last?.key === key) last.turns.push(turn);
+    else rounds.push({ key, label: turn.round > 0 ? `Round ${turn.round}` : "", turns: [turn] });
+  }
+  return rounds;
 }
 
 export function EmptyGroups({ joined = false }: { joined?: boolean }) {

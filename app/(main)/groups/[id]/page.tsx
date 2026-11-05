@@ -8,7 +8,7 @@ import { GroupNav } from "@/components/group-bits";
 import { CollateralList, GroupHero, GroupRing, GroupSection, GroupStatGrid, MemberCard, groupMark } from "@/components/groups-ui";
 import { Page } from "@/components/ui-bits";
 import { spanLabel } from "@/lib/cycle";
-import { liveRotationPlan, turnMoneyLine, turnTimes, weiTimes } from "@/lib/group-plan";
+import { liveRotationPlan, rotationLengthLabel, turnHeading, turnMoneyLine, turnTimes, weiTimes } from "@/lib/group-plan";
 import { groupNetLabel, parseGroupKey } from "@/lib/group-network";
 import { GroupMoney } from "@/components/token-icon";
 import { labeledGroup } from "@/lib/group-token";
@@ -102,7 +102,7 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
               <GroupRing value={ringValue} max={ringMax} caption={ringCaption} />
               <div className="min-w-0">
                 <p className="text-sm font-semibold tabular-nums text-[#141414]">
-                  {group.started ? `Turn ${turn} of ${group.cycles}` : "Waiting to start"}
+                  {group.started ? turnHeading(current, group.cycles, group.members.length) : "Waiting to start"}
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-[#5C6572]">
                   {group.started
@@ -177,7 +177,7 @@ async function GroupBody({ params }: { params: Promise<{ id: string }> }) {
             <ul className="space-y-2 text-sm text-[#3A3F47]">
               <li className="flex flex-wrap items-center gap-1.5">Contribution <GroupMoney wei={group.contribution} token={group.token} /> per turn</li>
               <li>{spanLabel(group.cycleSeconds)} each cycle</li>
-              <li>{group.cycles} turns</li>
+              <li>{rotationLengthLabel(group.cycles, group.members.length)}</li>
               <li>Turn 1 is first in the payout order</li>
             </ul>
           </GroupSection>

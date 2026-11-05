@@ -9,7 +9,7 @@ import { useSignedAction } from "@/components/sign-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorNote } from "@/components/ui-bits";
-import { draftCycleSeconds, rotationPlan } from "@/lib/group-plan";
+import { draftCycleSeconds, rotationPlan, roundPhrase, turnsInRounds } from "@/lib/group-plan";
 import {
   acceptJoin,
   addMember,
@@ -62,7 +62,7 @@ export function DraftTerms() {
       <label className="block space-y-1.5">
         <Label htmlFor="contribution">Each contribution</Label>
         <Input id="contribution" name="contribution" placeholder="100" inputMode="decimal" className={field} aria-invalid={Boolean(state?.error)} />
-        <span className="block text-xs leading-relaxed text-muted-foreground">Each member posts this amount for every turn before the rotation can start.</span>
+        <span className="block text-xs leading-relaxed text-muted-foreground">Each member pays this on every turn. One round is one turn for each person.</span>
       </label>
       <label className="block space-y-1.5">
         <Label htmlFor="payout">How each turn is paid</Label>
@@ -73,9 +73,9 @@ export function DraftTerms() {
         <span className="block text-xs leading-relaxed text-muted-foreground">Paid each turn sends the contribution to the person whose turn it is. A streaming pot pays that person every second.</span>
       </label>
       <label className="block space-y-1.5">
-        <Label htmlFor="cycles">How many turns</Label>
-        <Input id="cycles" name="cycles" defaultValue="2" inputMode="numeric" className={field} />
-        <span className="block text-xs leading-relaxed text-muted-foreground">Two people, every week: pick Week, then 2 turns, or 52 for a year.</span>
+        <Label htmlFor="cycles">How many rounds</Label>
+        <Input id="cycles" name="cycles" defaultValue="1" inputMode="numeric" className={field} />
+        <span className="block text-xs leading-relaxed text-muted-foreground">1 round means each person receives the pot once. 2 rounds means each person receives it twice.</span>
       </label>
       <label className="block space-y-1.5">
         <Label htmlFor="cycle">Each cycle</Label>
@@ -269,22 +269,35 @@ export function ApplyLink({ id }: { id: string }) {
   return <Apply id={id} compact />;
 }
 
+function expandRounds(rounds: number, members: number): { turns: number; error: string } {
+  if (members < 3) return { turns: 0, error: "" };
+  try {
+    return { turns: turnsInRounds(rounds, members), error: "" };
+  } catch (error) {
+    return { turns: 0, error: error instanceof Error ? error.message : "That is too many turns." };
+  }
+}
+
 function StartGroup({ draft }: { draft: DraftView }) {
   const ready = draft.members.length >= 3;
   const [open, setOpen] = useState(false);
   const [dropOpen, setDropOpen] = useState(false);
   const [state, action, pending] = useSignedAction(startDraft);
   const [dropState, drop, dropping] = useActionState(removeDraft, null);
+  const expanded = expandRounds(draft.cycles, draft.members.length);
   const plan = rotationPlan({
     contribution: draft.contribution,
     token: draft.token,
-    cycles: draft.cycles,
+    cycles: expanded.turns,
     cycleSeconds: draftCycleSeconds(draft.cycle, draft.days),
     members: draft.members,
   });
+  const lead = expanded.error
+    ? expanded.error
+    : `${roundPhrase(draft.cycles)} ${draft.cycles === 1 ? "is" : "are"} ${expanded.turns} turns. Each person receives the pot ${draft.cycles === 1 ? "once" : `${draft.cycles} times`}. You post ${plan.youPost}.`;
   return (
     <div className="space-y-3">
-      {ready ? (
+      {ready && !expanded.error ? (
         <GroupRotationPlan
           youPost={plan.youPost}
           othersCount={plan.othersCount}
@@ -292,12 +305,14 @@ function StartGroup({ draft }: { draft: DraftView }) {
           eachTurn={plan.eachTurn}
           turns={plan.turns}
         />
+      ) : expanded.error ? (
+        <p className="text-sm leading-relaxed text-muted-foreground">{expanded.error}</p>
       ) : (
         <p className="text-sm leading-relaxed text-muted-foreground">
           Add at least 3 people, including you. Then you can start the group and see who is paid, how much, and when.
         </p>
       )}
-      {ready ? (
+      {ready && !expanded.error ? (
         <Button type="button" onClick={() => setOpen(true)} className="h-12 w-full rounded-full bg-[#D6F34A] text-base font-semibold text-[#141414] hover:bg-[#D6F34A]">
           Start group
         </Button>
@@ -313,7 +328,7 @@ function StartGroup({ draft }: { draft: DraftView }) {
           <Dialog.Content className="fixed top-1/2 left-1/2 z-50 max-h-[min(92dvh,36rem)] w-[min(100%-1.25rem,26rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.7rem] bg-white px-5 pt-5 pb-5 shadow-[0_28px_80px_-28px_rgba(0,0,0,0.55)] outline-none">
             <Dialog.Title className="text-lg font-semibold tracking-[-0.03em]">Who pays, who gets paid</Dialog.Title>
             <Dialog.Description className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              You post {plan.youPost}. Each of the other members posts the same. Starting writes this order on-chain.
+              {lead} Each of the other members posts the same. Starting writes this order on-chain.
             </Dialog.Description>
             <div className="mt-4">
               <GroupRotationPlan

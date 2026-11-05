@@ -47,7 +47,7 @@ async function ExploreBody() {
               {draft.description ? <p className="mt-1 text-muted-foreground">{draft.description}</p> : null}
               <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                 <GroupMoney amount={draft.contribution} token={draft.token} network={draft.network} />
-                <span>· {draft.cycles} cycles of {draft.cycleLabel} · {draft.count} {draft.count === 1 ? "member" : "members"}</span>
+                <span>· {draft.cycles === 1 ? "1 round" : `${draft.cycles} rounds`} · {draft.cycleLabel} each turn · {draft.count} {draft.count === 1 ? "member" : "members"}</span>
               </p>
               <div className="mt-2">
                 <ApplyLink id={draft.id} />

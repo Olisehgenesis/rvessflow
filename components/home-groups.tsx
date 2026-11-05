@@ -2,6 +2,7 @@ import Link from "next/link";
 import { GroupCard, groupMark } from "@/components/groups-ui";
 import { GroupMoney } from "@/components/token-icon";
 import { spanLabel } from "@/lib/cycle";
+import { turnHeading } from "@/lib/group-plan";
 import { MIN_GROUP_MEMBERS } from "@/lib/group-ui";
 import type { DraftCard } from "@/lib/circle";
 import type { Portfolio } from "@/lib/protocol";
@@ -32,7 +33,7 @@ export function HomeGroups({
             members={`${group.members.length} members`}
             progress={Math.min(current + 1, group.cycles)}
             progressMax={group.cycles}
-            next={group.cycleOpen ? `Turn ${current + 1} of ${group.cycles} is open` : `Turn ${current + 1} of ${group.cycles} · ${spanLabel(group.cycleSeconds)} each`}
+            next={group.cycleOpen ? `${turnHeading(current, group.cycles, group.members.length)} is open` : `${turnHeading(current, group.cycles, group.members.length)} · ${spanLabel(group.cycleSeconds)} each`}
           />
         </li>
       );
@@ -47,7 +48,7 @@ export function HomeGroups({
           members={`${draft.count} of ${MIN_GROUP_MEMBERS} members`}
           progress={draft.count}
           progressMax={MIN_GROUP_MEMBERS}
-          next={`${draft.cycles} turns · ${draft.cycleLabel}`}
+          next={`${draft.cycles === 1 ? "1 round" : `${draft.cycles} rounds`} · ${draft.cycleLabel}`}
           mark={groupMark.create}
         />
       </li>

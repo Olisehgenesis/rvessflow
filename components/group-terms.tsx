@@ -1,6 +1,6 @@
 "use client";
 
-import { CYCLE_PRESETS, MAX_GROUP_CYCLES, type CycleChoice } from "@/lib/cycle";
+import { MAX_GROUP_CYCLES, ROUND_PRESETS, type CycleChoice } from "@/lib/cycle";
 import type { GroupTokenKind } from "@/lib/group-token";
 import { ChainMark, TokenIcon } from "@/components/token-icon";
 import { groupMark } from "@/components/groups-ui";
@@ -24,7 +24,7 @@ export function CycleCount({ value, onChange }: { value: string; onChange: (next
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        {CYCLE_PRESETS.map((n) => (
+        {ROUND_PRESETS.map((n) => (
           <Chip key={n} on={value === String(n)} onClick={() => onChange(String(n))}>
             {n}
           </Chip>
@@ -36,10 +36,10 @@ export function CycleCount({ value, onChange }: { value: string; onChange: (next
         value={value}
         onChange={(event) => onChange(event.target.value.replace(/\D/g, "").slice(0, 3))}
         className={`${field} w-full`}
-        aria-label="Number of turns"
+        aria-label="Number of rounds"
       />
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Two people, every week: Week, then 2 for one turn each, or 52 for a year. Max {MAX_GROUP_CYCLES}.
+        One round is one turn for each person. With 3 people, 1 round is 3 turns, and each person receives the pot once. Max {MAX_GROUP_CYCLES} turns.
       </p>
     </div>
   );

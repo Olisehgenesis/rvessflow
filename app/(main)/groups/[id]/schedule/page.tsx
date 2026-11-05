@@ -6,7 +6,7 @@ import { GroupWhen } from "@/components/group-when";
 import { GroupSection } from "@/components/groups-ui";
 import { Page } from "@/components/ui-bits";
 import { groupLabel } from "@/lib/circle";
-import { liveRotationPlan, turnTimes } from "@/lib/group-plan";
+import { liveRotationPlan, turnHeading, turnTimes } from "@/lib/group-plan";
 import { liveGroupTabs } from "@/lib/group-ui";
 import { loadPortfolio } from "@/lib/protocol";
 import { viewer } from "@/lib/session";
@@ -43,7 +43,7 @@ async function ScheduleBody({ params }: { params: Promise<{ id: string }> }) {
       <div className="mt-4 lg:max-w-3xl">
         <GroupSection title={label?.name || `Group ${group.id}`}>
           <p className="mb-4 text-sm leading-relaxed text-[#5C6572]">
-            {group.started ? `Turn ${Math.min(current + 1, group.cycles)} of ${group.cycles}. Times come from the start of the rotation.` : "The rotation has not started."}
+            {group.started ? `${turnHeading(current, group.cycles, group.members.length)}. Times come from the start of the rotation.` : "The rotation has not started."}
           </p>
           {group.started && me ? (
             <div className="mb-4">

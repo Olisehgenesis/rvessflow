@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DAY } from "@/lib/cycle";
-import { liveRotationPlan, rotationPlan, turnMoneyLine, turnTimes, weiTimes } from "@/lib/group-plan";
+import { liveRotationPlan, rotationLengthLabel, rotationPlan, turnHeading, turnMoneyLine, turnTimes, turnsInRounds, weiTimes } from "@/lib/group-plan";
 
 describe("group rotation plan", () => {
   it("shows what you post and what each turn receives", () => {
@@ -20,9 +20,32 @@ describe("group rotation plan", () => {
     assert.equal(plan.othersCount, 2);
     assert.equal(plan.othersPost, "1 USD");
     assert.equal(plan.eachTurn, "3 USD");
+    assert.equal(plan.turns[0]?.round, 0);
     assert.equal(plan.turns[0]?.name, "Ada (you)");
     assert.equal(plan.turns[0]?.when, "When the rotation starts");
     assert.equal(plan.turns[0]?.receives, "3 USD");
+  });
+
+  it("turns one round into one turn for each person", () => {
+    const members = [{ name: "Ada", you: true }, { name: "Bae" }, { name: "Cam" }];
+    assert.equal(turnsInRounds(1, 3), 3);
+    assert.equal(turnsInRounds(2, 3), 6);
+    const plan = rotationPlan({
+      contribution: "1",
+      token: "usd",
+      cycles: turnsInRounds(1, members.length),
+      cycleSeconds: 7 * DAY,
+      members,
+    });
+    assert.equal(plan.youPost, "3 USD");
+    assert.equal(plan.turns.map((turn) => turn.name).join(", "), "Ada (you), Bae, Cam");
+    assert.equal(plan.turns[0]?.round, 1);
+    assert.equal(plan.turns[2]?.round, 1);
+    assert.equal(plan.turns[2]?.when, "After 14 days");
+    assert.equal(turnHeading(0, 3, 3), "Turn 1 of 3 · Round 1 of 1");
+    assert.equal(rotationLengthLabel(3, 3), "1 round · 3 turns, one for each person");
+    assert.equal(rotationLengthLabel(1, 3), "1 turn · one person receives the pot");
+    assert.throws(() => turnsInRounds(200, 3));
   });
 
   it("spaces later turns by the cycle length", () => {
