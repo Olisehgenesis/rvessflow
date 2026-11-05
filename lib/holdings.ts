@@ -3,7 +3,7 @@ import "server-only";
 import { createPublicClient, http, zeroAddress, type Address, type Hex } from "viem";
 import { base, celo } from "viem/chains";
 import { maxUsdInput } from "@/lib/deposit-math";
-import { balanceColumns, holdingCaption } from "@/lib/home-math";
+import { appChainSuper, balanceColumns, holdingCaption } from "@/lib/home-math";
 import { formatAmount, formatUsd8, type PayAsset } from "@/lib/pay-math";
 import { coinMap, loadPrices } from "@/lib/prices";
 import { celoTransport } from "@/lib/network";
@@ -327,7 +327,17 @@ export async function loadHoldings(owner: Address, portfolio: Portfolio, quote: 
   const usdt = readAmount(reads, 1);
   const spendableSuperBalance = BigInt(portfolio.wallet) + BigInt(portfolio.idle);
   const streamingSuper = BigInt(portfolio.streaming);
-  const usdSuper = spendableSuperBalance + BigInt(portfolio.held) + streamingSuper + BigInt(portfolio.locked);
+  const usdSuper = appChainSuper({
+    wallet: BigInt(portfolio.wallet),
+    idle: BigInt(portfolio.idle),
+    held: BigInt(portfolio.held),
+    streaming: streamingSuper,
+    locked: BigInt(portfolio.locked),
+    otherIdle: BigInt(portfolio.otherIdle),
+    otherHeld: BigInt(portfolio.otherHeld),
+    otherStreaming: BigInt(portfolio.otherStreaming),
+    otherLocked: BigInt(portfolio.otherLocked),
+  });
   let ethxLocked = 0n;
   for (const lock of portfolio.locks) {
     if (!lock.settled && lock.token.toLowerCase() === addresses.ethx.toLowerCase()) ethxLocked += BigInt(lock.principal);

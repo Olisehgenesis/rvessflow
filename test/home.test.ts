@@ -1,8 +1,26 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { balanceColumns, flowingPlaces, hasTokenAmount, holdingCaption, liveHomeColumns, mainBalancePlaces, showGettingStarted, sortHoldingsByBalance, usdcEquivalent } from "@/lib/home-math";
+import { appChainSuper, balanceColumns, flowingPlaces, hasTokenAmount, holdingCaption, liveHomeColumns, mainBalancePlaces, showGettingStarted, sortHoldingsByBalance, usdcEquivalent } from "@/lib/home-math";
 
 describe("home balance columns", () => {
+  it("does not count the other chain's vault twice in the USD super total", () => {
+    const celoVault = 15_100_578_702_135_097_291n;
+    const celoWallet = 96_820_080_174_908_912n;
+    const superOnApp = appChainSuper({
+      wallet: 0n,
+      idle: 1n,
+      held: 2_500_760_999_999_994_291n,
+      streaming: 3_036_908_702_135_103_480n,
+      locked: 9_562_909_000_000_000_000n,
+      otherIdle: 1n,
+      otherHeld: 2_500_760_999_999_994_291n,
+      otherStreaming: 3_036_908_702_135_103_480n,
+      otherLocked: 9_562_909_000_000_000_000n,
+    });
+    assert.equal(superOnApp, 0n);
+    assert.equal(celoWallet + celoVault, 15_197_398_782_310_006_203n);
+  });
+
   it("splits a total into available, streaming, and locked that add back up", () => {
     const total = 12_842_000_000n;
     const streaming = 3_426_000_000n;

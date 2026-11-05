@@ -1,5 +1,30 @@
 import { formatUsd8 } from "@/lib/pay-math";
 
+function atLeastZero(value: bigint) {
+  return value > 0n ? value : 0n;
+}
+
+/** Super on this app chain only. The other chain is added separately from its wallet/vault/lock reads. */
+export function appChainSuper(input: {
+  wallet: bigint;
+  idle: bigint;
+  held: bigint;
+  streaming: bigint;
+  locked: bigint;
+  otherIdle: bigint;
+  otherHeld: bigint;
+  otherStreaming: bigint;
+  otherLocked: bigint;
+}) {
+  return (
+    input.wallet +
+    atLeastZero(input.idle - input.otherIdle) +
+    atLeastZero(input.held - input.otherHeld) +
+    atLeastZero(input.streaming - input.otherStreaming) +
+    atLeastZero(input.locked - input.otherLocked)
+  );
+}
+
 /**
  * Main balance places. More than three digits in the whole part uses 2 decimals.
  * A smaller balance uses 4, so a short amount still shows the fraction.

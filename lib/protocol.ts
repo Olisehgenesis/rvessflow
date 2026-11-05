@@ -407,6 +407,11 @@ export type Portfolio = {
   held: string;
   streaming: string;
   locked: string;
+  /** Other-chain vault/lock super already included in idle/held/streaming/locked. */
+  otherIdle: string;
+  otherHeld: string;
+  otherStreaming: string;
+  otherLocked: string;
   total: string;
   readAt: number;
   flows: FlowRow[];
@@ -733,6 +738,10 @@ export const loadPortfolio = cache(async (who: { address: Address; name: string;
     held: held.toString(),
     streaming: streaming.toString(),
     locked: locked.toString(),
+    otherIdle: otherBook.idle.toString(),
+    otherHeld: otherBook.held.toString(),
+    otherStreaming: otherBook.streaming.toString(),
+    otherLocked: otherBook.locked.toString(),
     total: total.toString(),
     readAt,
     flows,
