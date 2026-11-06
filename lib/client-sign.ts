@@ -198,7 +198,34 @@ async function sendWallet(calls: PreparedCall[], from: Address, where: ReturnTyp
   return last;
 }
 
+function signFailDetail(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      shortMessage: "shortMessage" in error ? String((error as { shortMessage?: unknown }).shortMessage ?? "") : "",
+      details: "details" in error ? String((error as { details?: unknown }).details ?? "") : "",
+      cause: error.cause instanceof Error ? error.cause.message : error.cause ? String(error.cause) : "",
+      stack: error.stack,
+    };
+  }
+  return { message: String(error) };
+}
+
+function logSignFail(step: string, error: unknown, extra?: Record<string, unknown>) {
+  console.error(`[passkey-sign] ${step}`, { ...extra, error: signFailDetail(error) });
+}
+
 async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnType<typeof settlement>, onHash?: (hash: Hash) => void) {
+  try {
+    return await sendPasskeyInner(calls, from, where, onHash);
+  } catch (error) {
+    logSignFail("sendPasskey", error, { from, chainId: where.id, calls: calls.length });
+    throw error;
+  }
+}
+
+async function sendPasskeyInner(calls: PreparedCall[], from: Address, where: ReturnType<typeof settlement>, onHash?: (hash: Hash) => void) {
   const saved = (await readPasskeys()).find((item) => item.address.toLowerCase() === from.toLowerCase());
   if (!saved) throw new Error("This browser does not have the passkey for this account. Sign in again on this device.");
   const [{ createPublicClient: createClient, http: transport }, accountAbstraction, { toKernelSmartAccount }, { createSmartAccountClient }, { getUserOperationGasPrice }, { createPimlicoClient }] =
@@ -258,7 +285,8 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
         const { topCeloIfNeeded } = await import("@/lib/actions");
         await topCeloIfNeeded();
         ethBalance = await publicClient.getBalance({ address: account.address });
-      } catch {
+      } catch (error) {
+        console.warn("[passkey-sign] celo faucet skipped", signFailDetail(error));
         // The faucet is optional. The passkey can still pay with CELO or a dollar token.
       }
     }
@@ -271,8 +299,17 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
           await wait(hash, where.reader);
           return hash;
         }
+        console.warn("[passkey-sign] celo native path skipped", {
+          from: account.address,
+          ethBalance: ethBalance.toString(),
+          celoCost: celoCost.toString(),
+        });
       } catch (error) {
-        if (!estimationSkipped(error)) throw error;
+        if (!estimationSkipped(error)) {
+          logSignFail("celo native prepare/send", error, { from: account.address, ethBalance: ethBalance.toString() });
+          throw error;
+        }
+        console.warn("[passkey-sign] celo native estimation skipped", signFailDetail(error));
       }
     }
     const pimlicoPaymaster = createPimlicoClient({
@@ -290,7 +327,17 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
         estimateFeesPerGas: async () => (await pimlicoPaymaster.getUserOperationGasPrice()).fast,
       },
     });
-    const quoted = await sponsored.prepareUserOperation({ calls: batched });
+    let quoted;
+    try {
+      quoted = await sponsored.prepareUserOperation({ calls: batched });
+    } catch (error) {
+      logSignFail("celo sponsored prepareUserOperation", error, {
+        from: account.address,
+        ethBalance: ethBalance.toString(),
+        callTos: batched.map((call) => call.to),
+      });
+      throw error;
+    }
     const dueWei = withSkimGas(userOpCost(quoted), quoted.maxFeePerGas ?? 0n);
     const nativePrice = await hexGasPrice(where.reader);
     const amounts = await Promise.all(
@@ -304,15 +351,46 @@ async function sendPasskey(calls: PreparedCall[], from: Address, where: ReturnTy
         return tokenAmountForCeloGas({ costWei: dueWei, nativePrice, tokenPrice, decimals: row.decimals });
       }),
     );
+    const feeSnapshot = celoFeeCurrencies.map((row, index) => ({
+      label: row.label,
+      have: (amounts[index] ?? 0n).toString(),
+      need: (needed[index] ?? 0n).toString(),
+      ok: (amounts[index] ?? 0n) >= (needed[index] ?? 0n) && (needed[index] ?? 0n) > 0n,
+    }));
     const pick = pickCeloFeeCovering(amounts, needed);
     const due = pick ? needed[celoFeeCurrencies.findIndex((row) => row.label === pick.label)] ?? 0n : 0n;
     if (!pick || due === 0n) {
+      console.error("[passkey-sign] celo fee tokens short", {
+        from: account.address,
+        ethBalance: ethBalance.toString(),
+        dueWei: dueWei.toString(),
+        nativePrice: nativePrice.toString(),
+        fees: feeSnapshot,
+      });
       throw new Error("This passkey needs CELO, or USDT, USDC, or USDm at this address for the Celo network fee.");
     }
-    const hash = await sponsored.sendTransaction({ calls: [celoGasSkimCall(pick.token, due), ...batched] });
-    onHash?.(hash);
-    await wait(hash, where.reader);
-    return hash;
+    console.info("[passkey-sign] celo fee pick", {
+      from: account.address,
+      pick: pick.label,
+      due: due.toString(),
+      ethBalance: ethBalance.toString(),
+      fees: feeSnapshot,
+    });
+    try {
+      const hash = await sponsored.sendTransaction({ calls: [celoGasSkimCall(pick.token, due), ...batched] });
+      onHash?.(hash);
+      await wait(hash, where.reader);
+      return hash;
+    } catch (error) {
+      logSignFail("celo sponsored sendTransaction", error, {
+        from: account.address,
+        pick: pick.label,
+        due: due.toString(),
+        fees: feeSnapshot,
+        callTos: batched.map((call) => call.to),
+      });
+      throw error;
+    }
   }
   let ethCost: bigint | null = null;
   if (!usdcCanPayFee(usdcBalance) && ethBalance > 0n) {

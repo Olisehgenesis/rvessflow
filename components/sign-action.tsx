@@ -133,6 +133,25 @@ export function useSignedAction(
         throw new Error("That didn't finish.");
       } catch (error) {
         if (cancel) return;
+        const raw =
+          error instanceof Error
+            ? {
+                name: error.name,
+                message: error.message,
+                shortMessage: "shortMessage" in error ? String((error as { shortMessage?: unknown }).shortMessage ?? "") : "",
+                details: "details" in error ? String((error as { details?: unknown }).details ?? "") : "",
+                cause: error.cause instanceof Error ? error.cause.message : error.cause ? String(error.cause) : "",
+                stack: error.stack,
+              }
+            : { message: String(error) };
+        console.error("[sign-action] signing failed", {
+          method: current.method,
+          address: current.address,
+          chainId: current.chainId,
+          intent: current.intent.kind,
+          calls: current.calls.map((call) => ({ to: call.to, data: call.data.slice(0, 10) })),
+          error: raw,
+        });
         const message = explain(error);
         setLocalError(message);
         show(current.intent, finished.length ? "send" : "sign", { error: message, busy: false });
