@@ -832,7 +832,7 @@ async function planGdxSwap(owner: Address, intent: Extract<Intent, { kind: "gdxS
 async function planClaim(owner: Address, intent: Extract<Intent, { kind: "claim" }>): Promise<Plan> {
   const identity = await loadIdentity(owner);
   if (!identity.verified) throw new Error("Verify this account first. GoodDollar pays UBI to a unique person.");
-  if (identity.claimable === 0n) return done(intent, { href: "/settings" });
+  if (identity.claimable === 0n) return done(intent, { href: "/home" });
   if (intent.submitted) return pending(intent);
   const { topCeloFaucet } = await import("@/lib/good-faucet");
   await topCeloFaucet(owner);

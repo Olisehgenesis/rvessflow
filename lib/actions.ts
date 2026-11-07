@@ -244,7 +244,7 @@ function activityFrom(owner: string, intent: Intent, id?: string): ActivityRecor
     return amount ? { ...base, title: "Locked", detail: "Top up", direction: "out", amount, href: `/vaults/${intent.id}` } : null;
   }
   if (intent.kind === "claim") {
-    return { ...base, title: "Claimed G$", detail: "Daily UBI", direction: "in", amount: "0", href: "/settings" };
+    return { ...base, title: "Claimed G$", detail: "Daily UBI", direction: "in", amount: "0", href: "/home" };
   }
   if (intent.kind === "link") {
     return { ...base, title: "Linked a wallet", detail: shortAddress(intent.target), direction: "in", amount: "0", href: "/settings" };

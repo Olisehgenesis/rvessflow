@@ -18,7 +18,9 @@ import { loadQuote } from "@/lib/rates";
 import { viewer } from "@/lib/session";
 import { allLabels, draftsIfReady } from "@/lib/circle";
 import { HomeGroups } from "@/components/home-groups";
+import { HomeUbiClaim } from "@/components/home-ubi-claim";
 import { TourHost } from "@/components/tour-overlay";
+import { loadIdentity } from "@/lib/good-identity";
 import { resolveTour } from "@/lib/onboarding";
 import type { Quote } from "@/lib/quote";
 import type { Address } from "viem";
@@ -48,7 +50,7 @@ function HomeTools({ alert = false }: { alert?: boolean }) {
 
 async function HomeFigures() {
   const who = await viewer();
-  const loaded = await readHome(who);
+  const [loaded, identity] = await Promise.all([readHome(who), loadIdentity(who.address)]);
   if (!loaded.ok) return <BalanceError message={loaded.message} />;
   return (
     <HomeReady
@@ -59,6 +61,8 @@ async function HomeFigures() {
       incoming={loaded.incoming}
       drafts={loaded.drafts}
       labels={loaded.labels}
+      verified={identity.verified}
+      claimable={identity.claimable.toString()}
     />
   );
 }
@@ -91,6 +95,8 @@ async function HomeReady({
   incoming,
   drafts,
   labels,
+  verified,
+  claimable,
 }: {
   who: { address: Address; name: string; index: number };
   portfolio: Portfolio;
@@ -99,6 +105,8 @@ async function HomeReady({
   incoming: IncomingItem[];
   drafts: import("@/lib/circle").DraftCard[];
   labels: { ref: string; name: string }[];
+  verified: boolean;
+  claimable: string;
 }) {
   const me = who.address.toLowerCase();
   const prices = flowPricesFrom(holdings);
@@ -188,6 +196,7 @@ async function HomeReady({
         <div className="mt-6 grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.78fr)]">
           <div className="space-y-5">
             {balanceCard("desk")}
+            <HomeUbiClaim verified={verified} claimable={claimable} />
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {deskActions.map((action) => (
                 <li key={action.title}>
@@ -283,6 +292,7 @@ async function HomeReady({
       </div>
       <div className="lg:hidden">
       {balanceCard()}
+      <HomeUbiClaim verified={verified} claimable={claimable} />
       {portfolio.vault ? null : (
         <p className="mt-3 text-sm text-muted-foreground">
           No savings vault on {networkName} yet. Topping up or opening a goal creates one. You can receive on Base and Celo before that.
