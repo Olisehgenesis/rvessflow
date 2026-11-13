@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { ChevronDown, CreditCard, Smartphone, Wallet } from "lucide-react";
 import { useSignedAction } from "@/components/sign-action";
 import { ErrorNote } from "@/components/ui-bits";
 import { CopyAddress } from "@/components/receive/copy-address";
 import { useReceiveConnect } from "@/components/receive/receive-connect";
 import { ProfileAvatar } from "@/components/profile-avatar";
-import { contributeOnce, contributeStream } from "@/lib/actions";
+import { contributeOnce, contributeStream, readContributeBalances } from "@/lib/actions";
 import {
   frequencyLabel,
   moneyOk,
@@ -20,9 +20,10 @@ import {
 import type { PublicReceiveProfile } from "@/lib/receive-resolve";
 
 type Mode = "once" | "stream";
-type Step = "details" | "pay" | "confirm" | "done";
+type Step = "wallet" | "details" | "pay" | "confirm" | "done";
 type PayMethod = "wallet" | "mobile" | "card";
 type OnceAsset = (typeof onceTokenOptions)[number]["asset"];
+type BalanceRow = { asset: string; label: string; network: string; balance: string };
 
 const onceTokenOptions = [
   { asset: "base-usdc", label: "USDC", network: "Base" },
@@ -33,9 +34,9 @@ const onceTokenOptions = [
 ] as const;
 
 const streamPayOptions = [
-  { pay: "usdc", label: "USDC", network: "base" as const },
-  { pay: "usdt", label: "USDT", network: "base" as const },
-  { pay: "gdx", label: "G$", network: "celo" as const },
+  { pay: "usdc", label: "USDC", network: "base" as const, asset: "base-usdc" },
+  { pay: "usdt", label: "USDT", network: "base" as const, asset: "base-usdt" },
+  { pay: "gdx", label: "G$", network: "celo" as const, asset: "celo-gdx" },
 ] as const;
 
 function pickDefaultOnceAsset(tokens: (typeof onceTokenOptions)[number][]): OnceAsset {
@@ -45,6 +46,55 @@ function pickDefaultOnceAsset(tokens: (typeof onceTokenOptions)[number][]): Once
     tokens[0]?.asset ??
     "base-usdc"
   );
+}
+
+function moneyOf(value: string) {
+  return Number(value.replace(/,/g, "").trim()) || 0;
+}
+
+function pickFundedAsset(tokens: (typeof onceTokenOptions)[number][], rows: BalanceRow[], current: OnceAsset): OnceAsset {
+  const funded = tokens
+    .map((token) => ({ token, bal: moneyOf(rows.find((row) => row.asset === token.asset)?.balance ?? "0") }))
+    .filter((row) => row.bal > 0)
+    .sort((a, b) => b.bal - a.bal);
+  if (!funded.length) return current;
+  if (funded.some((row) => row.token.asset === current)) return current;
+  return funded.find((row) => row.token.asset === "base-usdc")?.token.asset
+    ?? funded.find((row) => row.token.label === "USDC")?.token.asset
+    ?? funded[0].token.asset;
+}
+
+function useBalances(wallet: string | null, assets: string[]) {
+  const [rows, setRows] = useState<BalanceRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const key = assets.join(",");
+
+  useEffect(() => {
+    if (!wallet || !assets.length) {
+      setRows([]);
+      setError("");
+      return;
+    }
+    let cancel = false;
+    setLoading(true);
+    setError("");
+    void readContributeBalances(wallet, assets).then((result) => {
+      if (cancel) return;
+      setLoading(false);
+      if (result.error) {
+        setError(result.error);
+        setRows([]);
+        return;
+      }
+      setRows(result.rows ?? []);
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [wallet, key]);
+
+  return { rows, loading, error };
 }
 
 export function ReceiveCheckout({
@@ -67,6 +117,7 @@ export function ReceiveCheckout({
     initialSuccess === "stream" ? "stream" : config.onceEnabled ? "once" : "stream",
   );
   const connect = useReceiveConnect();
+  const [wallet, setWallet] = useState(viewerAddress ?? null);
 
   return (
     <section className="rounded-[1.6rem] border border-[#E6EADF] bg-white shadow-[0_1px_0_rgba(20,20,20,0.04)]">
@@ -91,7 +142,8 @@ export function ReceiveCheckout({
             profile={profile}
             config={config}
             payTo={payTo}
-            viewerAddress={viewerAddress}
+            wallet={wallet}
+            setWallet={setWallet}
             connect={connect}
             startDone={initialSuccess === "once"}
           />
@@ -102,7 +154,8 @@ export function ReceiveCheckout({
             profile={profile}
             config={config}
             payTo={payTo}
-            viewerAddress={viewerAddress}
+            wallet={wallet}
+            setWallet={setWallet}
             connect={connect}
             startDone={initialSuccess === "stream"}
           />
@@ -132,9 +185,9 @@ function ModeTab({ active, onClick, title, hint }: { active: boolean; onClick: (
 }
 
 function StepDots({ step }: { step: Step }) {
-  const order: Step[] = ["details", "pay", "confirm", "done"];
+  const order: Step[] = ["wallet", "details", "pay", "confirm", "done"];
   const index = order.indexOf(step);
-  const labels = ["Amount", "Pay", "Sign", "Done"];
+  const labels = ["Wallet", "Amount", "Pay", "Sign", "Done"];
   return (
     <ol className="mb-5 flex items-center gap-1.5">
       {labels.map((label, i) => {
@@ -159,7 +212,8 @@ function OnceForm({
   profile,
   config,
   payTo,
-  viewerAddress,
+  wallet,
+  setWallet,
   connect,
   startDone,
 }: {
@@ -167,43 +221,75 @@ function OnceForm({
   profile: PublicReceiveProfile;
   config: ReceiveLinkConfig;
   payTo: string;
-  viewerAddress?: string | null;
+  wallet: string | null;
+  setWallet: (value: string | null) => void;
   connect: ReturnType<typeof useReceiveConnect>;
   startDone?: boolean;
 }) {
-  const tokens = onceTokenOptions.filter((item) => config.tokens.includes(item.asset) || config.tokens.length === 0);
-  const [step, setStep] = useState<Step>(startDone ? "done" : "details");
+  const tokens = useMemo(
+    () => onceTokenOptions.filter((item) => config.tokens.includes(item.asset) || config.tokens.length === 0),
+    [config.tokens],
+  );
+  const tokenAssets = useMemo(() => tokens.map((item) => item.asset), [tokens]);
+  const [step, setStep] = useState<Step>(startDone ? "done" : wallet ? "details" : "wallet");
   const [payMethod, setPayMethod] = useState<PayMethod>("wallet");
   const [asset, setAsset] = useState<OnceAsset>(() => pickDefaultOnceAsset(tokens));
   const [amount, setAmount] = useState(config.oncePresets[0] ?? "10");
   const [custom, setCustom] = useState("");
   const [message, setMessage] = useState("");
   const [anonymous, setAnonymous] = useState(false);
-  const [wallet, setWallet] = useState(viewerAddress ?? null);
+  const balances = useBalances(wallet, tokenAssets);
   const [state, action, pending] = useSignedAction(contributeOnce, {
     art: "/marks/receive.png",
     title: "Sending contribution",
     onSuccess: () => setStep("done"),
   });
+
+  useEffect(() => {
+    if (!balances.rows.length) return;
+    setAsset((current) => pickFundedAsset(tokens, balances.rows, current));
+  }, [balances.rows, tokens]);
+
   const picked = tokens.find((item) => item.asset === asset) ?? tokens.find((item) => item.asset === pickDefaultOnceAsset(tokens)) ?? tokens[0];
   const finalAmount = custom.trim() || amount;
   const min = onceMinimum(config);
+  const held = balances.rows.find((row) => row.asset === asset);
+  const balance = held?.balance ?? null;
   const amountReady = moneyOk(finalAmount) && Number(finalAmount) >= min;
+  const enough = balance === null || moneyOf(finalAmount) <= moneyOf(balance) + 1e-9;
+  const shortfall = amountReady && balance !== null && !enough;
+
+  async function ensureWallet() {
+    if (wallet) return wallet;
+    const address = await connect.connect();
+    if (!address) return null;
+    setWallet(address);
+    return address;
+  }
 
   async function onConfirm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (payMethod !== "wallet") return;
-    let address = wallet;
-    if (!address) {
-      address = await connect.connect();
-      if (!address) return;
-      setWallet(address);
-    }
+    if (!(await ensureWallet())) return;
     action(new FormData(event.currentTarget));
   }
 
   if (step === "done") {
-    return <SuccessCard kind="once" profile={profile} onAgain={() => setStep("details")} />;
+    return <SuccessCard kind="once" profile={profile} onAgain={() => setStep(wallet ? "details" : "wallet")} />;
+  }
+
+  if (step === "wallet") {
+    return (
+      <WalletStep
+        wallet={wallet}
+        connect={connect}
+        onConnected={(address) => {
+          setWallet(address);
+          setStep("details");
+        }}
+        onContinue={() => setStep("details")}
+      />
+    );
   }
 
   if (step === "pay") {
@@ -214,6 +300,7 @@ function OnceForm({
           amount={`$${finalAmount}`}
           token={picked ? `${picked.label} · ${picked.network}` : "—"}
           recipient={profile.name}
+          balance={balance}
         />
         <Fieldset legend="How do you want to pay?">
           <div className="space-y-2">
@@ -222,7 +309,7 @@ function OnceForm({
               onSelect={() => setPayMethod("wallet")}
               icon={<Wallet className="size-5" />}
               title="Wallet"
-              body="Connect an injected wallet or WalletConnect."
+              body="Pay from the connected wallet."
               enabled
             />
             <PayOption
@@ -271,33 +358,28 @@ function OnceForm({
           amount={`$${finalAmount}`}
           token={picked ? `${picked.label} · ${picked.network}` : "—"}
           recipient={profile.name}
+          balance={balance}
         />
 
-        <div className="rounded-2xl border border-[#E6EADF] bg-[#F7F6F3] px-4 py-3 text-sm">
-          <p className="font-medium text-[#141414]">Wallet</p>
-          <p className="mt-1 text-[#5C6572]">
-            {wallet
-              ? `Connected · ${truncateAddress(wallet)}`
-              : "Connect an injected wallet or WalletConnect to sign."}
-          </p>
-        </div>
+        <WalletBadge address={wallet} />
 
         <Details
           rows={[
             { label: "Recipient", value: profile.name },
-            { label: "Wallet", value: <CopyAddress address={payTo} /> },
+            { label: "To", value: <CopyAddress address={payTo} /> },
             { label: "Amount", value: `$${finalAmount || "—"}` },
             { label: "Token", value: picked ? `${picked.label} · ${picked.network}` : "—" },
+            ...(balance !== null ? [{ label: "Your balance", value: `${balance} ${picked?.label ?? ""}` }] : []),
           ]}
         />
 
-        <ErrorNote error={state?.error || connect.error} />
+        <ErrorNote error={state?.error || connect.error || (shortfall ? `Not enough ${picked?.label ?? "token"} in this wallet.` : "")} />
         <div className="flex gap-2">
           <SecondaryButton label="Back" onClick={() => setStep("pay")} disabled={pending || connect.busy} />
           <PrimaryButton
             pending={pending || connect.busy}
-            disabled={!amountReady}
-            label={wallet ? "Sign & send" : "Connect wallet & sign"}
+            disabled={!amountReady || shortfall}
+            label="Sign & send"
           />
         </div>
         <p className="text-center text-xs text-[#5C6572]">External wallet only · Passkeys are not used here</p>
@@ -308,6 +390,11 @@ function OnceForm({
   return (
     <div className="space-y-5">
       <StepDots step={step} />
+      <WalletBadge
+        address={wallet}
+        onChange={() => setStep("wallet")}
+      />
+
       <Fieldset legend="Amount">
         <div className="flex flex-wrap gap-2">
           {config.oncePresets.map((preset) => (
@@ -341,11 +428,25 @@ function OnceForm({
           onChange={(next) => {
             if (tokens.some((item) => item.asset === next)) setAsset(next as OnceAsset);
           }}
-          options={tokens.map((item) => ({
-            value: item.asset,
-            label: `${item.label} · ${item.network}`,
-          }))}
+          options={tokens.map((item) => {
+            const row = balances.rows.find((entry) => entry.asset === item.asset);
+            const bal = row ? ` · ${row.balance}` : balances.loading ? " · …" : "";
+            return {
+              value: item.asset,
+              label: `${item.label} · ${item.network}${bal}`,
+            };
+          })}
         />
+        {held ? (
+          <p className={`mt-1.5 text-xs ${shortfall ? "text-[#b42318]" : "text-[#5C6572]"}`}>
+            Balance {held.balance} {held.label}
+            {shortfall ? " — not enough for this amount" : null}
+          </p>
+        ) : balances.loading ? (
+          <p className="mt-1.5 text-xs text-[#5C6572]">Loading balances…</p>
+        ) : balances.error ? (
+          <p className="mt-1.5 text-xs text-[#b42318]">{balances.error}</p>
+        ) : null}
       </Fieldset>
 
       {config.messagesOk ? (
@@ -375,10 +476,11 @@ function OnceForm({
         </label>
       ) : null}
 
+      <ErrorNote error={shortfall ? `Not enough ${picked?.label ?? "token"} in this wallet.` : ""} />
       <PrimaryButton
         type="button"
         pending={false}
-        disabled={!amountReady}
+        disabled={!amountReady || shortfall}
         label="Contribute"
         onClick={() => setStep("pay")}
       />
@@ -392,7 +494,8 @@ function StreamForm({
   profile,
   config,
   payTo,
-  viewerAddress,
+  wallet,
+  setWallet,
   connect,
   startDone,
 }: {
@@ -400,13 +503,14 @@ function StreamForm({
   profile: PublicReceiveProfile;
   config: ReceiveLinkConfig;
   payTo: string;
-  viewerAddress?: string | null;
+  wallet: string | null;
+  setWallet: (value: string | null) => void;
   connect: ReturnType<typeof useReceiveConnect>;
   startDone?: boolean;
 }) {
   const fixed = config.streamMode === "fixed";
   const flexible = config.streamMode === "flexible";
-  const [step, setStep] = useState<Step>(startDone ? "done" : "details");
+  const [step, setStep] = useState<Step>(startDone ? "done" : wallet ? "details" : "wallet");
   const [payMethod, setPayMethod] = useState<PayMethod>("wallet");
   const [rate, setRate] = useState(fixed ? config.streamAmount : config.streamAmounts[0] ?? config.streamAmount);
   const [customRate, setCustomRate] = useState("");
@@ -417,12 +521,28 @@ function StreamForm({
   const [pay, setPay] = useState<(typeof streamPayOptions)[number]>(streamPayOptions[0]);
   const [message, setMessage] = useState("");
   const [anonymous, setAnonymous] = useState(false);
-  const [wallet, setWallet] = useState(viewerAddress ?? null);
+  const balances = useBalances(
+    wallet,
+    streamPayOptions.map((item) => item.asset),
+  );
   const [state, action, pending] = useSignedAction(contributeStream, {
     art: "/marks/flow.png",
     title: "Starting stream",
     onSuccess: () => setStep("done"),
   });
+
+  useEffect(() => {
+    if (!balances.rows.length) return;
+    setPay((current) => {
+      const funded = streamPayOptions
+        .map((option) => ({ option, bal: moneyOf(balances.rows.find((row) => row.asset === option.asset)?.balance ?? "0") }))
+        .filter((row) => row.bal > 0)
+        .sort((a, b) => b.bal - a.bal);
+      if (!funded.length) return current;
+      if (funded.some((row) => row.option.pay === current.pay && row.option.network === current.network)) return current;
+      return funded[0].option;
+    });
+  }, [balances.rows]);
 
   const finalRate = fixed ? config.streamAmount : customRate.trim() || rate;
   const finalFrequency = fixed ? config.streamFrequency : frequency;
@@ -439,21 +559,42 @@ function StreamForm({
   const durations = fixed ? [config.streamDurationDays] : flexible ? config.streamDurations : [7, 30, 90];
   const amounts = fixed ? [config.streamAmount] : flexible ? config.streamAmounts : config.streamAmounts;
   const rateReady = moneyOk(finalRate);
+  const held = balances.rows.find((row) => row.asset === pay.asset);
+  const balance = held?.balance ?? null;
+  const enough = balance === null || moneyOf(commitment) <= moneyOf(balance) + 1e-9;
+  const shortfall = rateReady && balance !== null && !enough;
+
+  async function ensureWallet() {
+    if (wallet) return wallet;
+    const address = await connect.connect();
+    if (!address) return null;
+    setWallet(address);
+    return address;
+  }
 
   async function onConfirm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (payMethod !== "wallet") return;
-    let address = wallet;
-    if (!address) {
-      address = await connect.connect();
-      if (!address) return;
-      setWallet(address);
-    }
+    if (!(await ensureWallet())) return;
     action(new FormData(event.currentTarget));
   }
 
   if (step === "done") {
-    return <SuccessCard kind="stream" profile={profile} onAgain={() => setStep("details")} />;
+    return <SuccessCard kind="stream" profile={profile} onAgain={() => setStep(wallet ? "details" : "wallet")} />;
+  }
+
+  if (step === "wallet") {
+    return (
+      <WalletStep
+        wallet={wallet}
+        connect={connect}
+        onConnected={(address) => {
+          setWallet(address);
+          setStep("details");
+        }}
+        onContinue={() => setStep("details")}
+      />
+    );
   }
 
   if (step === "pay") {
@@ -464,6 +605,7 @@ function StreamForm({
           amount={`$${finalRate} / ${frequencyLabel(finalFrequency).toLowerCase()}`}
           token={`${pay.label} · ${pay.network === "celo" ? "Celo" : "Base"}`}
           recipient={profile.name}
+          balance={balance}
         />
         <Fieldset legend="How do you want to pay?">
           <div className="space-y-2">
@@ -472,7 +614,7 @@ function StreamForm({
               onSelect={() => setPayMethod("wallet")}
               icon={<Wallet className="size-5" />}
               title="Wallet"
-              body="Connect an injected wallet or WalletConnect."
+              body="Pay from the connected wallet."
               enabled
             />
             <PayOption
@@ -524,35 +666,30 @@ function StreamForm({
           amount={`$${finalRate} / ${frequencyLabel(finalFrequency).toLowerCase()}`}
           token={`${pay.label} · ${pay.network === "celo" ? "Celo" : "Base"}`}
           recipient={profile.name}
+          balance={balance}
         />
 
-        <div className="rounded-2xl border border-[#E6EADF] bg-[#F7F6F3] px-4 py-3 text-sm">
-          <p className="font-medium text-[#141414]">Wallet</p>
-          <p className="mt-1 text-[#5C6572]">
-            {wallet
-              ? `Connected · ${truncateAddress(wallet)}`
-              : "Connect an injected wallet or WalletConnect to sign."}
-          </p>
-        </div>
+        <WalletBadge address={wallet} />
 
         <Details
           rows={[
             { label: "Recipient", value: profile.name },
-            { label: "Wallet", value: <CopyAddress address={payTo} /> },
+            { label: "To", value: <CopyAddress address={payTo} /> },
             { label: "Stream rate", value: `$${finalRate || "—"} / ${frequencyLabel(finalFrequency).toLowerCase()}` },
             { label: "Duration", value: `${finalDays} days` },
             { label: "Estimated total", value: `$${commitment}` },
             { label: "Token", value: `${pay.label} · ${pay.network === "celo" ? "Celo" : "Base"}` },
+            ...(balance !== null ? [{ label: "Your balance", value: `${balance} ${pay.label}` }] : []),
           ]}
         />
 
-        <ErrorNote error={state?.error || connect.error} />
+        <ErrorNote error={state?.error || connect.error || (shortfall ? `Not enough ${pay.label} in this wallet for the estimated total.` : "")} />
         <div className="flex gap-2">
           <SecondaryButton label="Back" onClick={() => setStep("pay")} disabled={pending || connect.busy} />
           <PrimaryButton
             pending={pending || connect.busy}
-            disabled={!rateReady}
-            label={wallet ? "Sign & start" : "Connect wallet & sign"}
+            disabled={!rateReady || shortfall}
+            label="Sign & start"
           />
         </div>
         <p className="text-center text-xs text-[#5C6572]">External wallet only · Passkeys are not used here</p>
@@ -563,6 +700,8 @@ function StreamForm({
   return (
     <div className="space-y-5">
       <StepDots step={step} />
+      <WalletBadge address={wallet} onChange={() => setStep("wallet")} />
+
       <Fieldset legend={fixed ? "Amount (set by recipient)" : "Amount"} disabled={fixed}>
         <div className="flex flex-wrap gap-2">
           {amounts.map((preset) => (
@@ -616,11 +755,23 @@ function StreamForm({
             const found = streamPayOptions.find((item) => `${item.pay}:${item.network}` === next);
             if (found) setPay(found);
           }}
-          options={streamPayOptions.map((item) => ({
-            value: `${item.pay}:${item.network}`,
-            label: `${item.label} · ${item.network === "celo" ? "Celo" : "Base"}`,
-          }))}
+          options={streamPayOptions.map((item) => {
+            const row = balances.rows.find((entry) => entry.asset === item.asset);
+            const bal = row ? ` · ${row.balance}` : balances.loading ? " · …" : "";
+            return {
+              value: `${item.pay}:${item.network}`,
+              label: `${item.label} · ${item.network === "celo" ? "Celo" : "Base"}${bal}`,
+            };
+          })}
         />
+        {held ? (
+          <p className={`mt-1.5 text-xs ${shortfall ? "text-[#b42318]" : "text-[#5C6572]"}`}>
+            Balance {held.balance} {held.label}
+            {shortfall ? " — not enough for the estimated total" : null}
+          </p>
+        ) : balances.loading ? (
+          <p className="mt-1.5 text-xs text-[#5C6572]">Loading balances…</p>
+        ) : null}
       </Fieldset>
 
       {config.messagesOk ? (
@@ -650,14 +801,80 @@ function StreamForm({
         </label>
       ) : null}
 
+      <ErrorNote error={shortfall ? `Not enough ${pay.label} in this wallet for the estimated total.` : ""} />
       <PrimaryButton
         type="button"
         pending={false}
-        disabled={!rateReady}
+        disabled={!rateReady || shortfall}
         label="Contribute"
         onClick={() => setStep("pay")}
       />
       <p className="text-center text-xs text-[#5C6572]">Secure contribution · Powered by Rvess</p>
+    </div>
+  );
+}
+
+function WalletStep({
+  wallet,
+  connect,
+  onConnected,
+  onContinue,
+}: {
+  wallet: string | null;
+  connect: ReturnType<typeof useReceiveConnect>;
+  onConnected: (address: string) => void;
+  onContinue: () => void;
+}) {
+  async function connectNow() {
+    const address = await connect.connect();
+    if (!address) return;
+    onConnected(address);
+  }
+
+  return (
+    <div className="space-y-5">
+      <StepDots step="wallet" />
+      <div className="rounded-2xl border border-[#E6EADF] bg-[#F3F7E8] px-4 py-5 text-center">
+        <div className="mx-auto grid size-12 place-items-center rounded-full bg-white text-[#141414]">
+          <Wallet className="size-6" />
+        </div>
+        <h3 className="mt-3 text-base font-semibold tracking-[-0.03em] text-[#141414]">Connect a wallet first</h3>
+        <p className="mt-1.5 text-sm text-[#5C6572]">
+          Injected wallets and WalletConnect. We load your balances so you can pick a token you actually hold.
+        </p>
+      </div>
+      <ErrorNote error={connect.error} />
+      {wallet ? (
+        <>
+          <WalletBadge address={wallet} />
+          <PrimaryButton type="button" pending={false} label="Continue" onClick={onContinue} />
+        </>
+      ) : (
+        <PrimaryButton
+          type="button"
+          pending={connect.busy}
+          label={connect.busy ? "Connecting…" : "Connect wallet"}
+          onClick={() => void connectNow()}
+        />
+      )}
+      <p className="text-center text-xs text-[#5C6572]">External wallet only · Passkeys are not used here</p>
+    </div>
+  );
+}
+
+function WalletBadge({ address, onChange }: { address: string | null; onChange?: () => void }) {
+  if (!address) return null;
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#E6EADF] bg-[#F7F6F3] px-4 py-3 text-sm">
+      <div>
+        <p className="font-medium text-[#141414]">Connected wallet</p>
+        <p className="mt-0.5 font-mono text-xs text-[#5C6572]">{truncateAddress(address)}</p>
+      </div>
+      {onChange ? (
+        <button type="button" onClick={onChange} className="text-xs font-semibold text-[#141414] underline-offset-2 hover:underline">
+          Change
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -694,13 +911,24 @@ function SuccessCard({
   );
 }
 
-function SummaryLine({ amount, token, recipient }: { amount: string; token: string; recipient: string }) {
+function SummaryLine({
+  amount,
+  token,
+  recipient,
+  balance,
+}: {
+  amount: string;
+  token: string;
+  recipient: string;
+  balance?: string | null;
+}) {
   return (
     <div className="rounded-2xl bg-[#F3F7E8] px-4 py-3 text-sm">
       <p className="font-semibold text-[#141414]">
         {amount} <span className="font-medium text-[#5C6572]">· {token}</span>
       </p>
       <p className="mt-0.5 text-[#5C6572]">To {recipient}</p>
+      {balance != null ? <p className="mt-0.5 text-xs text-[#5C6572]">Your balance {balance}</p> : null}
     </div>
   );
 }

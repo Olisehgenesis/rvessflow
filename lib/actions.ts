@@ -15,7 +15,7 @@ import { goalNotes, patchGoalNote, recordActivity, saveGoalNote, type ActivityRe
 import { parseUsd, readPay, readReceive, type PayAsset } from "@/lib/pay-math";
 import { captureServerEvent } from "@/lib/posthog-server";
 import { logPostHogInfo } from "@/lib/posthog-logger";
-import { activityUnits, isSendAsset, parseSendAmount, type SendAsset } from "@/lib/send-math";
+import { activityUnits, isSendAsset, parseSendAmount, sendDecimals, type SendAsset } from "@/lib/send-math";
 import { sendRoute } from "@/lib/send";
 import { appGroupNet, groupNetLabel, netFromLabel, parseGroupKey, type GroupNet } from "@/lib/group-network";
 import { vaultSite } from "@/lib/vault-site";
@@ -412,6 +412,36 @@ export async function openContributeSession(address: string, method: "passkey" |
   const account = getAddress(address);
   await rememberContributeWallet(account);
   return { address: account, name: label.trim().slice(0, 32) || "Wallet" };
+}
+
+/** Public balances for contribute token picks (injected / WalletConnect wallet). */
+export async function readContributeBalances(
+  owner: string,
+  assets: string[],
+): Promise<{ rows?: { asset: string; label: string; network: string; balance: string }[]; error?: string }> {
+  try {
+    if (!isAddress(owner)) return { error: "Connect a wallet first." };
+    const { walletBalance, sendRoute } = await import("@/lib/send");
+    const { formatAmount } = await import("@/lib/pay-math");
+    const address = getAddress(owner);
+    const wanted = assets.filter(isSendAsset);
+    const rows = await Promise.all(
+      wanted.map(async (asset) => {
+        const balance = await walletBalance(address, asset);
+        const route = sendRoute(asset);
+        const digits = asset === "celo-gdx" ? 4 : 2;
+        return {
+          asset,
+          label: route.label,
+          network: route.network,
+          balance: formatAmount(balance, sendDecimals(asset), digits),
+        };
+      }),
+    );
+    return { rows };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message.slice(0, 120) : "Balances could not be loaded." };
+  }
 }
 
 export async function saveDisplayName(_prev: ActionState, formData: FormData): Promise<ActionState> {
