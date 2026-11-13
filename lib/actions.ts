@@ -77,13 +77,14 @@ import {
   isStreamFrequency,
   isStreamMode,
   moneyOk,
+  onceMinimum,
   streamPlanAmounts,
   type StreamFrequency,
   type StreamMode,
 } from "@/lib/receive-link";
 import { resolveReceiveIdentifier } from "@/lib/receive-resolve";
 import { loadReceiveLink, recordReceiveEvent, saveReceiveLink } from "@/lib/receive-store";
-import { acceptedTerms, accountIndex, clearSession, currencyChoice, dismissNamePrompt, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet, signedInViewer, viewer, type Viewer } from "@/lib/session";
+import { acceptedTerms, accountIndex, clearSession, contributeViewer, currencyChoice, dismissNamePrompt, rememberContributeWallet, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet, signedInViewer, viewer, type Viewer } from "@/lib/session";
 
 export type ActionState = { error?: string; sign?: SignPayload; saved?: boolean } | null;
 
@@ -292,7 +293,10 @@ function activityFrom(owner: string, intent: Intent, id?: string): ActivityRecor
 }
 
 async function handoff(intent: Intent): Promise<ActionState> {
-  const who = await viewer();
+  return handoffAs(await viewer(), intent);
+}
+
+async function handoffAs(who: Viewer, intent: Intent): Promise<ActionState> {
   if (who.method === "tester") throw new Error("This account signs on the server.");
   const ready = refIntent(intent);
   const step = await planIntent(who.address, ready);
@@ -305,10 +309,18 @@ async function handoff(intent: Intent): Promise<ActionState> {
   return signPayload(who, step.intent, step.calls, step.chainId);
 }
 
+async function actorForIntent(intent: Intent): Promise<Viewer> {
+  if (intent.returnPath?.startsWith("/r/")) {
+    const contributor = await contributeViewer();
+    if (contributor) return contributor;
+  }
+  return viewer();
+}
+
 export async function continueIntent(intent: Intent): Promise<{ error?: string; href?: string; sign?: SignPayload }> {
   try {
     await requireTerms();
-    const who = await viewer();
+    const who = await actorForIntent(intent);
     if (who.method === "tester") return { error: "This session signs on the server. Reload and try again." };
     const step = await planIntent(who.address, intent);
     if (step.pending) return { error: "The transaction was sent, but the account has not caught up yet. Refresh in a moment." };
@@ -391,20 +403,15 @@ export async function openSession(address: string, method: "passkey" | "wallet",
   redirect("/home");
 }
 
-/** Connect a wallet on a public receive page without leaving `/r/...`. */
+/** Connect an external wallet on a public receive page without touching the passkey/app session. */
 export async function openContributeSession(address: string, method: "passkey" | "wallet", label: string) {
-  if ((method !== "passkey" && method !== "wallet") || !isAddress(address)) {
-    throw new Error("That sign-in could not be saved.");
+  if (method !== "wallet" || !isAddress(address)) {
+    throw new Error("Connect an external wallet to contribute.");
   }
   await requireTerms();
   const account = getAddress(address);
-  let shown = label.trim().slice(0, 32);
-  if (!chosenName(shown)) shown = (await knownDisplayName(account)) ?? shown;
-  else shown = (await codedDisplayName(account, shown)) ?? shown;
-  await rememberWallet(account, method, shown);
-  if (chosenName(shown)) await keepDisplayName(account, shown);
-  refresh();
-  return { address: account, name: shown };
+  await rememberContributeWallet(account);
+  return { address: account, name: label.trim().slice(0, 32) || "Wallet" };
 }
 
 export async function saveDisplayName(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -1374,8 +1381,8 @@ export async function previewReceive(input: { usd: string; receive: string }): P
 
 async function requireContributor(): Promise<Viewer> {
   await requireTerms();
-  const who = await signedInViewer();
-  if (!who) throw new Error("Connect a wallet to contribute.");
+  const who = await contributeViewer();
+  if (!who || who.method !== "wallet") throw new Error("Connect a wallet to contribute.");
   return who;
 }
 
@@ -1398,7 +1405,7 @@ export async function contributeOnce(_prev: ActionState, formData: FormData): Pr
     const amountRaw = String(formData.get("amount") ?? "");
     const amount = clampOnceAmount(amountRaw, resolved.config);
     if (!amount) {
-      const min = resolved.config.onceMin || "1";
+      const min = String(onceMinimum(resolved.config));
       const max = resolved.config.onceMax ? ` and at most ${resolved.config.onceMax}` : "";
       return { error: `Enter an amount of at least ${min}${max}.` };
     }
@@ -1437,7 +1444,7 @@ export async function contributeOnce(_prev: ActionState, formData: FormData): Pr
     });
 
     if (who.method === "tester") return await finishTester(intent);
-    return await handoff(intent);
+    return await handoffAs(who, intent);
   } catch (error) {
     rethrowRedirect(error);
     return spoken(error);
@@ -1530,7 +1537,7 @@ export async function contributeStream(_prev: ActionState, formData: FormData): 
       refresh();
       redirect(receiveReturnPath(identifier, "stream"));
     }
-    return await handoff(intent);
+    return await handoffAs(who, intent);
   } catch (error) {
     rethrowRedirect(error);
     return spoken(error);
@@ -1562,7 +1569,7 @@ export async function saveReceiveSettings(_prev: ActionState, formData: FormData
       fundingGoal: String(formData.get("fundingGoal") ?? "").replace(/,/g, "").trim(),
       anonymousOk: formData.get("anonymousOk") === "on",
       messagesOk: formData.get("messagesOk") === "on",
-      onceMin: String(formData.get("onceMin") ?? "1").trim() || "1",
+      onceMin: String(formData.get("onceMin") ?? "0.1").trim() || "0.1",
       onceMax: String(formData.get("onceMax") ?? "").trim(),
       oncePresets: String(formData.get("oncePresets") ?? "5,10,25,50")
         .split(",")

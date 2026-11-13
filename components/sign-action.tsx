@@ -60,13 +60,15 @@ function show(intent: Intent, phase: HumanPhase, extra?: { error?: string; busy?
 
 export function useSignedAction(
   action: (prev: ActionState, data: FormData) => Promise<ActionState>,
-  options?: { art?: string; title?: string },
+  options?: { art?: string; title?: string; onSuccess?: (href?: string) => void },
 ): [ActionState, (payload: FormData) => void, boolean] {
   const router = useRouter();
   const [state, run, pending] = useActionState(action, null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
   const sent = useRef("");
+  const onSuccess = useRef(options?.onSuccess);
+  onSuccess.current = options?.onSuccess;
 
   useEffect(() => {
     if (signing) return;
@@ -119,12 +121,18 @@ export function useSignedAction(
           if (next.error) throw new Error(next.error);
           if (next.href) {
             show(current.intent, "done", { busy: false });
+            if (onSuccess.current) {
+              onSuccess.current(next.href);
+              router.refresh();
+              return;
+            }
             router.push(next.href);
             router.refresh();
             return;
           }
           if (!next.sign) {
             show(current.intent, "done", { busy: false });
+            onSuccess.current?.();
             router.refresh();
             return;
           }

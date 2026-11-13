@@ -61,7 +61,7 @@ async function applyReceiveSchema() {
           stream_amounts VARCHAR NOT NULL DEFAULT '5,10,25,50',
           stream_frequencies VARCHAR NOT NULL DEFAULT 'daily,weekly,monthly',
           stream_durations VARCHAR NOT NULL DEFAULT '7,30,90',
-          tokens VARCHAR NOT NULL DEFAULT 'base-usdc,celo-usdc,base-usdt,celo-usdt',
+          tokens VARCHAR NOT NULL DEFAULT 'base-usdc,celo-usdc,base-usdt,celo-usdt,celo-gdx',
           networks VARCHAR NOT NULL DEFAULT 'base,celo',
           wallet VARCHAR NOT NULL DEFAULT '',
           socials VARCHAR NOT NULL DEFAULT '{}',

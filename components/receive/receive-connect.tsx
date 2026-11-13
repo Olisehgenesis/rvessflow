@@ -6,6 +6,13 @@ import { noteTerms, openContributeSession } from "@/lib/actions";
 import { requestWalletAccount } from "@/lib/auth-client";
 import { truncateAddress } from "@/lib/receive-link";
 
+async function connectExternalWallet() {
+  const next = await requestWalletAccount();
+  await noteTerms();
+  await openContributeSession(next, "wallet", "Wallet");
+  return next;
+}
+
 export function ReceiveConnectButton({ address }: { address?: string | null }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -23,9 +30,7 @@ export function ReceiveConnectButton({ address }: { address?: string | null }) {
     setBusy(true);
     setError("");
     try {
-      const next = await requestWalletAccount();
-      await noteTerms();
-      await openContributeSession(next, "wallet", "Wallet");
+      await connectExternalWallet();
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "The wallet could not connect.";
@@ -54,20 +59,16 @@ export function ReceiveConnectButton({ address }: { address?: string | null }) {
   );
 }
 
+/** Opens injected / WalletConnect for public receive — never the Rvess passkey. */
 export function useReceiveConnect() {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  async function connect() {
+  async function connect(): Promise<string | null> {
     setBusy(true);
     setError("");
     try {
-      const next = await requestWalletAccount();
-      await noteTerms();
-      await openContributeSession(next, "wallet", "Wallet");
-      router.refresh();
-      return true;
+      return await connectExternalWallet();
     } catch (err) {
       const message = err instanceof Error ? err.message : "The wallet could not connect.";
       if (/reject|denied|dismiss|cancel|reset/i.test(message)) {
@@ -75,7 +76,7 @@ export function useReceiveConnect() {
       } else {
         setError(message.slice(0, 120));
       }
-      return false;
+      return null;
     } finally {
       setBusy(false);
     }

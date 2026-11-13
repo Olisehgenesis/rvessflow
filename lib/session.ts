@@ -15,6 +15,8 @@ const METHOD = "rvess-auth";
 const LABEL = "rvess-label";
 const NAME_SKIP = "rvess-name-skip";
 const TERMS = "rvess-terms";
+/** External wallet used only on public `/r/...` landings — never the passkey account. */
+const CONTRIBUTE = "rvess-contribute";
 
 export type AuthMethod = "passkey" | "wallet" | "tester";
 
@@ -131,6 +133,25 @@ export async function rememberWallet(address: Address, method: "passkey" | "wall
   jar.delete(WHO);
 }
 
+/** Wallet for public receive contributions. Does not replace the signed-in passkey/app session. */
+export async function rememberContributeWallet(address: Address) {
+  const jar = await cookies();
+  jar.set(CONTRIBUTE, address, cookie);
+}
+
+/** External contribute wallet on `/r/...`, if one is connected. */
+export async function contributeViewer(): Promise<Viewer | null> {
+  const jar = await cookies();
+  const address = jar.get(CONTRIBUTE)?.value;
+  if (!address || !isAddress(address)) return null;
+  return { address, name: "Wallet", method: "wallet", index: -1, needsName: false };
+}
+
+export async function clearContributeWallet() {
+  const jar = await cookies();
+  jar.delete(CONTRIBUTE);
+}
+
 export async function nameSkipped(): Promise<boolean> {
   const jar = await cookies();
   return jar.get(NAME_SKIP)?.value === "1";
@@ -169,6 +190,7 @@ export async function clearSession() {
   jar.delete(LABEL);
   jar.delete(NAME_SKIP);
   jar.delete(TERMS);
+  jar.delete(CONTRIBUTE);
 }
 
 async function requestCountry(): Promise<string | null> {

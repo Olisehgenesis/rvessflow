@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ReceivePageView } from "@/components/receive/receive-page";
 import { resolveReceiveIdentifier } from "@/lib/receive-resolve";
-import { signedInViewer } from "@/lib/session";
+import { contributeViewer } from "@/lib/session";
 
 type Params = { identifier: string };
 type Search = Record<string, string | string[] | undefined>;
@@ -29,11 +29,11 @@ export default async function PublicReceivePage({
   const { identifier } = await params;
   const query = await searchParams;
   const ok = typeof query.ok === "string" && (query.ok === "once" || query.ok === "stream") ? query.ok : null;
-  const viewer = await signedInViewer();
+  const contributor = await contributeViewer();
   const resolved = await resolveReceiveIdentifier(identifier);
 
   if (resolved.status === "invalid" || resolved.status === "not_found") {
-    return <ReceivePageView identifier={identifier} status={resolved.status} reason={resolved.reason} viewerAddress={viewer?.address} />;
+    return <ReceivePageView identifier={identifier} status={resolved.status} reason={resolved.reason} viewerAddress={contributor?.address} />;
   }
 
   if (resolved.status === "disabled") {
@@ -45,7 +45,7 @@ export default async function PublicReceivePage({
         profile={resolved.profile}
         config={resolved.config}
         payTo={resolved.profile.address}
-        viewerAddress={viewer?.address}
+        viewerAddress={contributor?.address}
       />
     );
   }
@@ -58,7 +58,7 @@ export default async function PublicReceivePage({
       config={resolved.config}
       funding={resolved.funding}
       payTo={resolved.payTo}
-      viewerAddress={viewer?.address}
+      viewerAddress={contributor?.address}
       success={ok}
     />
   );

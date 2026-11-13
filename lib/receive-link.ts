@@ -63,7 +63,7 @@ export function defaultReceiveConfig(address: string): ReceiveLinkConfig {
     fundingGoal: "",
     anonymousOk: true,
     messagesOk: true,
-    onceMin: "1",
+    onceMin: "0.1",
     onceMax: "",
     oncePresets: ["5", "10", "25", "50"],
     streamAmount: "10",
@@ -165,16 +165,25 @@ export function parseFrequencyList(raw: string, fallback: StreamFrequency[]): St
   return parts.length ? Array.from(new Set(parts)) : fallback;
 }
 
+/** Absolute floor for one-time public contributions (USD). */
+export const RECEIVE_ONCE_FLOOR = 0.1;
+
 export function moneyOk(value: string): boolean {
   return /^\d+(\.\d{1,6})?$/.test(value.replace(/,/g, "").trim()) && Number(value.replace(/,/g, "").trim()) > 0;
+}
+
+export function onceMinimum(config: ReceiveLinkConfig): number {
+  const configured = Number(config.onceMin || "0");
+  const base = Number.isFinite(configured) && configured > 0 ? configured : RECEIVE_ONCE_FLOOR;
+  return Math.max(base, RECEIVE_ONCE_FLOOR);
 }
 
 export function clampOnceAmount(amount: string, config: ReceiveLinkConfig): string | null {
   if (!moneyOk(amount)) return null;
   const n = Number(amount.replace(/,/g, "").trim());
-  const min = Number(config.onceMin || "0");
+  const min = onceMinimum(config);
   const max = config.onceMax ? Number(config.onceMax) : Infinity;
-  if (Number.isFinite(min) && min > 0 && n < min) return null;
+  if (n < min) return null;
   if (Number.isFinite(max) && max > 0 && n > max) return null;
   return amount.replace(/,/g, "").trim();
 }

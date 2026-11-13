@@ -1,22 +1,28 @@
 "use client";
 
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, CreditCard, Smartphone, Wallet } from "lucide-react";
 import { useSignedAction } from "@/components/sign-action";
 import { ErrorNote } from "@/components/ui-bits";
 import { CopyAddress } from "@/components/receive/copy-address";
 import { useReceiveConnect } from "@/components/receive/receive-connect";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { contributeOnce, contributeStream } from "@/lib/actions";
 import {
   frequencyLabel,
   moneyOk,
+  onceMinimum,
   streamCommitment,
+  truncateAddress,
   type ReceiveLinkConfig,
   type StreamFrequency,
 } from "@/lib/receive-link";
 import type { PublicReceiveProfile } from "@/lib/receive-resolve";
 
 type Mode = "once" | "stream";
+type Step = "details" | "pay" | "confirm" | "done";
+type PayMethod = "wallet" | "mobile" | "card";
+type OnceAsset = (typeof onceTokenOptions)[number]["asset"];
 
 const onceTokenOptions = [
   { asset: "base-usdc", label: "USDC", network: "Base" },
@@ -32,11 +38,13 @@ const streamPayOptions = [
   { pay: "gdx", label: "G$", network: "celo" as const },
 ] as const;
 
-function pickDefaultOnceAsset(tokens: (typeof onceTokenOptions)[number][]) {
-  return tokens.find((item) => item.asset === "base-usdc")?.asset
-    ?? tokens.find((item) => item.label === "USDC")?.asset
-    ?? tokens[0]?.asset
-    ?? "base-usdc";
+function pickDefaultOnceAsset(tokens: (typeof onceTokenOptions)[number][]): OnceAsset {
+  return (
+    tokens.find((item) => item.asset === "base-usdc")?.asset ??
+    tokens.find((item) => item.label === "USDC")?.asset ??
+    tokens[0]?.asset ??
+    "base-usdc"
+  );
 }
 
 export function ReceiveCheckout({
@@ -45,15 +53,19 @@ export function ReceiveCheckout({
   config,
   payTo,
   viewerAddress,
+  initialSuccess,
 }: {
   identifier: string;
   profile: PublicReceiveProfile;
   config: ReceiveLinkConfig;
   payTo: string;
   viewerAddress?: string | null;
+  initialSuccess?: "once" | "stream" | null;
 }) {
   const both = config.onceEnabled && config.streamEnabled;
-  const [mode, setMode] = useState<Mode>(config.onceEnabled ? "once" : "stream");
+  const [mode, setMode] = useState<Mode>(
+    initialSuccess === "stream" ? "stream" : config.onceEnabled ? "once" : "stream",
+  );
   const connect = useReceiveConnect();
 
   return (
@@ -81,6 +93,7 @@ export function ReceiveCheckout({
             payTo={payTo}
             viewerAddress={viewerAddress}
             connect={connect}
+            startDone={initialSuccess === "once"}
           />
         ) : null}
         {mode === "stream" && config.streamEnabled ? (
@@ -91,6 +104,7 @@ export function ReceiveCheckout({
             payTo={payTo}
             viewerAddress={viewerAddress}
             connect={connect}
+            startDone={initialSuccess === "stream"}
           />
         ) : null}
         {!config.onceEnabled && !config.streamEnabled ? (
@@ -117,6 +131,29 @@ function ModeTab({ active, onClick, title, hint }: { active: boolean; onClick: (
   );
 }
 
+function StepDots({ step }: { step: Step }) {
+  const order: Step[] = ["details", "pay", "confirm", "done"];
+  const index = order.indexOf(step);
+  const labels = ["Amount", "Pay", "Sign", "Done"];
+  return (
+    <ol className="mb-5 flex items-center gap-1.5">
+      {labels.map((label, i) => {
+        const active = i === index;
+        const complete = i < index;
+        return (
+          <li key={label} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+            <span
+              className={`h-1.5 w-full rounded-full ${active || complete ? "bg-[#D6F34A]" : "bg-[#E6EADF]"}`}
+              aria-hidden
+            />
+            <span className={`text-[11px] ${active ? "font-semibold text-[#141414]" : "text-[#5C6572]"}`}>{label}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function OnceForm({
   identifier,
   profile,
@@ -124,6 +161,7 @@ function OnceForm({
   payTo,
   viewerAddress,
   connect,
+  startDone,
 }: {
   identifier: string;
   profile: PublicReceiveProfile;
@@ -131,36 +169,145 @@ function OnceForm({
   payTo: string;
   viewerAddress?: string | null;
   connect: ReturnType<typeof useReceiveConnect>;
+  startDone?: boolean;
 }) {
   const tokens = onceTokenOptions.filter((item) => config.tokens.includes(item.asset) || config.tokens.length === 0);
-  const [asset, setAsset] = useState(() => pickDefaultOnceAsset(tokens));
+  const [step, setStep] = useState<Step>(startDone ? "done" : "details");
+  const [payMethod, setPayMethod] = useState<PayMethod>("wallet");
+  const [asset, setAsset] = useState<OnceAsset>(() => pickDefaultOnceAsset(tokens));
   const [amount, setAmount] = useState(config.oncePresets[0] ?? "10");
   const [custom, setCustom] = useState("");
   const [message, setMessage] = useState("");
   const [anonymous, setAnonymous] = useState(false);
+  const [wallet, setWallet] = useState(viewerAddress ?? null);
   const [state, action, pending] = useSignedAction(contributeOnce, {
     art: "/marks/receive.png",
     title: "Sending contribution",
+    onSuccess: () => setStep("done"),
   });
   const picked = tokens.find((item) => item.asset === asset) ?? tokens.find((item) => item.asset === pickDefaultOnceAsset(tokens)) ?? tokens[0];
   const finalAmount = custom.trim() || amount;
+  const min = onceMinimum(config);
+  const amountReady = moneyOk(finalAmount) && Number(finalAmount) >= min;
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onConfirm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!viewerAddress) {
-      const ok = await connect.connect();
-      if (!ok) return;
+    if (payMethod !== "wallet") return;
+    let address = wallet;
+    if (!address) {
+      address = await connect.connect();
+      if (!address) return;
+      setWallet(address);
     }
     action(new FormData(event.currentTarget));
   }
 
-  return (
-    <form onSubmit={(event) => void onSubmit(event)} className="space-y-5">
-      <input type="hidden" name="identifier" value={identifier} />
-      <input type="hidden" name="asset" value={asset} />
-      <input type="hidden" name="amount" value={finalAmount} />
-      {anonymous ? <input type="hidden" name="anonymous" value="on" /> : null}
+  if (step === "done") {
+    return <SuccessCard kind="once" profile={profile} onAgain={() => setStep("details")} />;
+  }
 
+  if (step === "pay") {
+    return (
+      <div className="space-y-5">
+        <StepDots step={step} />
+        <SummaryLine
+          amount={`$${finalAmount}`}
+          token={picked ? `${picked.label} · ${picked.network}` : "—"}
+          recipient={profile.name}
+        />
+        <Fieldset legend="How do you want to pay?">
+          <div className="space-y-2">
+            <PayOption
+              selected={payMethod === "wallet"}
+              onSelect={() => setPayMethod("wallet")}
+              icon={<Wallet className="size-5" />}
+              title="Wallet"
+              body="Connect an injected wallet or WalletConnect."
+              enabled
+            />
+            <PayOption
+              selected={false}
+              onSelect={() => undefined}
+              icon={<Smartphone className="size-5" />}
+              title="Mobile money"
+              body="Coming soon."
+              enabled={false}
+            />
+            <PayOption
+              selected={false}
+              onSelect={() => undefined}
+              icon={<CreditCard className="size-5" />}
+              title="Card"
+              body="Coming soon."
+              enabled={false}
+            />
+          </div>
+        </Fieldset>
+        <div className="flex gap-2">
+          <SecondaryButton label="Back" onClick={() => setStep("details")} />
+          <PrimaryButton
+            type="button"
+            pending={false}
+            disabled={payMethod !== "wallet"}
+            label="Continue"
+            onClick={() => setStep("confirm")}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "confirm") {
+    return (
+      <form onSubmit={(event) => void onConfirm(event)} className="space-y-5">
+        <StepDots step={step} />
+        <input type="hidden" name="identifier" value={identifier} />
+        <input type="hidden" name="asset" value={asset} />
+        <input type="hidden" name="amount" value={finalAmount} />
+        {anonymous ? <input type="hidden" name="anonymous" value="on" /> : null}
+        {config.messagesOk && message ? <input type="hidden" name="message" value={message} /> : null}
+
+        <SummaryLine
+          amount={`$${finalAmount}`}
+          token={picked ? `${picked.label} · ${picked.network}` : "—"}
+          recipient={profile.name}
+        />
+
+        <div className="rounded-2xl border border-[#E6EADF] bg-[#F7F6F3] px-4 py-3 text-sm">
+          <p className="font-medium text-[#141414]">Wallet</p>
+          <p className="mt-1 text-[#5C6572]">
+            {wallet
+              ? `Connected · ${truncateAddress(wallet)}`
+              : "Connect an injected wallet or WalletConnect to sign."}
+          </p>
+        </div>
+
+        <Details
+          rows={[
+            { label: "Recipient", value: profile.name },
+            { label: "Wallet", value: <CopyAddress address={payTo} /> },
+            { label: "Amount", value: `$${finalAmount || "—"}` },
+            { label: "Token", value: picked ? `${picked.label} · ${picked.network}` : "—" },
+          ]}
+        />
+
+        <ErrorNote error={state?.error || connect.error} />
+        <div className="flex gap-2">
+          <SecondaryButton label="Back" onClick={() => setStep("pay")} disabled={pending || connect.busy} />
+          <PrimaryButton
+            pending={pending || connect.busy}
+            disabled={!amountReady}
+            label={wallet ? "Sign & send" : "Connect wallet & sign"}
+          />
+        </div>
+        <p className="text-center text-xs text-[#5C6572]">External wallet only · Passkeys are not used here</p>
+      </form>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <StepDots step={step} />
       <Fieldset legend="Amount">
         <div className="flex flex-wrap gap-2">
           {config.oncePresets.map((preset) => (
@@ -182,19 +329,18 @@ function OnceForm({
           onChange={(event) => setCustom(event.target.value)}
           className="mt-2 h-12 w-full rounded-2xl border border-[#E6EADF] bg-white px-4 text-base outline-none focus:border-[#141414]"
         />
-        {(config.onceMin || config.onceMax) && (
-          <p className="mt-1.5 text-xs text-[#5C6572]">
-            {config.onceMin ? `Min $${config.onceMin}` : null}
-            {config.onceMin && config.onceMax ? " · " : null}
-            {config.onceMax ? `Max $${config.onceMax}` : null}
-          </p>
-        )}
+        <p className="mt-1.5 text-xs text-[#5C6572]">
+          Min ${min}
+          {config.onceMax ? ` · Max $${config.onceMax}` : null}
+        </p>
       </Fieldset>
 
       <Fieldset legend="Token & network">
         <TokenSelect
           value={picked?.asset ?? asset}
-          onChange={setAsset}
+          onChange={(next) => {
+            if (tokens.some((item) => item.asset === next)) setAsset(next as OnceAsset);
+          }}
           options={tokens.map((item) => ({
             value: item.asset,
             label: `${item.label} · ${item.network}`,
@@ -229,23 +375,15 @@ function OnceForm({
         </label>
       ) : null}
 
-      <Details
-        rows={[
-          { label: "Recipient", value: profile.name },
-          { label: "Wallet", value: <CopyAddress address={payTo} /> },
-          { label: "Amount", value: `$${finalAmount || "—"}` },
-          { label: "Token", value: picked ? `${picked.label} · ${picked.network}` : "—" },
-        ]}
-      />
-
-      <ErrorNote error={state?.error || connect.error} />
       <PrimaryButton
-        pending={pending || connect.busy}
-        disabled={!moneyOk(finalAmount)}
-        label={viewerAddress ? "Send contribution" : "Connect & send"}
+        type="button"
+        pending={false}
+        disabled={!amountReady}
+        label="Contribute"
+        onClick={() => setStep("pay")}
       />
-      <p className="text-center text-xs text-[#5C6572]">Secure transaction · Powered by Rvess</p>
-    </form>
+      <p className="text-center text-xs text-[#5C6572]">Secure contribution · Powered by Rvess</p>
+    </div>
   );
 }
 
@@ -256,6 +394,7 @@ function StreamForm({
   payTo,
   viewerAddress,
   connect,
+  startDone,
 }: {
   identifier: string;
   profile: PublicReceiveProfile;
@@ -263,9 +402,12 @@ function StreamForm({
   payTo: string;
   viewerAddress?: string | null;
   connect: ReturnType<typeof useReceiveConnect>;
+  startDone?: boolean;
 }) {
   const fixed = config.streamMode === "fixed";
   const flexible = config.streamMode === "flexible";
+  const [step, setStep] = useState<Step>(startDone ? "done" : "details");
+  const [payMethod, setPayMethod] = useState<PayMethod>("wallet");
   const [rate, setRate] = useState(fixed ? config.streamAmount : config.streamAmounts[0] ?? config.streamAmount);
   const [customRate, setCustomRate] = useState("");
   const [frequency, setFrequency] = useState<StreamFrequency>(
@@ -275,9 +417,11 @@ function StreamForm({
   const [pay, setPay] = useState<(typeof streamPayOptions)[number]>(streamPayOptions[0]);
   const [message, setMessage] = useState("");
   const [anonymous, setAnonymous] = useState(false);
+  const [wallet, setWallet] = useState(viewerAddress ?? null);
   const [state, action, pending] = useSignedAction(contributeStream, {
     art: "/marks/flow.png",
     title: "Starting stream",
+    onSuccess: () => setStep("done"),
   });
 
   const finalRate = fixed ? config.streamAmount : customRate.trim() || rate;
@@ -294,26 +438,131 @@ function StreamForm({
       : (["daily", "weekly", "monthly"] as StreamFrequency[]);
   const durations = fixed ? [config.streamDurationDays] : flexible ? config.streamDurations : [7, 30, 90];
   const amounts = fixed ? [config.streamAmount] : flexible ? config.streamAmounts : config.streamAmounts;
+  const rateReady = moneyOk(finalRate);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onConfirm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!viewerAddress) {
-      const ok = await connect.connect();
-      if (!ok) return;
+    if (payMethod !== "wallet") return;
+    let address = wallet;
+    if (!address) {
+      address = await connect.connect();
+      if (!address) return;
+      setWallet(address);
     }
     action(new FormData(event.currentTarget));
   }
 
-  return (
-    <form onSubmit={(event) => void onSubmit(event)} className="space-y-5">
-      <input type="hidden" name="identifier" value={identifier} />
-      <input type="hidden" name="rate" value={finalRate} />
-      <input type="hidden" name="frequency" value={finalFrequency} />
-      <input type="hidden" name="durationDays" value={finalDays} />
-      <input type="hidden" name="pay" value={pay.pay} />
-      <input type="hidden" name="network" value={pay.network} />
-      {anonymous ? <input type="hidden" name="anonymous" value="on" /> : null}
+  if (step === "done") {
+    return <SuccessCard kind="stream" profile={profile} onAgain={() => setStep("details")} />;
+  }
 
+  if (step === "pay") {
+    return (
+      <div className="space-y-5">
+        <StepDots step={step} />
+        <SummaryLine
+          amount={`$${finalRate} / ${frequencyLabel(finalFrequency).toLowerCase()}`}
+          token={`${pay.label} · ${pay.network === "celo" ? "Celo" : "Base"}`}
+          recipient={profile.name}
+        />
+        <Fieldset legend="How do you want to pay?">
+          <div className="space-y-2">
+            <PayOption
+              selected={payMethod === "wallet"}
+              onSelect={() => setPayMethod("wallet")}
+              icon={<Wallet className="size-5" />}
+              title="Wallet"
+              body="Connect an injected wallet or WalletConnect."
+              enabled
+            />
+            <PayOption
+              selected={false}
+              onSelect={() => undefined}
+              icon={<Smartphone className="size-5" />}
+              title="Mobile money"
+              body="Coming soon."
+              enabled={false}
+            />
+            <PayOption
+              selected={false}
+              onSelect={() => undefined}
+              icon={<CreditCard className="size-5" />}
+              title="Card"
+              body="Coming soon."
+              enabled={false}
+            />
+          </div>
+        </Fieldset>
+        <div className="flex gap-2">
+          <SecondaryButton label="Back" onClick={() => setStep("details")} />
+          <PrimaryButton
+            type="button"
+            pending={false}
+            disabled={payMethod !== "wallet"}
+            label="Continue"
+            onClick={() => setStep("confirm")}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "confirm") {
+    return (
+      <form onSubmit={(event) => void onConfirm(event)} className="space-y-5">
+        <StepDots step={step} />
+        <input type="hidden" name="identifier" value={identifier} />
+        <input type="hidden" name="rate" value={finalRate} />
+        <input type="hidden" name="frequency" value={finalFrequency} />
+        <input type="hidden" name="durationDays" value={finalDays} />
+        <input type="hidden" name="pay" value={pay.pay} />
+        <input type="hidden" name="network" value={pay.network} />
+        {anonymous ? <input type="hidden" name="anonymous" value="on" /> : null}
+        {config.messagesOk && message ? <input type="hidden" name="message" value={message} /> : null}
+
+        <SummaryLine
+          amount={`$${finalRate} / ${frequencyLabel(finalFrequency).toLowerCase()}`}
+          token={`${pay.label} · ${pay.network === "celo" ? "Celo" : "Base"}`}
+          recipient={profile.name}
+        />
+
+        <div className="rounded-2xl border border-[#E6EADF] bg-[#F7F6F3] px-4 py-3 text-sm">
+          <p className="font-medium text-[#141414]">Wallet</p>
+          <p className="mt-1 text-[#5C6572]">
+            {wallet
+              ? `Connected · ${truncateAddress(wallet)}`
+              : "Connect an injected wallet or WalletConnect to sign."}
+          </p>
+        </div>
+
+        <Details
+          rows={[
+            { label: "Recipient", value: profile.name },
+            { label: "Wallet", value: <CopyAddress address={payTo} /> },
+            { label: "Stream rate", value: `$${finalRate || "—"} / ${frequencyLabel(finalFrequency).toLowerCase()}` },
+            { label: "Duration", value: `${finalDays} days` },
+            { label: "Estimated total", value: `$${commitment}` },
+            { label: "Token", value: `${pay.label} · ${pay.network === "celo" ? "Celo" : "Base"}` },
+          ]}
+        />
+
+        <ErrorNote error={state?.error || connect.error} />
+        <div className="flex gap-2">
+          <SecondaryButton label="Back" onClick={() => setStep("pay")} disabled={pending || connect.busy} />
+          <PrimaryButton
+            pending={pending || connect.busy}
+            disabled={!rateReady}
+            label={wallet ? "Sign & start" : "Connect wallet & sign"}
+          />
+        </div>
+        <p className="text-center text-xs text-[#5C6572]">External wallet only · Passkeys are not used here</p>
+      </form>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <StepDots step={step} />
       <Fieldset legend={fixed ? "Amount (set by recipient)" : "Amount"} disabled={fixed}>
         <div className="flex flex-wrap gap-2">
           {amounts.map((preset) => (
@@ -401,25 +650,103 @@ function StreamForm({
         </label>
       ) : null}
 
-      <Details
-        rows={[
-          { label: "Recipient", value: profile.name },
-          { label: "Wallet", value: <CopyAddress address={payTo} /> },
-          { label: "Stream rate", value: `$${finalRate || "—"} / ${frequencyLabel(finalFrequency).toLowerCase()}` },
-          { label: "Duration", value: `${finalDays} days` },
-          { label: "Estimated total", value: `$${commitment}` },
-          { label: "Token", value: `${pay.label} · ${pay.network === "celo" ? "Celo" : "Base"}` },
-        ]}
-      />
-
-      <ErrorNote error={state?.error || connect.error} />
       <PrimaryButton
-        pending={pending || connect.busy}
-        disabled={!moneyOk(finalRate)}
-        label={viewerAddress ? "Start supporting" : "Connect & start"}
+        type="button"
+        pending={false}
+        disabled={!rateReady}
+        label="Contribute"
+        onClick={() => setStep("pay")}
       />
-      <p className="text-center text-xs text-[#5C6572]">Secure transaction · Powered by Rvess</p>
-    </form>
+      <p className="text-center text-xs text-[#5C6572]">Secure contribution · Powered by Rvess</p>
+    </div>
+  );
+}
+
+function SuccessCard({
+  kind,
+  profile,
+  onAgain,
+}: {
+  kind: "once" | "stream";
+  profile: PublicReceiveProfile;
+  onAgain: () => void;
+}) {
+  return (
+    <div className="space-y-4 text-center">
+      <StepDots step="done" />
+      <div className="mx-auto grid size-14 place-items-center rounded-full bg-[#E7F4C4]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={kind === "stream" ? "/marks/flow.png" : "/marks/receive.png"} alt="" className="size-9 object-contain" />
+      </div>
+      <ProfileAvatar seed={profile.address} className="mx-auto size-11" />
+      <div>
+        <h3 className="text-lg font-semibold tracking-[-0.03em] text-[#141414]">
+          {kind === "stream" ? `You're supporting ${profile.name}.` : "Contribution sent successfully."}
+        </h3>
+        <p className="mt-1.5 text-sm text-[#5C6572]">
+          {kind === "stream"
+            ? "The stream goes live once the wallet confirms."
+            : "Thank you — the transfer is complete."}
+        </p>
+      </div>
+      <PrimaryButton type="button" pending={false} label="Contribute again" onClick={onAgain} />
+    </div>
+  );
+}
+
+function SummaryLine({ amount, token, recipient }: { amount: string; token: string; recipient: string }) {
+  return (
+    <div className="rounded-2xl bg-[#F3F7E8] px-4 py-3 text-sm">
+      <p className="font-semibold text-[#141414]">
+        {amount} <span className="font-medium text-[#5C6572]">· {token}</span>
+      </p>
+      <p className="mt-0.5 text-[#5C6572]">To {recipient}</p>
+    </div>
+  );
+}
+
+function PayOption({
+  selected,
+  onSelect,
+  icon,
+  title,
+  body,
+  enabled,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  icon: ReactNode;
+  title: string;
+  body: string;
+  enabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={!enabled}
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left transition ${
+        enabled
+          ? selected
+            ? "border-[#141414]/20 bg-[#D6F34A]/40"
+            : "border-[#E6EADF] bg-white hover:bg-[#F7F6F3]"
+          : "cursor-not-allowed border-[#E6EADF] bg-[#F7F6F3] opacity-55"
+      }`}
+    >
+      <span className="mt-0.5 text-[#141414]">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-[#141414]">{title}</span>
+          {!enabled ? (
+            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold tracking-wide text-[#5C6572] uppercase">
+              Soon
+            </span>
+          ) : null}
+        </span>
+        <span className="mt-0.5 block text-xs text-[#5C6572]">{body}</span>
+      </span>
+    </button>
   );
 }
 
@@ -501,14 +828,40 @@ function Details({ rows }: { rows: { label: string; value: ReactNode }[] }) {
   );
 }
 
-function PrimaryButton({ pending, disabled, label }: { pending: boolean; disabled?: boolean; label: string }) {
+function PrimaryButton({
+  pending,
+  disabled,
+  label,
+  type = "submit",
+  onClick,
+}: {
+  pending: boolean;
+  disabled?: boolean;
+  label: string;
+  type?: "submit" | "button";
+  onClick?: () => void;
+}) {
   return (
     <button
-      type="submit"
+      type={type}
       disabled={pending || disabled}
-      className="flex h-12 w-full items-center justify-center rounded-full bg-[#D6F34A] text-base font-semibold text-[#141414] transition hover:bg-[#c9ea38] disabled:opacity-50"
+      onClick={onClick}
+      className="flex h-12 w-full flex-1 items-center justify-center rounded-full bg-[#D6F34A] text-base font-semibold text-[#141414] transition hover:bg-[#c9ea38] disabled:opacity-50"
     >
       {pending ? "Working…" : label}
+    </button>
+  );
+}
+
+function SecondaryButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex h-12 shrink-0 items-center justify-center rounded-full border border-[#E6EADF] bg-white px-5 text-sm font-semibold text-[#141414] transition hover:bg-[#F7F6F3] disabled:opacity-50"
+    >
+      {label}
     </button>
   );
 }

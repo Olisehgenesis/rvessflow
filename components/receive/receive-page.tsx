@@ -5,7 +5,6 @@ import { BadgeCheck } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { IconMark } from "@/components/icons";
 import { ReceiveCheckout } from "@/components/receive/receive-checkout";
-import { ReceiveSuccess } from "@/components/receive/receive-success";
 import { ReceiveConnectButton } from "@/components/receive/receive-connect";
 import { truncateAddress, type ReceiveFundingStats, type ReceiveLinkConfig } from "@/lib/receive-link";
 import type { PublicReceiveProfile } from "@/lib/receive-resolve";
@@ -50,14 +49,6 @@ export function ReceivePageView(props: ReceivePageProps) {
     );
   }
 
-  if (props.success) {
-    return (
-      <ReceiveShell payTo={props.payTo} viewerAddress={props.viewerAddress}>
-        <ReceiveSuccess kind={props.success} profile={props.profile} identifier={props.identifier} />
-      </ReceiveShell>
-    );
-  }
-
   return (
     <ReceiveShell payTo={props.payTo} viewerAddress={props.viewerAddress}>
       <div className="mx-auto grid max-w-[980px] gap-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-start lg:gap-8">
@@ -68,6 +59,7 @@ export function ReceivePageView(props: ReceivePageProps) {
           config={props.config}
           payTo={props.payTo}
           viewerAddress={props.viewerAddress}
+          initialSuccess={props.success}
         />
       </div>
     </ReceiveShell>

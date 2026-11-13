@@ -56,6 +56,13 @@ describe("give-once limits", () => {
     assert.equal(clampOnceAmount("1", config), null);
     assert.equal(clampOnceAmount("250", config), null);
   });
+
+  it("floors at 0.1 usd by default", () => {
+    const config = defaultReceiveConfig("0x1234567890abcdef1234567890abcdef12345678");
+    assert.equal(config.onceMin, "0.1");
+    assert.equal(clampOnceAmount("0.1", config), "0.1");
+    assert.equal(clampOnceAmount("0.05", config), null);
+  });
 });
 
 describe("display helpers", () => {
