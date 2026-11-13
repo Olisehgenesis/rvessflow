@@ -6,7 +6,6 @@ import { useSignedAction } from "@/components/sign-action";
 import { ErrorNote } from "@/components/ui-bits";
 import { CopyAddress } from "@/components/receive/copy-address";
 import { useReceiveConnect } from "@/components/receive/receive-connect";
-import { TokenIcon } from "@/components/token-icon";
 import { contributeOnce, contributeStream } from "@/lib/actions";
 import {
   frequencyLabel,
@@ -21,9 +20,10 @@ type Mode = "once" | "stream";
 
 const onceTokenOptions = [
   { asset: "base-usdc", label: "USDC", network: "Base" },
-  { asset: "base-usdt", label: "USDT", network: "Base" },
   { asset: "celo-usdc", label: "USDC", network: "Celo" },
+  { asset: "base-usdt", label: "USDT", network: "Base" },
   { asset: "celo-usdt", label: "USDT", network: "Celo" },
+  { asset: "celo-gdx", label: "G$", network: "Celo" },
 ] as const;
 
 const streamPayOptions = [
@@ -31,6 +31,13 @@ const streamPayOptions = [
   { pay: "usdt", label: "USDT", network: "base" as const },
   { pay: "gdx", label: "G$", network: "celo" as const },
 ] as const;
+
+function pickDefaultOnceAsset(tokens: (typeof onceTokenOptions)[number][]) {
+  return tokens.find((item) => item.asset === "base-usdc")?.asset
+    ?? tokens.find((item) => item.label === "USDC")?.asset
+    ?? tokens[0]?.asset
+    ?? "base-usdc";
+}
 
 export function ReceiveCheckout({
   identifier,
@@ -126,7 +133,7 @@ function OnceForm({
   connect: ReturnType<typeof useReceiveConnect>;
 }) {
   const tokens = onceTokenOptions.filter((item) => config.tokens.includes(item.asset) || config.tokens.length === 0);
-  const [asset, setAsset] = useState(tokens[0]?.asset ?? "base-usdc");
+  const [asset, setAsset] = useState(() => pickDefaultOnceAsset(tokens));
   const [amount, setAmount] = useState(config.oncePresets[0] ?? "10");
   const [custom, setCustom] = useState("");
   const [message, setMessage] = useState("");
@@ -135,7 +142,7 @@ function OnceForm({
     art: "/marks/receive.png",
     title: "Sending contribution",
   });
-  const picked = tokens.find((item) => item.asset === asset) ?? tokens[0];
+  const picked = tokens.find((item) => item.asset === asset) ?? tokens.find((item) => item.asset === pickDefaultOnceAsset(tokens)) ?? tokens[0];
   const finalAmount = custom.trim() || amount;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -185,17 +192,14 @@ function OnceForm({
       </Fieldset>
 
       <Fieldset legend="Token & network">
-        <div className="grid gap-2">
-          {tokens.map((item) => (
-            <TokenRow
-              key={item.asset}
-              active={asset === item.asset}
-              onClick={() => setAsset(item.asset)}
-              label={item.label}
-              network={item.network}
-            />
-          ))}
-        </div>
+        <TokenSelect
+          value={picked?.asset ?? asset}
+          onChange={setAsset}
+          options={tokens.map((item) => ({
+            value: item.asset,
+            label: `${item.label} · ${item.network}`,
+          }))}
+        />
       </Fieldset>
 
       {config.messagesOk ? (
@@ -231,8 +235,6 @@ function OnceForm({
           { label: "Wallet", value: <CopyAddress address={payTo} /> },
           { label: "Amount", value: `$${finalAmount || "—"}` },
           { label: "Token", value: picked ? `${picked.label} · ${picked.network}` : "—" },
-          { label: "Protocol fees", value: "None on transfer" },
-          { label: "Total payable", value: `$${finalAmount || "—"}` },
         ]}
       />
 
@@ -359,17 +361,17 @@ function StreamForm({
       </Fieldset>
 
       <Fieldset legend="Token & network">
-        <div className="grid gap-2">
-          {streamPayOptions.map((item) => (
-            <TokenRow
-              key={`${item.pay}-${item.network}`}
-              active={pay.pay === item.pay && pay.network === item.network}
-              onClick={() => setPay(item)}
-              label={item.label}
-              network={item.network === "celo" ? "Celo" : "Base"}
-            />
-          ))}
-        </div>
+        <TokenSelect
+          value={`${pay.pay}:${pay.network}`}
+          onChange={(next) => {
+            const found = streamPayOptions.find((item) => `${item.pay}:${item.network}` === next);
+            if (found) setPay(found);
+          }}
+          options={streamPayOptions.map((item) => ({
+            value: `${item.pay}:${item.network}`,
+            label: `${item.label} · ${item.network === "celo" ? "Celo" : "Base"}`,
+          }))}
+        />
       </Fieldset>
 
       {config.messagesOk ? (
@@ -407,8 +409,6 @@ function StreamForm({
           { label: "Duration", value: `${finalDays} days` },
           { label: "Estimated total", value: `$${commitment}` },
           { label: "Token", value: `${pay.label} · ${pay.network === "celo" ? "Celo" : "Base"}` },
-          { label: "Upfront deposit", value: "Vault funds the stream (buffer + total)" },
-          { label: "Protocol fees", value: "Shown when signing" },
         ]}
       />
 
@@ -455,32 +455,30 @@ function Chip({ active, onClick, label }: { active: boolean; onClick: () => void
   );
 }
 
-function TokenRow({
-  active,
-  onClick,
-  label,
-  network,
+function TokenSelect({
+  value,
+  onChange,
+  options,
 }: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  network: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left transition ${
-        active ? "border-2 border-[#141414] bg-white" : "border border-[#E6EADF] bg-[#F7F6F3]/60 hover:bg-white"
-      }`}
-    >
-      <TokenIcon symbol={label} network={network} className="size-9" />
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-[#141414]">{label}</span>
-        <span className="block text-xs text-[#5C6572]">{network}</span>
-      </span>
-    </button>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-12 w-full appearance-none rounded-2xl border border-[#E6EADF] bg-white px-4 pr-10 text-sm font-medium text-[#141414] outline-none focus:border-[#141414]"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-[#5C6572]" />
+    </div>
   );
 }
 

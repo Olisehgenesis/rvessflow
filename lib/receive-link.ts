@@ -72,7 +72,7 @@ export function defaultReceiveConfig(address: string): ReceiveLinkConfig {
     streamAmounts: ["5", "10", "25", "50"],
     streamFrequencies: ["daily", "weekly", "monthly"],
     streamDurations: [7, 30, 90],
-    tokens: ["base-usdc", "celo-usdc", "base-usdt", "celo-usdt"],
+    tokens: ["base-usdc", "celo-usdc", "base-usdt", "celo-usdt", "celo-gdx"],
     networks: ["base", "celo"],
     wallet: "",
     socials: {},
