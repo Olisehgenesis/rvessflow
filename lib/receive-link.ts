@@ -123,21 +123,37 @@ export function frequencyLabel(frequency: StreamFrequency): string {
   return "Monthly";
 }
 
-/** Total USD commitment for a stream rate × duration. */
-export function streamCommitment(rate: string, frequency: StreamFrequency, durationDays: number): string {
-  const amount = Number(rate.replace(/,/g, "").trim());
-  if (!Number.isFinite(amount) || amount <= 0 || durationDays <= 0) return "0";
-  const periods = (durationDays * DAY) / periodSeconds(frequency);
-  const total = amount * periods;
-  if (!Number.isFinite(total) || total <= 0) return "0";
-  return total >= 100 ? total.toFixed(0) : total.toFixed(2).replace(/\.00$/, "");
+/**
+ * Face USD for a receive stream. The chosen amount is the **total** to stream;
+ * longer duration lowers the per-second rate (same model as in-app createStream).
+ */
+export function streamFace(amount: string): string {
+  const clean = amount.replace(/,/g, "").trim();
+  const value = Number(clean);
+  if (!Number.isFinite(value) || value <= 0) return "0";
+  return clean;
 }
 
-/** Duration seconds + total USD amount for existing vault `createFlow`. */
-export function streamPlanAmounts(rate: string, frequency: StreamFrequency, durationDays: number): { amount: string; duration: number } {
+/** Rough $/day display when `amount` is spread evenly over `durationDays`. */
+export function streamPerDay(amount: string, durationDays: number): string {
+  const value = Number(streamFace(amount));
+  if (!Number.isFinite(value) || value <= 0 || durationDays <= 0) return "0";
+  const daily = value / durationDays;
+  if (!Number.isFinite(daily) || daily <= 0) return "0";
+  if (daily >= 100) return daily.toFixed(0);
+  if (daily >= 1) return daily.toFixed(2).replace(/\.?0+$/, "");
+  return daily.toFixed(4).replace(/\.?0+$/, "");
+}
+
+/** @deprecated Use streamFace — amount is total, not a recurring rate. */
+export function streamCommitment(amount: string, _frequency?: StreamFrequency, _durationDays?: number): string {
+  return streamFace(amount);
+}
+
+/** Duration seconds + total USD for vault `createFlow` (amount ÷ duration = flow rate). */
+export function streamPlanAmounts(amount: string, durationDays: number): { amount: string; duration: number } {
   const duration = Math.round(durationDays) * DAY;
-  const total = streamCommitment(rate, frequency, durationDays);
-  return { amount: total, duration };
+  return { amount: streamFace(amount), duration };
 }
 
 export function parseMoneyList(raw: string, fallback: string[]): string[] {

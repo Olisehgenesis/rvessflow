@@ -5,7 +5,8 @@ import {
   clampOnceAmount,
   defaultReceiveConfig,
   periodSeconds,
-  streamCommitment,
+  streamFace,
+  streamPerDay,
   streamPlanAmounts,
   truncateAddress,
 } from "@/lib/receive-link";
@@ -33,15 +34,16 @@ describe("receive identifier classification", () => {
   });
 });
 
-describe("stream commitment math", () => {
-  it("computes monthly totals from rate and duration", () => {
-    assert.equal(streamCommitment("10", "monthly", 30), "10");
-    assert.equal(streamCommitment("10", "weekly", 28), "40");
-    assert.equal(streamCommitment("5", "daily", 7), "35");
+describe("stream total over duration", () => {
+  it("keeps the chosen amount as the total face", () => {
+    assert.equal(streamFace("10"), "10");
+    assert.equal(streamFace("20.5"), "20.5");
+    assert.equal(streamPerDay("10", 10), "1");
+    assert.equal(streamPerDay("10", 1000), "0.01");
   });
 
-  it("maps into vault stream amount + duration", () => {
-    const plan = streamPlanAmounts("10", "monthly", 30);
+  it("maps into vault stream amount + duration seconds", () => {
+    const plan = streamPlanAmounts("10", 30);
     assert.equal(plan.amount, "10");
     assert.equal(plan.duration, 30 * periodSeconds("daily"));
   });

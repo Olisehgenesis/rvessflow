@@ -97,21 +97,17 @@ export function ReceiveSettingsForm({
               <option value="open">Open — supporters choose within limits</option>
             </select>
           </label>
+          <p className="text-sm text-[#5C6572]">
+            Stream amount is the total to send. Longer duration lowers the daily rate — same as Goals streams.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Fixed / default amount" name="streamAmount" defaultValue={config.streamAmount} />
-            <label className="block space-y-1.5">
-              <Label htmlFor="streamFrequency">Default frequency</Label>
-              <select id="streamFrequency" name="streamFrequency" defaultValue={config.streamFrequency} className={field}>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
-            </label>
+            <Field label="Fixed / default total (USD)" name="streamAmount" defaultValue={config.streamAmount} />
+            <Field label="Default duration (days)" name="streamDurationDays" defaultValue={String(config.streamDurationDays)} />
           </div>
-          <Field label="Default duration (days)" name="streamDurationDays" defaultValue={String(config.streamDurationDays)} />
-          <Field label="Allowed amounts" name="streamAmounts" defaultValue={config.streamAmounts.join(",")} />
-          <Field label="Allowed frequencies" name="streamFrequencies" defaultValue={config.streamFrequencies.join(",")} />
+          <input type="hidden" name="streamFrequency" value={config.streamFrequency || "monthly"} />
+          <Field label="Allowed totals" name="streamAmounts" defaultValue={config.streamAmounts.join(",")} />
           <Field label="Allowed durations (days)" name="streamDurations" defaultValue={config.streamDurations.join(",")} />
+          <input type="hidden" name="streamFrequencies" value={(config.streamFrequencies || ["monthly"]).join(",")} />
         </section>
 
         <section className="space-y-3 rounded-[1.6rem] border border-[#E6EADF] bg-white p-5">

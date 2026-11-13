@@ -73,7 +73,6 @@ import { filledName } from "@/lib/next-label";
 import { finishTour, restartTourRecord, saveTourStep, skipTour } from "@/lib/onboarding";
 import {
   clampOnceAmount,
-  frequencyLabel,
   isStreamFrequency,
   isStreamMode,
   moneyOk,
@@ -1493,30 +1492,26 @@ export async function contributeStream(_prev: ActionState, formData: FormData): 
 
     const config = resolved.config;
     const mode = config.streamMode;
-    let rate = String(formData.get("rate") ?? "").replace(/,/g, "").trim();
-    let frequencyRaw = String(formData.get("frequency") ?? "").toLowerCase();
+    // Amount is the TOTAL to stream; duration spreads it (same as in-app createStream).
+    let amount = String(formData.get("amount") ?? formData.get("rate") ?? "").replace(/,/g, "").trim();
     let durationDays = Number(formData.get("durationDays") ?? "0");
 
     if (mode === "fixed") {
-      rate = config.streamAmount;
-      frequencyRaw = config.streamFrequency;
+      amount = config.streamAmount;
       durationDays = config.streamDurationDays;
     } else if (mode === "flexible") {
-      if (!config.streamAmounts.includes(rate)) return { error: "Pick one of the suggested stream amounts." };
-      if (!config.streamFrequencies.includes(frequencyRaw as StreamFrequency)) return { error: "Pick a supported frequency." };
+      if (!config.streamAmounts.includes(amount)) return { error: "Pick one of the suggested stream amounts." };
       if (!config.streamDurations.includes(durationDays)) return { error: "Pick a supported duration." };
     } else {
-      if (!moneyOk(rate)) return { error: "Enter a stream amount greater than zero." };
-      if (!isStreamFrequency(frequencyRaw)) return { error: "Pick daily, weekly, or monthly." };
+      if (!moneyOk(amount)) return { error: "Enter a stream amount greater than zero." };
       if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 3650) {
         return { error: "Pick a duration between 1 and 3650 days." };
       }
     }
 
-    const frequency = frequencyRaw as StreamFrequency;
-    const planned = streamPlanAmounts(rate, frequency, durationDays);
+    const planned = streamPlanAmounts(amount, durationDays);
     if (!moneyOk(planned.amount) || planned.duration < FLOW_MIN) {
-      return { error: "That stream is too small. Raise the amount or the duration." };
+      return { error: "That stream is too small. Raise the amount or shorten the duration." };
     }
 
     const to = resolved.payTo;
@@ -1528,6 +1523,7 @@ export async function contributeStream(_prev: ActionState, formData: FormData): 
     const message = config.messagesOk ? String(formData.get("message") ?? "").trim().slice(0, 280) : "";
     const name = `Support · ${resolved.profile.name}`.slice(0, 32);
     const now = Math.floor(Date.now() / 1000);
+    const pace = inferFrequency(planned.duration);
     const intent = refIntent({
       kind: "stream" as const,
       name,
@@ -1536,8 +1532,8 @@ export async function contributeStream(_prev: ActionState, formData: FormData): 
       flowKind: "expense" as const,
       recipient: to,
       startAt: 0,
-      description: message || `Public receive · ${frequencyLabel(frequency)}`,
-      frequency: inferFrequency(planned.duration),
+      description: message || `Public receive · ${pace}`,
+      frequency: pace,
       startedAt: now,
       pay,
       network,
@@ -1547,8 +1543,8 @@ export async function contributeStream(_prev: ActionState, formData: FormData): 
 
     await captureServerEvent(who.address, "receive_stream_started", {
       recipient: to,
-      frequency,
       duration_days: durationDays,
+      amount: planned.amount,
       anonymous,
       has_message: Boolean(message),
     });

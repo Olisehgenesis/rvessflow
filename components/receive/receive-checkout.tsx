@@ -9,13 +9,12 @@ import { useReceiveConnect } from "@/components/receive/receive-connect";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { contributeOnce, contributeStream, readContributeBalances } from "@/lib/actions";
 import {
-  frequencyLabel,
   moneyOk,
   onceMinimum,
-  streamCommitment,
+  streamFace,
+  streamPerDay,
   truncateAddress,
   type ReceiveLinkConfig,
-  type StreamFrequency,
 } from "@/lib/receive-link";
 import type { PublicReceiveProfile } from "@/lib/receive-resolve";
 
@@ -50,17 +49,10 @@ function formatMoney(value: number, digits = 2) {
   return value >= 100 ? value.toFixed(0) : value.toFixed(digits).replace(/\.?0+$/, "") || "0";
 }
 
-function perDayRate(rate: string, frequency: StreamFrequency) {
-  const n = moneyOf(rate);
-  if (frequency === "daily") return n;
-  if (frequency === "weekly") return n / 7;
-  return n / 30;
-}
-
-/** Rough on-chain stream deposit need: face + CFA buffer + 1h cushion. */
-function streamNeedEstimate(rate: string, frequency: StreamFrequency, durationDays: number) {
-  const face = moneyOf(streamCommitment(rate, frequency, durationDays));
-  const daily = perDayRate(rate, frequency);
+/** Rough on-chain need when `amount` is the TOTAL face spread over `durationDays`. */
+function streamNeedEstimate(amount: string, durationDays: number) {
+  const face = moneyOf(streamFace(amount));
+  const daily = moneyOf(streamPerDay(amount, durationDays));
   const hour = daily / 24;
   const buffer = daily * (4 / 24) * 2;
   const protocol = face * 0.003;
@@ -437,11 +429,8 @@ function StreamForm({
   const flexible = config.streamMode === "flexible";
   const [step, setStep] = useState<Step>(startDone ? "done" : "details");
   const [payMethod, setPayMethod] = useState<PayMethod>("wallet");
-  const [rate, setRate] = useState(fixed ? config.streamAmount : config.streamAmounts[0] ?? config.streamAmount);
-  const [customRate, setCustomRate] = useState("");
-  const [frequency, setFrequency] = useState<StreamFrequency>(
-    fixed ? config.streamFrequency : config.streamFrequencies[0] ?? "monthly",
-  );
+  const [amount, setAmount] = useState(fixed ? config.streamAmount : config.streamAmounts[0] ?? config.streamAmount);
+  const [customAmount, setCustomAmount] = useState("");
   const [durationDays, setDurationDays] = useState(fixed ? config.streamDurationDays : config.streamDurations[0] ?? 30);
   const [pay, setPay] = useState<(typeof streamPayOptions)[number]>(streamPayOptions[0]);
   const [message, setMessage] = useState("");
@@ -474,29 +463,18 @@ function StreamForm({
     });
   }, [balances.rows]);
 
-  const finalRate = fixed ? config.streamAmount : customRate.trim() || rate;
-  const finalFrequency = fixed ? config.streamFrequency : frequency;
+  const finalAmount = fixed ? config.streamAmount : customAmount.trim() || amount;
   const finalDays = fixed ? config.streamDurationDays : durationDays;
-  const commitment = useMemo(
-    () => streamCommitment(finalRate, finalFrequency, finalDays),
-    [finalRate, finalFrequency, finalDays],
-  );
-  const needEstimate = useMemo(
-    () => streamNeedEstimate(finalRate, finalFrequency, finalDays),
-    [finalRate, finalFrequency, finalDays],
-  );
-  const frequencies = fixed
-    ? [config.streamFrequency]
-    : flexible
-      ? config.streamFrequencies
-      : (["daily", "weekly", "monthly"] as StreamFrequency[]);
+  const face = streamFace(finalAmount);
+  const perDay = streamPerDay(finalAmount, finalDays);
+  const needEstimate = useMemo(() => streamNeedEstimate(finalAmount, finalDays), [finalAmount, finalDays]);
   const durations = fixed ? [config.streamDurationDays] : flexible ? config.streamDurations : [7, 30, 90];
   const amounts = fixed ? [config.streamAmount] : flexible ? config.streamAmounts : config.streamAmounts;
-  const rateReady = moneyOk(finalRate);
+  const amountReady = moneyOk(finalAmount);
   const held = balances.rows.find((row) => row.asset === pay.asset);
   const balance = held?.balance ?? null;
   const have = balance === null ? null : moneyOf(balance);
-  const shortfall = pay.pay !== "gdx" && have !== null && rateReady && have + 1e-9 < needEstimate;
+  const shortfall = pay.pay !== "gdx" && have !== null && amountReady && have + 1e-9 < needEstimate;
   const shortMsg =
     shortfall
       ? `This account has ${formatMoney(have!)} ${pay.label}. This needs ${formatMoney(needEstimate)} ${pay.label}.`
@@ -531,7 +509,7 @@ function StreamForm({
   if (step === "pay") {
     return (
       <PayStep
-        summary={`$${finalRate} / ${frequencyLabel(finalFrequency).toLowerCase()}`}
+        summary={`$${face} over ${finalDays} days`}
         recipient={profile.name}
         payMethod={payMethod}
         setPayMethod={setPayMethod}
@@ -546,10 +524,7 @@ function StreamForm({
   if (step === "confirm") {
     return (
       <form onSubmit={(event) => void onConfirm(event)} className="space-y-5">
-        <AmountHero
-          amount={`$${finalRate}`}
-          hint={`${frequencyLabel(finalFrequency)} · ${finalDays} days · ~$${commitment} total`}
-        />
+        <AmountHero amount={`$${face}`} hint={`${finalDays} days · ~$${perDay} / day`} />
         {wallet ? <WalletPill address={wallet} /> : null}
 
         <Fieldset legend="Token & network">
@@ -606,8 +581,7 @@ function StreamForm({
         ) : null}
 
         <input type="hidden" name="identifier" value={identifier} />
-        <input type="hidden" name="rate" value={finalRate} />
-        <input type="hidden" name="frequency" value={finalFrequency} />
+        <input type="hidden" name="amount" value={finalAmount} />
         <input type="hidden" name="durationDays" value={finalDays} />
         <input type="hidden" name="pay" value={pay.pay} />
         <input type="hidden" name="network" value={pay.network} />
@@ -616,7 +590,7 @@ function StreamForm({
         <ErrorNote error={state?.error || connect.error || shortMsg} />
         <div className="flex gap-2">
           <SecondaryButton label="Back" onClick={() => setStep("pay")} disabled={pending || connect.busy} />
-          <PrimaryButton pending={pending || connect.busy} disabled={!rateReady || shortfall} label="Confirm contribution" />
+          <PrimaryButton pending={pending || connect.busy} disabled={!amountReady || shortfall} label="Confirm contribution" />
         </div>
         <p className="text-center text-xs text-[#5C6572]">Secure contribution · Powered by Rvess</p>
       </form>
@@ -625,15 +599,15 @@ function StreamForm({
 
   return (
     <div className="space-y-5">
-      <Fieldset legend={fixed ? "Amount (set by recipient)" : "Amount"} disabled={fixed}>
+      <Fieldset legend={fixed ? "Total (set by recipient)" : "Total to stream"} disabled={fixed}>
         <div className="flex flex-wrap gap-2">
           {amounts.map((preset) => (
             <Chip
               key={preset}
-              active={!customRate && rate === preset}
+              active={!customAmount && amount === preset}
               onClick={() => {
-                setRate(preset);
-                setCustomRate("");
+                setAmount(preset);
+                setCustomAmount("");
               }}
               label={`$${preset}`}
             />
@@ -644,21 +618,13 @@ function StreamForm({
             <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-[#5C6572]">$</span>
             <input
               inputMode="decimal"
-              placeholder="Custom amount"
-              value={customRate}
-              onChange={(event) => setCustomRate(event.target.value)}
+              placeholder="Custom total"
+              value={customAmount}
+              onChange={(event) => setCustomAmount(event.target.value)}
               className="h-12 w-full rounded-2xl border border-[#E6EADF] bg-white py-0 pr-4 pl-8 text-base outline-none focus:border-[#141414]"
             />
           </div>
         ) : null}
-      </Fieldset>
-
-      <Fieldset legend="Frequency" disabled={fixed}>
-        <div className="flex flex-wrap gap-2">
-          {frequencies.map((item) => (
-            <Chip key={item} active={finalFrequency === item} onClick={() => setFrequency(item)} label={frequencyLabel(item)} />
-          ))}
-        </div>
       </Fieldset>
 
       <Fieldset legend="Duration" disabled={fixed}>
@@ -669,13 +635,13 @@ function StreamForm({
         </div>
       </Fieldset>
 
-      {rateReady ? (
+      {amountReady ? (
         <p className="text-xs text-[#5C6572]">
-          About ${commitment} streamed · wallet needs ~${formatMoney(needEstimate)} incl. deposit buffer
+          ${face} total · ~${perDay} / day over {finalDays} days · wallet needs ~${formatMoney(needEstimate)}
         </p>
       ) : null}
 
-      <PrimaryButton type="button" pending={false} disabled={!rateReady} label="Continue" onClick={() => setStep("pay")} />
+      <PrimaryButton type="button" pending={false} disabled={!amountReady} label="Continue" onClick={() => setStep("pay")} />
       <p className="text-center text-xs text-[#5C6572]">External wallet only · Passkeys are not used here</p>
     </div>
   );
