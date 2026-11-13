@@ -36,6 +36,8 @@ const onceTokenOptions = [
 const streamPayOptions = [
   { pay: "usdc", label: "USDC", network: "base" as const, asset: "base-usdc" },
   { pay: "usdt", label: "USDT", network: "base" as const, asset: "base-usdt" },
+  { pay: "usdc", label: "USDC", network: "celo" as const, asset: "celo-usdc" },
+  { pay: "usdt", label: "USDT", network: "celo" as const, asset: "celo-usdt" },
   { pay: "gdx", label: "G$", network: "celo" as const, asset: "celo-gdx" },
 ] as const;
 
@@ -539,8 +541,13 @@ function StreamForm({
         .filter((row) => row.bal > 0)
         .sort((a, b) => b.bal - a.bal);
       if (!funded.length) return current;
-      if (funded.some((row) => row.option.pay === current.pay && row.option.network === current.network)) return current;
-      return funded[0].option;
+      if (funded.some((row) => row.option.asset === current.asset)) return current;
+      return (
+        funded.find((row) => row.option.asset === "base-usdc")?.option ??
+        funded.find((row) => row.option.asset === "celo-usdc")?.option ??
+        funded.find((row) => row.option.pay === "gdx")?.option ??
+        funded[0].option
+      );
     });
   }, [balances.rows]);
 
@@ -561,7 +568,8 @@ function StreamForm({
   const rateReady = moneyOk(finalRate);
   const held = balances.rows.find((row) => row.asset === pay.asset);
   const balance = held?.balance ?? null;
-  const enough = balance === null || moneyOf(commitment) <= moneyOf(balance) + 1e-9;
+  // G$ face is token units, not USD — skip client shortfall vs the USD commitment estimate.
+  const enough = pay.pay === "gdx" || balance === null || moneyOf(commitment) <= moneyOf(balance) + 1e-9;
   const shortfall = rateReady && balance !== null && !enough;
 
   async function ensureWallet() {
