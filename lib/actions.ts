@@ -71,7 +71,19 @@ import {
 import { knownDisplayName } from "@/lib/known-name";
 import { filledName } from "@/lib/next-label";
 import { finishTour, restartTourRecord, saveTourStep, skipTour } from "@/lib/onboarding";
-import { acceptedTerms, accountIndex, clearSession, currencyChoice, dismissNamePrompt, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet, viewer, type Viewer } from "@/lib/session";
+import {
+  clampOnceAmount,
+  frequencyLabel,
+  isStreamFrequency,
+  isStreamMode,
+  moneyOk,
+  streamPlanAmounts,
+  type StreamFrequency,
+  type StreamMode,
+} from "@/lib/receive-link";
+import { resolveReceiveIdentifier } from "@/lib/receive-resolve";
+import { loadReceiveLink, recordReceiveEvent, saveReceiveLink } from "@/lib/receive-store";
+import { acceptedTerms, accountIndex, clearSession, currencyChoice, dismissNamePrompt, rememberCurrency, rememberName, rememberTerms, rememberTester, rememberWallet, signedInViewer, viewer, type Viewer } from "@/lib/session";
 
 export type ActionState = { error?: string; sign?: SignPayload; saved?: boolean } | null;
 
@@ -114,6 +126,23 @@ async function rememberIntent(owner: string, intent: Intent, id?: string) {
     }
     const row = activityFrom(owner, intent, id);
     if (row) await recordActivity(row);
+    if (intent.returnPath?.startsWith("/r/") && (intent.kind === "send" || intent.kind === "stream")) {
+      const recipient = intent.kind === "send" ? intent.to : intent.recipient;
+      if (isAddress(recipient)) {
+        const network =
+          intent.kind === "send" && isSendAsset(intent.asset) ? sendRoute(intent.asset).network : intent.kind === "stream" ? intent.network ?? "" : "";
+        await recordReceiveEvent({
+          recipient: getAddress(recipient),
+          contributor: owner,
+          kind: intent.kind === "send" ? "once" : "stream",
+          amount: intent.amount,
+          token: intent.kind === "send" ? intent.asset : intent.pay ?? "usdc",
+          network,
+          anonymous: false,
+          message: intent.kind === "stream" ? intent.description : "",
+        });
+      }
+    }
   } catch {
     // A missed activity line must not undo a payment that already succeeded.
   }
@@ -360,6 +389,22 @@ export async function openSession(address: string, method: "passkey" | "wallet",
   await rememberWallet(account, method, shown);
   if (chosenName(shown)) await keepDisplayName(account, shown);
   redirect("/home");
+}
+
+/** Connect a wallet on a public receive page without leaving `/r/...`. */
+export async function openContributeSession(address: string, method: "passkey" | "wallet", label: string) {
+  if ((method !== "passkey" && method !== "wallet") || !isAddress(address)) {
+    throw new Error("That sign-in could not be saved.");
+  }
+  await requireTerms();
+  const account = getAddress(address);
+  let shown = label.trim().slice(0, 32);
+  if (!chosenName(shown)) shown = (await knownDisplayName(account)) ?? shown;
+  else shown = (await codedDisplayName(account, shown)) ?? shown;
+  await rememberWallet(account, method, shown);
+  if (chosenName(shown)) await keepDisplayName(account, shown);
+  refresh();
+  return { address: account, name: shown };
 }
 
 export async function saveDisplayName(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -1325,4 +1370,236 @@ export async function previewReceive(input: { usd: string; receive: string }): P
     const quote = await loadQuote().catch(() => null);
     return { lines: [], error: quote && message === "Enter the amount in USD." ? `Enter the amount in ${quote.unit}.` : message };
   }
+}
+
+async function requireContributor(): Promise<Viewer> {
+  await requireTerms();
+  const who = await signedInViewer();
+  if (!who) throw new Error("Connect a wallet to contribute.");
+  return who;
+}
+
+function receiveReturnPath(identifier: string, kind: "once" | "stream") {
+  const slug = encodeURIComponent(identifier.trim());
+  return `/r/${slug}?ok=${kind}`;
+}
+
+/** One-time contribution on a public receive link. Uses ERC-20 / native transfer — never creates a stream. */
+export async function contributeOnce(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const who = await requireContributor();
+    const identifier = String(formData.get("identifier") ?? "").trim();
+    const resolved = await resolveReceiveIdentifier(identifier);
+    if (resolved.status === "invalid" || resolved.status === "not_found") return { error: resolved.reason };
+    if (resolved.status === "disabled") return { error: resolved.reason };
+    if (!resolved.config.onceEnabled) return { error: "One-time contributions are turned off for this link." };
+
+    const asset = sendAssetField(String(formData.get("asset") ?? ""));
+    const amountRaw = String(formData.get("amount") ?? "");
+    const amount = clampOnceAmount(amountRaw, resolved.config);
+    if (!amount) {
+      const min = resolved.config.onceMin || "1";
+      const max = resolved.config.onceMax ? ` and at most ${resolved.config.onceMax}` : "";
+      return { error: `Enter an amount of at least ${min}${max}.` };
+    }
+    parseSendAmount(asset, amount);
+
+    const route = sendRoute(asset);
+    const net: "base" | "celo" = /celo/i.test(route.network) ? "celo" : "base";
+    if (resolved.config.networks.length > 0 && !resolved.config.networks.includes(net)) {
+      return { error: `This link only accepts contributions on ${resolved.config.networks.join(" and ")}.` };
+    }
+    if (resolved.config.tokens.length > 0 && !resolved.config.tokens.includes(asset)) {
+      return { error: "That token is not accepted on this receive link." };
+    }
+
+    const to = resolved.payTo;
+    if (to.toLowerCase() === who.address.toLowerCase()) return { error: "You cannot contribute to your own wallet." };
+
+    const anonymous = resolved.config.anonymousOk && formData.get("anonymous") === "on";
+    const message = resolved.config.messagesOk ? String(formData.get("message") ?? "").trim().slice(0, 280) : "";
+    const label = resolved.profile.name.slice(0, 64) || shortAddress(to);
+    const intent = refIntent({
+      kind: "send" as const,
+      asset,
+      amount,
+      to,
+      label,
+      ref: "",
+      returnPath: receiveReturnPath(identifier, "once"),
+    });
+
+    await captureServerEvent(who.address, "receive_once_started", {
+      recipient: to,
+      asset,
+      anonymous,
+      has_message: Boolean(message),
+    });
+
+    if (who.method === "tester") return await finishTester(intent);
+    return await handoff(intent);
+  } catch (error) {
+    rethrowRedirect(error);
+    return spoken(error);
+  }
+}
+
+/** Continuous stream contribution on a public receive link (expense flow via FlowVault). */
+export async function contributeStream(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const who = await requireContributor();
+    const identifier = String(formData.get("identifier") ?? "").trim();
+    const resolved = await resolveReceiveIdentifier(identifier);
+    if (resolved.status === "invalid" || resolved.status === "not_found") return { error: resolved.reason };
+    if (resolved.status === "disabled") return { error: resolved.reason };
+    if (!resolved.config.streamEnabled) return { error: "Streams are turned off for this link." };
+
+    const config = resolved.config;
+    const mode = config.streamMode;
+    let rate = String(formData.get("rate") ?? "").replace(/,/g, "").trim();
+    let frequencyRaw = String(formData.get("frequency") ?? "").toLowerCase();
+    let durationDays = Number(formData.get("durationDays") ?? "0");
+
+    if (mode === "fixed") {
+      rate = config.streamAmount;
+      frequencyRaw = config.streamFrequency;
+      durationDays = config.streamDurationDays;
+    } else if (mode === "flexible") {
+      if (!config.streamAmounts.includes(rate)) return { error: "Pick one of the suggested stream amounts." };
+      if (!config.streamFrequencies.includes(frequencyRaw as StreamFrequency)) return { error: "Pick a supported frequency." };
+      if (!config.streamDurations.includes(durationDays)) return { error: "Pick a supported duration." };
+    } else {
+      if (!moneyOk(rate)) return { error: "Enter a stream amount greater than zero." };
+      if (!isStreamFrequency(frequencyRaw)) return { error: "Pick daily, weekly, or monthly." };
+      if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 3650) {
+        return { error: "Pick a duration between 1 and 3650 days." };
+      }
+    }
+
+    const frequency = frequencyRaw as StreamFrequency;
+    const planned = streamPlanAmounts(rate, frequency, durationDays);
+    if (!moneyOk(planned.amount) || planned.duration < FLOW_MIN) {
+      return { error: "That stream is too small. Raise the amount or the duration." };
+    }
+
+    const to = resolved.payTo;
+    if (to.toLowerCase() === who.address.toLowerCase()) return { error: "You cannot stream to your own wallet." };
+
+    const pay = payField(formData) ?? "usdc";
+    const network = networkField(formData);
+    const anonymous = config.anonymousOk && formData.get("anonymous") === "on";
+    const message = config.messagesOk ? String(formData.get("message") ?? "").trim().slice(0, 280) : "";
+    const name = `Support · ${resolved.profile.name}`.slice(0, 32);
+    const now = Math.floor(Date.now() / 1000);
+    const intent = refIntent({
+      kind: "stream" as const,
+      name,
+      amount: planned.amount,
+      duration: planned.duration,
+      flowKind: "expense" as const,
+      recipient: to,
+      startAt: 0,
+      description: message || `Public receive · ${frequencyLabel(frequency)}`,
+      frequency: inferFrequency(planned.duration),
+      startedAt: now,
+      pay,
+      network,
+      ref: "",
+      returnPath: receiveReturnPath(identifier, "stream"),
+    });
+
+    await captureServerEvent(who.address, "receive_stream_started", {
+      recipient: to,
+      frequency,
+      duration_days: durationDays,
+      anonymous,
+      has_message: Boolean(message),
+    });
+
+    if (who.method === "tester") {
+      if (pay || intent.network !== appGroupNet()) return await finishTester(intent);
+      const id = await openStream(await accountIndex(), {
+        name,
+        amount: planned.amount,
+        duration: planned.duration,
+        kind: "expense",
+        recipient: to,
+        startAt: 0,
+      });
+      await rememberIntent(who.address, intent, id);
+      refresh();
+      redirect(receiveReturnPath(identifier, "stream"));
+    }
+    return await handoff(intent);
+  } catch (error) {
+    rethrowRedirect(error);
+    return spoken(error);
+  }
+}
+
+export async function saveReceiveSettings(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await requireTerms();
+    const who = await viewer();
+    if (who.method === "tester" && !(await signedInViewer())) {
+      // Allow tester in local demo.
+    }
+    const modeRaw = String(formData.get("streamMode") ?? "open");
+    const streamMode: StreamMode = isStreamMode(modeRaw) ? modeRaw : "open";
+    const freqRaw = String(formData.get("streamFrequency") ?? "monthly");
+    const streamFrequency: StreamFrequency = isStreamFrequency(freqRaw) ? freqRaw : "monthly";
+    const walletRaw = String(formData.get("wallet") ?? "").trim();
+    if (walletRaw && !isAddress(walletRaw)) return { error: "Enter a valid receiving wallet, or leave it blank." };
+
+    await saveReceiveLink(who.address, {
+      enabled: formData.get("enabled") === "on",
+      streamEnabled: formData.get("streamEnabled") === "on",
+      onceEnabled: formData.get("onceEnabled") === "on",
+      streamMode,
+      title: String(formData.get("title") ?? ""),
+      description: String(formData.get("description") ?? ""),
+      coverUrl: String(formData.get("coverUrl") ?? ""),
+      fundingGoal: String(formData.get("fundingGoal") ?? "").replace(/,/g, "").trim(),
+      anonymousOk: formData.get("anonymousOk") === "on",
+      messagesOk: formData.get("messagesOk") === "on",
+      onceMin: String(formData.get("onceMin") ?? "1").trim() || "1",
+      onceMax: String(formData.get("onceMax") ?? "").trim(),
+      oncePresets: String(formData.get("oncePresets") ?? "5,10,25,50")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      streamAmount: String(formData.get("streamAmount") ?? "10").trim() || "10",
+      streamFrequency,
+      streamDurationDays: Math.max(1, Number(formData.get("streamDurationDays") ?? "30") || 30),
+      streamAmounts: String(formData.get("streamAmounts") ?? "5,10,25,50")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      streamFrequencies: String(formData.get("streamFrequencies") ?? "daily,weekly,monthly")
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter(isStreamFrequency),
+      streamDurations: String(formData.get("streamDurations") ?? "7,30,90")
+        .split(",")
+        .map((item) => Number(item.trim()))
+        .filter((item) => Number.isInteger(item) && item > 0),
+      wallet: walletRaw ? getAddress(walletRaw) : "",
+      socials: {
+        website: String(formData.get("website") ?? "").trim().slice(0, 200) || undefined,
+        twitter: String(formData.get("twitter") ?? "").trim().slice(0, 80) || undefined,
+        farcaster: String(formData.get("farcaster") ?? "").trim().slice(0, 80) || undefined,
+        github: String(formData.get("github") ?? "").trim().slice(0, 80) || undefined,
+      },
+    });
+    refresh();
+    return { saved: true };
+  } catch (error) {
+    return spoken(error);
+  }
+}
+
+export async function loadMyReceiveLink() {
+  const who = await viewer();
+  const config = await loadReceiveLink(who.address);
+  return { address: who.address, config };
 }

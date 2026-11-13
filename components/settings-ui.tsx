@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { ChevronRight, Lock, Settings2, ShieldCheck, UserRound, Wrench } from "lucide-react";
+import { ChevronRight, Link2, Lock, Settings2, ShieldCheck, UserRound, Wrench } from "lucide-react";
 
 export const settingsLinks = [
   { href: "/settings", match: (path: string) => path === "/settings" || path.startsWith("/settings/account"), label: "Account", hint: "Profile, identity and wallet", Icon: UserRound },
+  { href: "/settings/receive", match: (path: string) => path.startsWith("/settings/receive"), label: "Receive link", hint: "Public stream and give-once page", Icon: Link2 },
   { href: "/settings/verify", match: (path: string) => path.startsWith("/settings/verify"), label: "Verification", hint: "Face check and daily G$", Icon: ShieldCheck },
   { href: "/settings/preferences", match: (path: string) => path.startsWith("/settings/preferences"), label: "Preferences", hint: "Currency and how people find you", Icon: Settings2 },
   { href: "/settings/security", match: (path: string) => path.startsWith("/settings/security"), label: "Wallet & Security", hint: "Passkeys, sessions and backup", Icon: Lock },

@@ -69,6 +69,20 @@ export async function viewer(): Promise<Viewer> {
   return testerAt(index);
 }
 
+/** Wallet or passkey session only — never falls back to a tester account. */
+export async function signedInViewer(): Promise<Viewer | null> {
+  const jar = await cookies();
+  const method = jar.get(METHOD)?.value;
+  const address = jar.get(ADDR)?.value;
+  if ((method === "passkey" || method === "wallet") && address && isAddress(address)) {
+    const roster = people();
+    const index = roster.findIndex((person) => person.address.toLowerCase() === address.toLowerCase());
+    const shown = displayName(method, jar.get(LABEL)?.value);
+    return { address, name: shown.name, method, index, needsName: shown.needsName };
+  }
+  return null;
+}
+
 export async function accountIndex(): Promise<number> {
   const who = await viewer();
   if (who.method !== "tester" || who.index < 0) {

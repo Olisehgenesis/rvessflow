@@ -47,7 +47,8 @@ function pending(intent: Intent): Plan {
 }
 
 function done(intent: Intent, extra: { id?: string; href?: string } = {}): Plan {
-  return { calls: [], intent, done: true, ...extra };
+  const href = intent.returnPath || extra.href;
+  return { calls: [], intent, done: true, ...extra, ...(href ? { href } : {}) };
 }
 
 function productNet(intent: { network?: string; id?: string }): GroupNet {
@@ -445,6 +446,11 @@ async function planSend(owner: Address, intent: Extract<Intent, { kind: "send" }
     ? [encode(token, erc20, "transfer", [recipient, amount])]
     : [{ to: recipient, data: "0x", value: amount.toString() }];
   return { calls, intent: { ...intent, to: recipient, seen: balance.toString(), submitted: true }, done: false, chainId: route.chainId };
+}
+
+/** Used when a send completes and a custom return path was requested. */
+export function sendDoneHref(intent: Extract<Intent, { kind: "send" }>): string | undefined {
+  return intent.returnPath || "/home";
 }
 
 async function planWithdraw(owner: Address, intent: Extract<Intent, { kind: "withdraw" }>): Promise<Plan> {

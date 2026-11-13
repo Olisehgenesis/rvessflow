@@ -35,6 +35,8 @@ type Progress = {
   knownIds?: string[];
   groupId?: string;
   phonesQueued?: boolean;
+  /** When set, success navigates here instead of the default goals/home path. */
+  returnPath?: string;
 };
 
 export type Intent = (
