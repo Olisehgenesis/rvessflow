@@ -2,6 +2,10 @@
 
 Public checkout at `/r/:identifier` for **Give once** (ERC-20 / native transfer) and **Stream** (expense flow via FlowVault).
 
+## Visual language
+
+Public `/r` matches the main Rvess product: cream `#F7F6F3`, white surfaces, dark `#141414`, muted `#5C6572`, lime `#D6F34A` for selected states and primary actions. Soft pale-green accents only. No orange/blue checkout theme.
+
 ## Identifier resolution
 
 | Input | Resolution |

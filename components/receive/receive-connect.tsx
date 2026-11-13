@@ -13,7 +13,7 @@ export function ReceiveConnectButton({ address }: { address?: string | null }) {
 
   if (address) {
     return (
-      <span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,#202020_12%,transparent)] bg-white px-3 py-1.5 font-mono text-xs font-medium text-[#202020]">
+      <span className="inline-flex h-10 items-center rounded-full border border-[#E6EADF] bg-white px-3 font-mono text-xs font-medium text-[#141414]">
         {truncateAddress(address)}
       </span>
     );
@@ -45,7 +45,7 @@ export function ReceiveConnectButton({ address }: { address?: string | null }) {
         type="button"
         disabled={busy}
         onClick={() => void connect()}
-        className="inline-flex h-10 items-center rounded-full bg-[#202020] px-4 text-sm font-semibold text-[#F5F2EB] disabled:opacity-60"
+        className="inline-flex h-10 items-center rounded-full border border-[#E6EADF] bg-white px-4 text-sm font-semibold text-[#141414] hover:bg-[#F7F6F3] disabled:opacity-60"
       >
         {busy ? "Connecting…" : "Connect wallet"}
       </button>

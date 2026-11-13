@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import { useSignedAction } from "@/components/sign-action";
 import { ErrorNote } from "@/components/ui-bits";
 import { CopyAddress } from "@/components/receive/copy-address";
 import { useReceiveConnect } from "@/components/receive/receive-connect";
+import { TokenIcon } from "@/components/token-icon";
 import { contributeOnce, contributeStream } from "@/lib/actions";
 import {
   frequencyLabel,
@@ -48,22 +50,22 @@ export function ReceiveCheckout({
   const connect = useReceiveConnect();
 
   return (
-    <div className="receive-card overflow-hidden p-0">
-      <div className="border-b border-[color-mix(in_srgb,#202020_10%,transparent)] px-5 py-4">
-        <h2 className="text-lg font-semibold tracking-[-0.03em]">Contribute</h2>
-        <p className="mt-1 text-sm text-[color-mix(in_srgb,#202020_58%,transparent)]">
-          {mode === "once" ? "Make a single contribution" : "Support continuously with a stream"}
+    <section className="rounded-[1.6rem] border border-[#E6EADF] bg-white shadow-[0_1px_0_rgba(20,20,20,0.04)]">
+      <div className="border-b border-[#E6EADF] px-5 py-4">
+        <h2 className="text-lg font-semibold tracking-[-0.03em] text-[#141414]">Contribute</h2>
+        <p className="mt-1 text-sm text-[#5C6572]">
+          {mode === "once" ? "Make a single contribution." : "Support continuously with a stream."}
         </p>
       </div>
 
       {both ? (
-        <div className="grid grid-cols-2 gap-1 px-3 pt-3">
+        <div className="grid grid-cols-2 gap-2 px-4 pt-4 sm:px-5">
           <ModeTab active={mode === "once"} onClick={() => setMode("once")} title="Give once" hint="One-time" />
           <ModeTab active={mode === "stream"} onClick={() => setMode("stream")} title="Stream" hint="Continuous" />
         </div>
       ) : null}
 
-      <div className="px-5 py-4">
+      <div className="px-4 py-4 sm:px-5">
         {mode === "once" && config.onceEnabled ? (
           <OnceForm
             identifier={identifier}
@@ -85,10 +87,10 @@ export function ReceiveCheckout({
           />
         ) : null}
         {!config.onceEnabled && !config.streamEnabled ? (
-          <p className="text-sm text-[color-mix(in_srgb,#202020_60%,transparent)]">No contribution options are available.</p>
+          <p className="text-sm text-[#5C6572]">No contribution options are available.</p>
         ) : null}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -99,11 +101,11 @@ function ModeTab({ active, onClick, title, hint }: { active: boolean; onClick: (
       onClick={onClick}
       aria-pressed={active}
       className={`rounded-2xl px-3 py-3 text-left transition ${
-        active ? "bg-[#315CFF] text-white shadow-sm" : "bg-[color-mix(in_srgb,#202020_5%,white)] text-[#202020]"
+        active ? "bg-[#D6F34A] text-[#141414] ring-1 ring-[#141414]/10" : "bg-[#F7F6F3] text-[#141414] hover:bg-[#F3F1EA]"
       }`}
     >
       <span className="block text-sm font-semibold">{title}</span>
-      <span className={`block text-xs ${active ? "text-white/80" : "text-[color-mix(in_srgb,#202020_55%,transparent)]"}`}>{hint}</span>
+      <span className={`block text-xs ${active ? "text-[#141414]/70" : "text-[#5C6572]"}`}>{hint}</span>
     </button>
   );
 }
@@ -129,11 +131,14 @@ function OnceForm({
   const [custom, setCustom] = useState("");
   const [message, setMessage] = useState("");
   const [anonymous, setAnonymous] = useState(false);
-  const [state, action, pending] = useSignedAction(contributeOnce, { art: "/receive/success.jpg", title: "Sending contribution" });
+  const [state, action, pending] = useSignedAction(contributeOnce, {
+    art: "/marks/receive.png",
+    title: "Sending contribution",
+  });
   const picked = tokens.find((item) => item.asset === asset) ?? tokens[0];
   const finalAmount = custom.trim() || amount;
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!viewerAddress) {
       const ok = await connect.connect();
@@ -143,17 +148,16 @@ function OnceForm({
   }
 
   return (
-    <form onSubmit={(event) => void onSubmit(event)} className="space-y-4">
+    <form onSubmit={(event) => void onSubmit(event)} className="space-y-5">
       <input type="hidden" name="identifier" value={identifier} />
       <input type="hidden" name="asset" value={asset} />
       <input type="hidden" name="amount" value={finalAmount} />
       {anonymous ? <input type="hidden" name="anonymous" value="on" /> : null}
 
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Amount</legend>
+      <Fieldset legend="Amount">
         <div className="flex flex-wrap gap-2">
           {config.oncePresets.map((preset) => (
-            <PresetChip
+            <Chip
               key={preset}
               active={!custom && amount === preset}
               onClick={() => {
@@ -164,68 +168,64 @@ function OnceForm({
             />
           ))}
         </div>
-        <label className="block">
-          <span className="sr-only">Custom amount</span>
-          <input
-            inputMode="decimal"
-            placeholder="Custom amount"
-            value={custom}
-            onChange={(event) => setCustom(event.target.value)}
-            className="h-12 w-full rounded-2xl border border-[color-mix(in_srgb,#202020_12%,transparent)] bg-white px-4 text-base outline-none focus:border-[#315CFF]"
-          />
-        </label>
+        <input
+          inputMode="decimal"
+          placeholder="Custom amount"
+          value={custom}
+          onChange={(event) => setCustom(event.target.value)}
+          className="mt-2 h-12 w-full rounded-2xl border border-[#E6EADF] bg-white px-4 text-base outline-none focus:border-[#141414]"
+        />
         {(config.onceMin || config.onceMax) && (
-          <p className="text-xs text-[color-mix(in_srgb,#202020_55%,transparent)]">
+          <p className="mt-1.5 text-xs text-[#5C6572]">
             {config.onceMin ? `Min $${config.onceMin}` : null}
             {config.onceMin && config.onceMax ? " · " : null}
             {config.onceMax ? `Max $${config.onceMax}` : null}
           </p>
         )}
-      </fieldset>
+      </Fieldset>
 
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Token & network</legend>
+      <Fieldset legend="Token & network">
         <div className="grid gap-2">
           {tokens.map((item) => (
-            <button
+            <TokenRow
               key={item.asset}
-              type="button"
-              aria-pressed={asset === item.asset}
+              active={asset === item.asset}
               onClick={() => setAsset(item.asset)}
-              className={`flex items-center justify-between rounded-2xl px-3 py-3 text-left ${
-                asset === item.asset ? "border-2 border-[#202020] bg-white" : "border border-[color-mix(in_srgb,#202020_10%,transparent)] bg-white/70"
-              }`}
-            >
-              <span className="text-sm font-semibold">{item.label}</span>
-              <span className="text-xs text-[color-mix(in_srgb,#202020_55%,transparent)]">{item.network}</span>
-            </button>
+              label={item.label}
+              network={item.network}
+            />
           ))}
         </div>
-      </fieldset>
+      </Fieldset>
 
       {config.messagesOk ? (
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Message (optional)</span>
+          <span className="text-sm font-medium text-[#141414]">Message</span>
           <textarea
             name="message"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             maxLength={280}
             rows={2}
-            className="w-full rounded-2xl border border-[color-mix(in_srgb,#202020_12%,transparent)] bg-white px-4 py-3 text-sm outline-none focus:border-[#315CFF]"
-            placeholder="Say something kind"
+            placeholder="Optional"
+            className="w-full rounded-2xl border border-[#E6EADF] bg-white px-4 py-3 text-sm outline-none focus:border-[#141414]"
           />
         </label>
       ) : null}
 
       {config.anonymousOk ? (
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} className="size-4 rounded" />
+        <label className="flex min-h-11 items-center gap-2.5 text-sm text-[#141414]">
+          <input
+            type="checkbox"
+            checked={anonymous}
+            onChange={(event) => setAnonymous(event.target.checked)}
+            className="size-4 rounded border-[#E6EADF]"
+          />
           Contribute anonymously
         </label>
       ) : null}
 
-      <Summary
+      <Details
         rows={[
           { label: "Recipient", value: profile.name },
           { label: "Wallet", value: <CopyAddress address={payTo} /> },
@@ -242,7 +242,7 @@ function OnceForm({
         disabled={!moneyOk(finalAmount)}
         label={viewerAddress ? "Send contribution" : "Connect & send"}
       />
-      <p className="text-center text-xs text-[color-mix(in_srgb,#202020_50%,transparent)]">Secure transaction · Powered by Rvess</p>
+      <p className="text-center text-xs text-[#5C6572]">Secure transaction · Powered by Rvess</p>
     </form>
   );
 }
@@ -266,22 +266,34 @@ function StreamForm({
   const flexible = config.streamMode === "flexible";
   const [rate, setRate] = useState(fixed ? config.streamAmount : config.streamAmounts[0] ?? config.streamAmount);
   const [customRate, setCustomRate] = useState("");
-  const [frequency, setFrequency] = useState<StreamFrequency>(fixed ? config.streamFrequency : config.streamFrequencies[0] ?? "monthly");
+  const [frequency, setFrequency] = useState<StreamFrequency>(
+    fixed ? config.streamFrequency : config.streamFrequencies[0] ?? "monthly",
+  );
   const [durationDays, setDurationDays] = useState(fixed ? config.streamDurationDays : config.streamDurations[0] ?? 30);
   const [pay, setPay] = useState<(typeof streamPayOptions)[number]>(streamPayOptions[0]);
   const [message, setMessage] = useState("");
   const [anonymous, setAnonymous] = useState(false);
-  const [state, action, pending] = useSignedAction(contributeStream, { art: "/receive/success.jpg", title: "Starting stream" });
+  const [state, action, pending] = useSignedAction(contributeStream, {
+    art: "/marks/flow.png",
+    title: "Starting stream",
+  });
 
   const finalRate = fixed ? config.streamAmount : customRate.trim() || rate;
   const finalFrequency = fixed ? config.streamFrequency : frequency;
   const finalDays = fixed ? config.streamDurationDays : durationDays;
-  const commitment = useMemo(() => streamCommitment(finalRate, finalFrequency, finalDays), [finalRate, finalFrequency, finalDays]);
-  const frequencies = fixed ? [config.streamFrequency] : flexible ? config.streamFrequencies : (["daily", "weekly", "monthly"] as StreamFrequency[]);
+  const commitment = useMemo(
+    () => streamCommitment(finalRate, finalFrequency, finalDays),
+    [finalRate, finalFrequency, finalDays],
+  );
+  const frequencies = fixed
+    ? [config.streamFrequency]
+    : flexible
+      ? config.streamFrequencies
+      : (["daily", "weekly", "monthly"] as StreamFrequency[]);
   const durations = fixed ? [config.streamDurationDays] : flexible ? config.streamDurations : [7, 30, 90];
   const amounts = fixed ? [config.streamAmount] : flexible ? config.streamAmounts : config.streamAmounts;
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!viewerAddress) {
       const ok = await connect.connect();
@@ -291,7 +303,7 @@ function StreamForm({
   }
 
   return (
-    <form onSubmit={(event) => void onSubmit(event)} className="space-y-4">
+    <form onSubmit={(event) => void onSubmit(event)} className="space-y-5">
       <input type="hidden" name="identifier" value={identifier} />
       <input type="hidden" name="rate" value={finalRate} />
       <input type="hidden" name="frequency" value={finalFrequency} />
@@ -300,11 +312,10 @@ function StreamForm({
       <input type="hidden" name="network" value={pay.network} />
       {anonymous ? <input type="hidden" name="anonymous" value="on" /> : null}
 
-      <fieldset className="space-y-2" disabled={fixed}>
-        <legend className="text-sm font-medium">Amount {fixed ? "(set by recipient)" : ""}</legend>
+      <Fieldset legend={fixed ? "Amount (set by recipient)" : "Amount"} disabled={fixed}>
         <div className="flex flex-wrap gap-2">
           {amounts.map((preset) => (
-            <PresetChip
+            <Chip
               key={preset}
               active={!customRate && rate === preset}
               onClick={() => {
@@ -321,73 +332,74 @@ function StreamForm({
             placeholder="Custom amount"
             value={customRate}
             onChange={(event) => setCustomRate(event.target.value)}
-            className="h-12 w-full rounded-2xl border border-[color-mix(in_srgb,#202020_12%,transparent)] bg-white px-4 text-base outline-none focus:border-[#315CFF]"
+            className="mt-2 h-12 w-full rounded-2xl border border-[#E6EADF] bg-white px-4 text-base outline-none focus:border-[#141414]"
           />
         ) : null}
-      </fieldset>
+      </Fieldset>
 
-      <fieldset className="space-y-2" disabled={fixed}>
-        <legend className="text-sm font-medium">Frequency</legend>
+      <Fieldset legend="Frequency" disabled={fixed}>
         <div className="flex flex-wrap gap-2">
           {frequencies.map((item) => (
-            <PresetChip key={item} active={finalFrequency === item} onClick={() => setFrequency(item)} label={frequencyLabel(item)} />
+            <Chip
+              key={item}
+              active={finalFrequency === item}
+              onClick={() => setFrequency(item)}
+              label={frequencyLabel(item)}
+            />
           ))}
         </div>
-      </fieldset>
+      </Fieldset>
 
-      <fieldset className="space-y-2" disabled={fixed}>
-        <legend className="text-sm font-medium">Duration</legend>
+      <Fieldset legend="Duration" disabled={fixed}>
         <div className="flex flex-wrap gap-2">
           {durations.map((days) => (
-            <PresetChip key={days} active={finalDays === days} onClick={() => setDurationDays(days)} label={`${days} days`} />
+            <Chip key={days} active={finalDays === days} onClick={() => setDurationDays(days)} label={`${days} days`} />
           ))}
         </div>
-      </fieldset>
+      </Fieldset>
 
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Payment token</legend>
+      <Fieldset legend="Token & network">
         <div className="grid gap-2">
           {streamPayOptions.map((item) => (
-            <button
+            <TokenRow
               key={`${item.pay}-${item.network}`}
-              type="button"
-              aria-pressed={pay.pay === item.pay && pay.network === item.network}
+              active={pay.pay === item.pay && pay.network === item.network}
               onClick={() => setPay(item)}
-              className={`flex items-center justify-between rounded-2xl px-3 py-3 text-left ${
-                pay.pay === item.pay && pay.network === item.network
-                  ? "border-2 border-[#202020] bg-white"
-                  : "border border-[color-mix(in_srgb,#202020_10%,transparent)] bg-white/70"
-              }`}
-            >
-              <span className="text-sm font-semibold">{item.label}</span>
-              <span className="text-xs text-[color-mix(in_srgb,#202020_55%,transparent)]">{item.network === "celo" ? "Celo" : "Base"}</span>
-            </button>
+              label={item.label}
+              network={item.network === "celo" ? "Celo" : "Base"}
+            />
           ))}
         </div>
-      </fieldset>
+      </Fieldset>
 
       {config.messagesOk ? (
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Message (optional)</span>
+          <span className="text-sm font-medium text-[#141414]">Message</span>
           <textarea
             name="message"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             maxLength={280}
             rows={2}
-            className="w-full rounded-2xl border border-[color-mix(in_srgb,#202020_12%,transparent)] bg-white px-4 py-3 text-sm outline-none focus:border-[#315CFF]"
+            placeholder="Optional"
+            className="w-full rounded-2xl border border-[#E6EADF] bg-white px-4 py-3 text-sm outline-none focus:border-[#141414]"
           />
         </label>
       ) : null}
 
       {config.anonymousOk ? (
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} className="size-4 rounded" />
+        <label className="flex min-h-11 items-center gap-2.5 text-sm text-[#141414]">
+          <input
+            type="checkbox"
+            checked={anonymous}
+            onChange={(event) => setAnonymous(event.target.checked)}
+            className="size-4 rounded border-[#E6EADF]"
+          />
           Support anonymously
         </label>
       ) : null}
 
-      <Summary
+      <Details
         rows={[
           { label: "Recipient", value: profile.name },
           { label: "Wallet", value: <CopyAddress address={payTo} /> },
@@ -396,7 +408,7 @@ function StreamForm({
           { label: "Estimated total", value: `$${commitment}` },
           { label: "Token", value: `${pay.label} · ${pay.network === "celo" ? "Celo" : "Base"}` },
           { label: "Upfront deposit", value: "Vault funds the stream (buffer + total)" },
-          { label: "Protocol fees", value: "Shown in wallet when signing" },
+          { label: "Protocol fees", value: "Shown when signing" },
         ]}
       />
 
@@ -406,19 +418,36 @@ function StreamForm({
         disabled={!moneyOk(finalRate)}
         label={viewerAddress ? "Start supporting" : "Connect & start"}
       />
-      <p className="text-center text-xs text-[color-mix(in_srgb,#202020_50%,transparent)]">Secure transaction · Powered by Rvess</p>
+      <p className="text-center text-xs text-[#5C6572]">Secure transaction · Powered by Rvess</p>
     </form>
   );
 }
 
-function PresetChip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function Fieldset({
+  legend,
+  children,
+  disabled,
+}: {
+  legend: string;
+  children: ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <fieldset className="space-y-2" disabled={disabled}>
+      <legend className="text-sm font-medium text-[#141414]">{legend}</legend>
+      {children}
+    </fieldset>
+  );
+}
+
+function Chip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-full px-3.5 py-2 text-sm font-semibold ${
-        active ? "bg-[#F47B35] text-white" : "bg-[color-mix(in_srgb,#202020_6%,white)] text-[#202020]"
+      className={`min-h-10 rounded-full px-3.5 text-sm font-semibold transition ${
+        active ? "bg-[#D6F34A] text-[#141414]" : "bg-[#F7F6F3] text-[#141414] hover:bg-[#F3F1EA]"
       }`}
     >
       {label}
@@ -426,16 +455,51 @@ function PresetChip({ active, onClick, label }: { active: boolean; onClick: () =
   );
 }
 
-function Summary({ rows }: { rows: { label: string; value: React.ReactNode }[] }) {
+function TokenRow({
+  active,
+  onClick,
+  label,
+  network,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  network: string;
+}) {
   return (
-    <dl className="rounded-2xl bg-[color-mix(in_srgb,#315CFF_7%,white)] px-4 py-3 text-sm">
-      {rows.map((row) => (
-        <div key={row.label} className="flex items-start justify-between gap-3 py-1.5">
-          <dt className="text-[color-mix(in_srgb,#202020_55%,transparent)]">{row.label}</dt>
-          <dd className="text-right font-medium">{row.value}</dd>
-        </div>
-      ))}
-    </dl>
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left transition ${
+        active ? "border-2 border-[#141414] bg-white" : "border border-[#E6EADF] bg-[#F7F6F3]/60 hover:bg-white"
+      }`}
+    >
+      <TokenIcon symbol={label} network={network} className="size-9" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-[#141414]">{label}</span>
+        <span className="block text-xs text-[#5C6572]">{network}</span>
+      </span>
+    </button>
+  );
+}
+
+function Details({ rows }: { rows: { label: string; value: ReactNode }[] }) {
+  return (
+    <details className="group rounded-2xl border border-[#E6EADF] bg-[#F7F6F3] open:bg-white">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-[#141414]">
+        Transaction details
+        <ChevronDown className="size-4 text-[#5C6572] transition group-open:rotate-180" />
+      </summary>
+      <dl className="border-t border-[#E6EADF] px-4 py-2 text-sm">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-start justify-between gap-3 py-1.5">
+            <dt className="text-[#5C6572]">{row.label}</dt>
+            <dd className="text-right font-medium text-[#141414]">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
   );
 }
 
@@ -444,7 +508,7 @@ function PrimaryButton({ pending, disabled, label }: { pending: boolean; disable
     <button
       type="submit"
       disabled={pending || disabled}
-      className="flex h-12 w-full items-center justify-center rounded-full bg-[#315CFF] text-base font-semibold text-white disabled:opacity-50"
+      className="flex h-12 w-full items-center justify-center rounded-full bg-[#D6F34A] text-base font-semibold text-[#141414] transition hover:bg-[#c9ea38] disabled:opacity-50"
     >
       {pending ? "Working…" : label}
     </button>

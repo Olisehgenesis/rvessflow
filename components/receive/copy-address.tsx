@@ -10,7 +10,7 @@ export function CopyAddress({ address }: { address: string }) {
   return (
     <button
       type="button"
-      className="inline-flex items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,#202020_6%,white)] px-2.5 py-1 font-mono text-xs"
+      className="inline-flex items-center gap-1.5 rounded-full bg-[#F3F7E8] px-2.5 py-1 font-mono text-xs text-[#141414]"
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(address);
