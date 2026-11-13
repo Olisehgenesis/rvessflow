@@ -112,7 +112,7 @@ export function WithdrawSheet({ savings, unit, conceal = false }: { savings: Sav
 
 export function topUpMethods(_network: string) {
   return [
-    { href: "/home/add/receive", title: "Receive", body: "Same address on Base and Celo.", src: "/marks/receive.png" },
+    { href: "/home/add/receive", title: "Receive", body: "Share a link or QR. Same address on Base and Celo.", src: "/marks/receive.png" },
     { href: "/home/add/mobile", title: "Mobile money", body: "Buy or cash out in your currency. Phone checkout next.", src: "/marks/phone.png" },
     { href: "/home/add/card", title: "Card", body: "Transak or Coinbase. USDC arrives on Base.", src: "/marks/card.png" },
   ];
