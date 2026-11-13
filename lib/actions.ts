@@ -135,7 +135,7 @@ async function rememberIntent(owner: string, intent: Intent, id?: string) {
           recipient: getAddress(recipient),
           contributor: owner,
           kind: intent.kind === "send" ? "once" : "stream",
-          amount: intent.amount,
+          amount: intent.receiveUsd || intent.amount,
           token: intent.kind === "send" ? intent.asset : intent.pay ?? "usdc",
           network,
           anonymous: false,
@@ -411,6 +411,21 @@ export async function openContributeSession(address: string, method: "passkey" |
   const account = getAddress(address);
   await rememberContributeWallet(account);
   return { address: account, name: label.trim().slice(0, 32) || "Wallet" };
+}
+
+/** Price a USD face into G$ units for public receive (UI preview + send sizing). */
+export async function quoteContributeGdx(usd: string): Promise<{ gdx?: string; error?: string }> {
+  try {
+    const clean = usd.replace(/,/g, "").trim();
+    if (!moneyOk(clean)) return { error: "Enter a USD amount." };
+    const { formatUnits } = await import("viem");
+    const { superForUsd } = await import("@/lib/funding");
+    const gdx = formatUnits(await superForUsd(clean, "gdx"), 18);
+    const trimmed = gdx.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
+    return { gdx: trimmed };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message.slice(0, 120) : "The G$ price is not available." };
+  }
 }
 
 /** Public balances for contribute token picks (injected / WalletConnect wallet). */
@@ -1432,13 +1447,23 @@ export async function contributeOnce(_prev: ActionState, formData: FormData): Pr
 
     const asset = sendAssetField(String(formData.get("asset") ?? ""));
     const amountRaw = String(formData.get("amount") ?? "");
-    const amount = clampOnceAmount(amountRaw, resolved.config);
-    if (!amount) {
+    const usdAmount = clampOnceAmount(amountRaw, resolved.config);
+    if (!usdAmount) {
       const min = String(onceMinimum(resolved.config));
       const max = resolved.config.onceMax ? ` and at most ${resolved.config.onceMax}` : "";
       return { error: `Enter an amount of at least ${min}${max}.` };
     }
-    parseSendAmount(asset, amount);
+
+    // UI amounts are USD. Stables are 1:1; G$ must be priced into token units.
+    let payAmount = usdAmount;
+    let receiveUsd: string | undefined;
+    if (asset === "celo-gdx") {
+      const { formatUnits } = await import("viem");
+      const { superForUsd } = await import("@/lib/funding");
+      payAmount = formatUnits(await superForUsd(usdAmount, "gdx"), 18);
+      receiveUsd = usdAmount;
+    }
+    parseSendAmount(asset, payAmount);
 
     const route = sendRoute(asset);
     const net: "base" | "celo" = /celo/i.test(route.network) ? "celo" : "base";
@@ -1458,11 +1483,12 @@ export async function contributeOnce(_prev: ActionState, formData: FormData): Pr
     const intent = refIntent({
       kind: "send" as const,
       asset,
-      amount,
+      amount: payAmount,
       to,
       label,
       ref: "",
       returnPath: receiveReturnPath(identifier, "once"),
+      receiveUsd,
     });
 
     await captureServerEvent(who.address, "receive_once_started", {
@@ -1519,6 +1545,15 @@ export async function contributeStream(_prev: ActionState, formData: FormData): 
 
     const pay = payField(formData) ?? "usdc";
     const network = networkField(formData);
+    // UI totals are USD; G$ streams need the priced token face (same as once).
+    let streamAmount = planned.amount;
+    let receiveUsd: string | undefined;
+    if (pay === "gdx") {
+      const { formatUnits } = await import("viem");
+      const { superForUsd } = await import("@/lib/funding");
+      streamAmount = formatUnits(await superForUsd(planned.amount, "gdx"), 18);
+      receiveUsd = planned.amount;
+    }
     const anonymous = config.anonymousOk && formData.get("anonymous") === "on";
     const message = config.messagesOk ? String(formData.get("message") ?? "").trim().slice(0, 280) : "";
     const name = `Support · ${resolved.profile.name}`.slice(0, 32);
@@ -1527,7 +1562,7 @@ export async function contributeStream(_prev: ActionState, formData: FormData): 
     const intent = refIntent({
       kind: "stream" as const,
       name,
-      amount: planned.amount,
+      amount: streamAmount,
       duration: planned.duration,
       flowKind: "expense" as const,
       recipient: to,
@@ -1539,6 +1574,7 @@ export async function contributeStream(_prev: ActionState, formData: FormData): 
       network,
       ref: "",
       returnPath: receiveReturnPath(identifier, "stream"),
+      receiveUsd,
     });
 
     await captureServerEvent(who.address, "receive_stream_started", {
@@ -1553,7 +1589,7 @@ export async function contributeStream(_prev: ActionState, formData: FormData): 
       if (pay || intent.network !== appGroupNet()) return await finishTester(intent);
       const id = await openStream(await accountIndex(), {
         name,
-        amount: planned.amount,
+        amount: streamAmount,
         duration: planned.duration,
         kind: "expense",
         recipient: to,

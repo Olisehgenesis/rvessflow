@@ -7,7 +7,7 @@ import { useSignedAction } from "@/components/sign-action";
 import { ErrorNote } from "@/components/ui-bits";
 import { useReceiveConnect } from "@/components/receive/receive-connect";
 import { ProfileAvatar } from "@/components/profile-avatar";
-import { contributeOnce, contributeStream, readContributeBalances } from "@/lib/actions";
+import { contributeOnce, contributeStream, quoteContributeGdx, readContributeBalances } from "@/lib/actions";
 import {
   moneyOk,
   onceMinimum,
@@ -113,6 +113,36 @@ function useBalances(wallet: string | null, assets: string[]) {
   }, [wallet, key]);
 
   return { rows, loading, error };
+}
+
+function useGdxForUsd(usd: string, enabled: boolean) {
+  const [gdx, setGdx] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!enabled || !moneyOk(usd)) {
+      setGdx(null);
+      setError("");
+      return;
+    }
+    let cancel = false;
+    const handle = setTimeout(() => {
+      void quoteContributeGdx(usd).then((result) => {
+        if (cancel) return;
+        if (result.error) {
+          setError(result.error);
+          setGdx(null);
+          return;
+        }
+        setError("");
+        setGdx(result.gdx ?? null);
+      });
+    }, 200);
+    return () => {
+      cancel = true;
+      clearTimeout(handle);
+    };
+  }, [usd, enabled]);
+  return { gdx, error };
 }
 
 export function ReceiveCheckout({
@@ -245,14 +275,16 @@ function OnceForm({
   const finalAmount = custom.trim() || amount;
   const min = onceMinimum(config);
   const amountReady = moneyOk(finalAmount) && Number(finalAmount) >= min;
+  const gdxPay = asset === "celo-gdx";
+  const gdxQuote = useGdxForUsd(finalAmount, gdxPay && amountReady);
   const held = balances.rows.find((row) => row.asset === asset);
   const balance = held?.balance ?? null;
-  const need = moneyOf(finalAmount);
+  const need = gdxPay ? (gdxQuote.gdx ? moneyOf(gdxQuote.gdx) : null) : moneyOf(finalAmount);
   const have = balance === null ? null : moneyOf(balance);
-  const shortfall = have !== null && amountReady && have + 1e-9 < need;
+  const shortfall = need !== null && have !== null && amountReady && have + 1e-9 < need;
   const shortMsg =
-    shortfall && picked
-      ? `This account has ${formatMoney(have!)} ${picked.label}. This needs ${formatMoney(need)} ${picked.label}.`
+    shortfall && picked && need !== null
+      ? `This account has ${formatMoney(have!)} ${picked.label}. This needs ${formatMoney(need)} ${picked.label} for $${finalAmount}.`
       : "";
 
   async function goPay() {
@@ -304,7 +336,10 @@ function OnceForm({
   if (step === "confirm") {
     return (
       <form onSubmit={(event) => void onConfirm(event)} className="space-y-5">
-        <AmountHero amount={`$${finalAmount}`} />
+        <AmountHero
+          amount={`$${finalAmount}`}
+          hint={gdxPay && gdxQuote.gdx ? `≈ ${gdxQuote.gdx} G$ at live price` : undefined}
+        />
         {wallet ? <WalletPill address={wallet} /> : null}
 
         <Fieldset legend="Token & network">
@@ -322,6 +357,7 @@ function OnceForm({
           {held ? (
             <p className={`mt-1.5 text-xs ${shortfall ? "text-[#b42318]" : "text-[#5C6572]"}`}>
               Balance {held.balance} {held.label}
+              {gdxPay && gdxQuote.gdx ? ` · sends ≈ ${gdxQuote.gdx} G$` : null}
             </p>
           ) : balances.loading ? (
             <p className="mt-1.5 text-xs text-[#5C6572]">Loading balances…</p>
@@ -360,10 +396,14 @@ function OnceForm({
         <input type="hidden" name="amount" value={finalAmount} />
         {anonymous ? <input type="hidden" name="anonymous" value="on" /> : null}
 
-        <ErrorNote error={state?.error || connect.error || shortMsg} />
+        <ErrorNote error={state?.error || connect.error || gdxQuote.error || shortMsg} />
         <div className="flex gap-2">
           <SecondaryButton label="Back" onClick={() => setStep("pay")} disabled={pending || connect.busy} />
-          <PrimaryButton pending={pending || connect.busy} disabled={!amountReady || shortfall} label="Confirm contribution" />
+          <PrimaryButton
+            pending={pending || connect.busy}
+            disabled={!amountReady || shortfall || (gdxPay && !gdxQuote.gdx)}
+            label="Confirm contribution"
+          />
         </div>
         <p className="text-center text-xs text-[#5C6572]">Secure contribution · Powered by Rvess</p>
       </form>
@@ -471,13 +511,17 @@ function StreamForm({
   const durations = fixed ? [config.streamDurationDays] : flexible ? config.streamDurations : [7, 30, 90];
   const amounts = fixed ? [config.streamAmount] : flexible ? config.streamAmounts : config.streamAmounts;
   const amountReady = moneyOk(finalAmount);
+  const gdxPay = pay.pay === "gdx";
+  const gdxQuote = useGdxForUsd(face, gdxPay && amountReady);
+  const gdxNeedQuote = useGdxForUsd(formatMoney(needEstimate, 4), gdxPay && amountReady);
   const held = balances.rows.find((row) => row.asset === pay.asset);
   const balance = held?.balance ?? null;
   const have = balance === null ? null : moneyOf(balance);
-  const shortfall = pay.pay !== "gdx" && have !== null && amountReady && have + 1e-9 < needEstimate;
+  const need = gdxPay ? (gdxNeedQuote.gdx ? moneyOf(gdxNeedQuote.gdx) : null) : needEstimate;
+  const shortfall = need !== null && have !== null && amountReady && have + 1e-9 < need;
   const shortMsg =
-    shortfall
-      ? `This account has ${formatMoney(have!)} ${pay.label}. This needs ${formatMoney(needEstimate)} ${pay.label}.`
+    shortfall && need !== null
+      ? `This account has ${formatMoney(have!)} ${pay.label}. This needs ${formatMoney(need)} ${pay.label}${gdxPay ? ` for $${face}` : ""}.`
       : "";
 
   async function goConfirm() {
@@ -524,7 +568,14 @@ function StreamForm({
   if (step === "confirm") {
     return (
       <form onSubmit={(event) => void onConfirm(event)} className="space-y-5">
-        <AmountHero amount={`$${face}`} hint={`${finalDays} days · ~$${perDay} / day`} />
+        <AmountHero
+          amount={`$${face}`}
+          hint={
+            gdxPay && gdxQuote.gdx
+              ? `${finalDays} days · ≈ ${gdxQuote.gdx} G$ at live price`
+              : `${finalDays} days · ~$${perDay} / day`
+          }
+        />
         {wallet ? <WalletPill address={wallet} /> : null}
 
         <Fieldset legend="Token & network">
@@ -546,7 +597,9 @@ function StreamForm({
           {held ? (
             <p className={`mt-1.5 text-xs ${shortfall ? "text-[#b42318]" : "text-[#5C6572]"}`}>
               Balance {held.balance} {held.label}
-              {pay.pay !== "gdx" ? ` · needs ~${formatMoney(needEstimate)} incl. stream deposit` : null}
+              {gdxPay && gdxNeedQuote.gdx
+                ? ` · needs ~${gdxNeedQuote.gdx} G$ incl. stream deposit`
+                : ` · needs ~${formatMoney(needEstimate)} incl. stream deposit`}
             </p>
           ) : balances.loading ? (
             <p className="mt-1.5 text-xs text-[#5C6572]">Loading balances…</p>
@@ -587,10 +640,14 @@ function StreamForm({
         <input type="hidden" name="network" value={pay.network} />
         {anonymous ? <input type="hidden" name="anonymous" value="on" /> : null}
 
-        <ErrorNote error={state?.error || connect.error || shortMsg} />
+        <ErrorNote error={state?.error || connect.error || gdxQuote.error || shortMsg} />
         <div className="flex gap-2">
           <SecondaryButton label="Back" onClick={() => setStep("pay")} disabled={pending || connect.busy} />
-          <PrimaryButton pending={pending || connect.busy} disabled={!amountReady || shortfall} label="Confirm contribution" />
+          <PrimaryButton
+            pending={pending || connect.busy}
+            disabled={!amountReady || shortfall || (gdxPay && !gdxQuote.gdx)}
+            label="Confirm contribution"
+          />
         </div>
         <p className="text-center text-xs text-[#5C6572]">Secure contribution · Powered by Rvess</p>
       </form>
